@@ -64,6 +64,21 @@ Build for deployment: `npm run build` — copy `dist/` to any static host. The A
 
 ---
 
+## Using with a local coding agent
+
+`SKILL.md` in the repo root is a skill file for local coding agents (e.g. Claude Code). It describes how to query the knowledge base using `bash` and `grep` — no browser, no API key required.
+
+If your agent supports skills, point it at this file:
+
+```bash
+# Claude Code — register as a project skill
+cp SKILL.md .claude/skills/knowdb-local-search.md
+```
+
+Once loaded, the agent can answer questions about any documents ingested into `db/` by following the skill's four-step workflow: discover → orient → search → read.
+
+---
+
 ## Contributing
 
 Issues and pull requests are welcome.
