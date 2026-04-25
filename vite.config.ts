@@ -1,11 +1,18 @@
 import { defineConfig } from "vite";
+import { cpSync, existsSync } from "fs";
 
 export default defineConfig({
-  publicDir: "db",
   build: {
     outDir: "dist",
-    rollupOptions: {
-      input: "index.html",
-    },
   },
+  plugins: [
+    {
+      name: "copy-db",
+      closeBundle() {
+        if (existsSync("db")) {
+          cpSync("db", "dist/db", { recursive: true });
+        }
+      },
+    },
+  ],
 });
