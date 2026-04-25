@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import { cpSync, existsSync } from "fs";
 
 export default defineConfig({
+  base: "./",
   build: {
     outDir: "dist",
   },
