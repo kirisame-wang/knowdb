@@ -32,6 +32,20 @@ The Tier 1 implementation deliberately uses no infrastructure beyond the filesys
 
 ---
 
+## Three-tier architecture
+
+The design is intended to scale across three tiers that share the same conceptual model — chunk tree, structural index, agent-native query API — while swapping the storage layer underneath.
+
+| Tier | Storage | Scale | Status |
+|------|---------|-------|--------|
+| **1 — Filesystem** | Plain `.md` files + JSON index | Tens to hundreds of documents | This prototype |
+| **2 — Embedded DB** | SQLite FTS5 (sqlite-wasm) | Thousands of documents | Planned |
+| **3 — Enterprise** | Elasticsearch / PostgreSQL + graph layer | Hundreds of thousands and beyond | Future |
+
+Detailed design and specification for Tier 2 and Tier 3 will be published separately.
+
+---
+
 ## Try it yourself
 
 ```bash
@@ -79,6 +93,20 @@ Tier 1 實作刻意不使用任何檔案系統以外的基礎設施：
 - UI 分為兩個面板：左側文件導覽，右側 Agent 問答
 - Agent 有七個工具：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`
 - 無後端，可部署至任何靜態主機
+
+---
+
+## 三層架構
+
+此設計預計跨越三個層級，共享相同的概念模型——chunk 樹、結構索引、Agent 原生查詢 API——而底層的儲存技術逐層替換。
+
+| 層級 | 儲存技術 | 規模 | 狀態 |
+|------|---------|------|------|
+| **1 — 檔案系統** | 純 `.md` 檔案 + JSON 索引 | 數十至數百份文件 | 此原型 |
+| **2 — 嵌入式 DB** | SQLite FTS5（sqlite-wasm） | 數千份文件 | 規劃中 |
+| **3 — 企業級** | Elasticsearch / PostgreSQL + 圖層 | 數十萬份文件以上 | 未來規劃 |
+
+Tier 2 與 Tier 3 的詳細設計與規格文件將另行公開。
 
 ---
 
