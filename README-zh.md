@@ -80,23 +80,35 @@ repo 根目錄的 `SKILL.md` 是一份供本地 coding agent（例如 Claude Cod
 
 以下指令以 **Claude Code** 為目標。其他 agent 可能使用不同的技能目錄。
 
+<details>
+<summary>macOS / Linux</summary>
+
 ```bash
-# macOS / Linux
 mkdir -p .claude/skills/knowdb-local-search
 cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
 ```
 
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
 ```powershell
-# Windows (PowerShell)
 New-Item -ItemType Directory -Force .claude\skills\knowdb-local-search
 Copy-Item SKILL.md .claude\skills\knowdb-local-search\Skill.md
 ```
 
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
 ```cmd
-:: Windows (CMD)
 mkdir .claude\skills\knowdb-local-search
 copy SKILL.md .claude\skills\knowdb-local-search\Skill.md
 ```
+
+</details>
 
 無論哪種方式，agent 都會遵循相同的四步驟工作流程——發現 → 定位 → 搜尋 → 讀取——回答關於 `db/` 中已攝入文件的問題。
 

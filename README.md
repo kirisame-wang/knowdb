@@ -80,23 +80,35 @@ Two ways to use it:
 
 The following commands target **Claude Code**. Other agents may use a different skill directory.
 
+<details>
+<summary>macOS / Linux</summary>
+
 ```bash
-# macOS / Linux
 mkdir -p .claude/skills/knowdb-local-search
 cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
 ```
 
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
 ```powershell
-# Windows (PowerShell)
 New-Item -ItemType Directory -Force .claude\skills\knowdb-local-search
 Copy-Item SKILL.md .claude\skills\knowdb-local-search\Skill.md
 ```
 
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
 ```cmd
-:: Windows (CMD)
 mkdir .claude\skills\knowdb-local-search
 copy SKILL.md .claude\skills\knowdb-local-search\Skill.md
 ```
+
+</details>
 
 Either way, the agent follows the same four-step workflow — discover → orient → search → read — to answer questions about documents ingested into `db/`.
 
