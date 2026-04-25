@@ -66,6 +66,9 @@ function renderDocTree() {
     const chunkList = document.createElement("div");
     chunkList.className = "chunk-list";
 
+    // _index.md first — gives a TOC overview of the document
+    chunkList.appendChild(createChunkItem(`${docId}/_index`, "_index"));
+
     for (const chunkId of chunks) {
       const chunkItem = createChunkItem(chunkId, chunkId.split("/")[1]!);
       chunkList.appendChild(chunkItem);
