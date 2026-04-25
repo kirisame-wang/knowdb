@@ -50,17 +50,34 @@ Tier 2 與 Tier 3 的詳細設計與規格文件將另行公開。
 
 ## 自行試用
 
+先 clone ：
+
 ```bash
 git clone https://github.com/kirisame-wang/knowdb.git
 cd knowdb
 npm install
-npm run ingest raw/   # 攝入隨附的範例文件
-npm run dev           # 開啟 http://localhost:5173
 ```
 
-在 UI 中貼上 Anthropic API 金鑰，即可對已攝入的文件提問。
+將 `raw/` 中的檔案換成你自己的 Markdown 文件，再重建知識庫：
 
-部署建置：`npm run build`——將 `dist/` 複製到任何靜態主機。API 金鑰僅存於 `sessionStorage`，不會離開瀏覽器。
+```bash
+rm -rf db/
+npm run ingest raw/
+```
+
+接著選擇查詢方式：
+
+**方式 A — 瀏覽器 UI**（需要 Anthropic API 金鑰）
+
+```bash
+npm run dev   # 開啟 http://localhost:5173
+```
+
+在 UI 中貼上 API 金鑰即可提問。靜態部署請執行 `npm run build`。
+
+**方式 B — 本地 Coding Agent**（不需要 API 金鑰，不需要瀏覽器）
+
+在提示詞中引用 `SKILL.md`，agent 直接透過 `bash` 與 `grep` 導覽 `db/`。詳見[搭配本地 Coding Agent 使用](#搭配本地-coding-agent-使用)。
 
 ---
 
@@ -68,15 +85,13 @@ npm run dev           # 開啟 http://localhost:5173
 
 repo 根目錄的 `SKILL.md` 是一份供本地 coding agent（例如 Claude Code）使用的技能檔案。它說明如何透過 `bash` 與 `grep` 查詢知識庫——不需要瀏覽器，也不需要 API 金鑰。
 
-有兩種使用方式：
-
-**方式 A — 直接引用。** 在提示詞中提及檔案，agent 即時讀取：
+**直接引用** — 在提示詞中提及檔案，agent 即時讀取：
 
 ```
-@SKILL.md 請問 2023 年的營業收入是多少？
+@SKILL.md 2023 年的營業收入是多少？
 ```
 
-**方式 B — 註冊為持久技能。** agent 每次執行時自動載入指引：
+**註冊為持久技能** — agent 每次執行時自動載入指引：
 
 以下指令以 **Claude Code** 為目標。其他 agent 可能使用不同的技能目錄。
 

@@ -50,17 +50,34 @@ Detailed design and specification for Tier 2 and Tier 3 will be published separa
 
 ## Try it yourself
 
+Clone the repo first:
+
 ```bash
 git clone https://github.com/kirisame-wang/knowdb.git
 cd knowdb
 npm install
-npm run ingest raw/   # ingest the included sample documents
-npm run dev           # open http://localhost:5173
 ```
 
-Paste your Anthropic API key into the UI and ask questions about the ingested documents.
+Replace the files in `raw/` with your own Markdown files, then rebuild the knowledge base:
 
-Build for deployment: `npm run build` — copy `dist/` to any static host. The API key stays in `sessionStorage` and never leaves the browser.
+```bash
+rm -rf db/
+npm run ingest raw/
+```
+
+Then choose how to query it:
+
+**Option A — Browser UI** (requires an Anthropic API key)
+
+```bash
+npm run dev   # open http://localhost:5173
+```
+
+Paste your API key into the UI and ask questions. Build for static deployment with `npm run build`.
+
+**Option B — Local coding agent** (no API key, no browser)
+
+Reference `SKILL.md` in your prompt and the agent navigates `db/` directly using `bash` and `grep`. See [Using with a local coding agent](#using-with-a-local-coding-agent) for details.
 
 ---
 
@@ -68,15 +85,13 @@ Build for deployment: `npm run build` — copy `dist/` to any static host. The A
 
 `SKILL.md` in the repo root is a skill file for local coding agents (e.g. Claude Code). It describes how to query the knowledge base using `bash` and `grep` — no browser, no API key required.
 
-Two ways to use it:
-
-**Option A — reference inline.** Mention the file directly in your prompt and the agent will read it on the spot:
+**Reference inline** — mention the file directly in your prompt and the agent will read it on the spot:
 
 ```
-@SKILL.md what is the company's revenue in 2023?
+@SKILL.md what is the revenue for 2023?
 ```
 
-**Option B — register as a persistent skill.** The agent loads the instructions automatically on every invocation:
+**Register as a persistent skill** — the agent loads the instructions automatically on every invocation:
 
 The following commands target **Claude Code**. Other agents may use a different skill directory.
 
