@@ -37,15 +37,25 @@ export function search(
     // default: skip _index entries; indexOnly: skip non-_index entries
     if (opts?.indexOnly ? !isIndexEntry : isIndexEntry) continue;
 
+    const lines = content.split("\n");
     let score = 0;
-    let excerpt = "";
-    for (const line of content.split("\n")) {
-      if (re.test(line)) {
+    let firstMatch = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i]!)) {
         score++;
-        if (!excerpt && line.trim()) excerpt = line.trim().slice(0, 120);
+        if (firstMatch === -1) firstMatch = i;
       }
     }
-    if (score > 0) results.push({ id, score, excerpt });
+    if (score > 0) {
+      const start = Math.max(0, firstMatch - 1);
+      const end = Math.min(lines.length - 1, firstMatch + 2);
+      const excerpt = lines.slice(start, end + 1)
+        .map((l) => l.trim())
+        .filter((l) => l)
+        .join("\n")
+        .slice(0, 300);
+      results.push({ id, score, excerpt });
+    }
   }
   return results.sort((a, b) => b.score - a.score);
 }
