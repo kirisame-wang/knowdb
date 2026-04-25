@@ -1,73 +1,97 @@
 # KnowDB
 
-A concept prototype exploring one question: can a knowledge base be just a folder of plain text files — no database, no server, no infrastructure — yet still support structured retrieval and AI-assisted Q&A?
+Most knowledge bases are built around a retrieval pipeline — documents go in, embeddings come out, and the LLM is handed a handful of chunks to summarise. KnowDB is a prototype exploring a different premise: what if the knowledge layer were a **document database** designed from the start for agent access patterns?
+
+The goal is not a RAG pipeline or an LLM wiki. It is a database where documents are ingested with enforced structure, the index is maintained by the system (not the LLM), and the query API is designed around how an agent actually navigates knowledge — following the document tree, expanding context on demand, jumping across related sections.
+
+This repository is **Tier 1** of that idea: the simplest possible implementation that demonstrates the concept. The knowledge base is a folder of plain `.md` files. There is no backend. It runs in a browser.
 
 ---
 
-## Design ideas
+## Core idea
 
-**1. Filesystem as database.** Ingestion parses a Markdown file's heading hierarchy and writes one `.md` file per chunk under `db/<docId>/<chunkId>.md`. The chunk ID encodes position in the heading tree: `01` is the first top-level section, `01-02` is its second subsection, `01-02-03` goes one level deeper. The structure is navigable by any tool that can list files.
+A document database designed for agents has three properties that distinguish it from a knowledge base:
 
-**2. Static deployment.** The entire app — UI and knowledge base — is a folder of static files. No backend process, no build step at runtime. Drop it on GitHub Pages or any file server and it works.
+**Structure is preserved at ingest, not reconstructed at query time.** When a document enters the system, its heading hierarchy becomes the chunk tree. Each chunk has a stable address (`db/<docId>/<chunkId>.md`) that encodes its position in the tree: `01` is the first top-level section, `01-02` its second subsection, `01-02-03` one level deeper.
 
-**3. Browser-side search.** The ingest step produces `_search_index.json`, a flat listing of every chunk. The browser loads it once and handles regex search, excerpt extraction, and structural navigation entirely client-side.
+**The system owns the index.** The agent's job is to query, not to maintain index integrity. The ingest pipeline produces `_search_index.json` and `_index.md` heading trees. The agent never writes to these.
 
-**4. Tool-use agent.** The AI assistant navigates the knowledge base through tools: `get_instructions`, `list_docs`, `read_index`, `search`, `read_chunk`, `read_chunks`, `parent`. Notably, the agent fetches its own usage guide on demand via `get_instructions` rather than having it baked into the system prompt — the instructions are themselves just another document in the knowledge base.
+**The query API follows the document tree.** An agent navigates by moving vertically (parent, expand) and horizontally (search, related). It starts with the smallest useful context and expands only as needed — not because the system decided the chunk size, but because the agent decided it needed more.
+
+---
+
+## This prototype
+
+The Tier 1 implementation deliberately uses no infrastructure beyond the filesystem:
+
+- `npm run ingest <file.md>` parses headings and writes chunk files to `db/`
+- `_search_index.json` is loaded once by the browser; all search is client-side
+- The UI is two panels: document navigator on the left, agent Q&A on the right
+- The agent has seven tools: `get_instructions`, `list_docs`, `read_index`, `search`, `read_chunk`, `read_chunks`, `parent`
+- No backend. Deployable to any static host.
 
 ---
 
 ## Try it yourself
 
 ```bash
-git clone https://github.com/yourname/knowdb.git
+git clone https://github.com/kirisame-wang/knowdb.git
 cd knowdb
 npm install
-npm run ingest raw/        # ingest the sample documents
-npm run dev                # open http://localhost:5173
+npm run ingest raw/   # ingest the included sample documents
+npm run dev           # open http://localhost:5173
 ```
 
-Paste your Anthropic API key into the key field in the UI and start asking questions.
+Paste your Anthropic API key into the UI and ask questions about the ingested documents.
 
----
-
-## Deployment
-
-Build with `npm run build`, then copy `dist/` and `db/` to any static host. The API key never leaves the browser — it is stored only in `sessionStorage`.
+Build for deployment: `npm run build` — copy `dist/` to any static host. The API key stays in `sessionStorage` and never leaves the browser.
 
 ---
 
 # KnowDB
 
-一個概念原型，探索一個問題：知識庫能否只是一個純文字檔案的資料夾——沒有資料庫、沒有伺服器、沒有任何基礎設施——卻仍能支援結構化檢索與 AI 輔助問答？
+大多數知識庫圍繞著檢索 pipeline 構建——文件輸入、向量輸出，再把幾個 chunk 交給 LLM 整理。KnowDB 是一個探索不同前提的原型：如果知識層從一開始就以 **文件資料庫** 的形態設計，專為 Agent 的存取模式而生，會是什麼樣子？
+
+目標不是 RAG pipeline，也不是 LLM wiki。而是一個資料庫：文件以強制的結構進入系統，索引由系統維護（而非 LLM），查詢 API 則設計來對應 Agent 實際導覽知識的方式——沿著文件樹移動、按需擴展脈絡、跨段落跳轉。
+
+這個 repository 是這個想法的 **Tier 1**：能夠展示概念的最簡實作。知識庫是一個純 `.md` 檔案的資料夾，沒有後端，在瀏覽器中執行。
 
 ---
 
-## 設計理念
+## 核心理念
 
-**1. 檔案系統即資料庫。** 攝入（ingest）步驟會解析 Markdown 檔案的標題層級，並將每個區塊寫成一個獨立的 `.md` 檔案，存放於 `db/<docId>/<chunkId>.md`。區塊 ID 編碼了該區塊在標題樹中的位置：`01` 為第一個頂層段落，`01-02` 為其第二個子段落，`01-02-03` 再深一層。整個結構可被任何能列出檔案的工具所遍歷。
+為 Agent 設計的文件資料庫，有三個特性使其有別於一般知識庫：
 
-**2. 靜態部署。** 整個應用程式——UI 與知識庫——都只是一個靜態檔案資料夾。不需要後端程序，執行期間也不需要任何建置步驟。丟到 GitHub Pages 或任何靜態伺服器即可運作。
+**結構在 ingest 時保留，而非在查詢時重建。** 文件進入系統時，其標題層級即成為 chunk 樹。每個 chunk 有穩定的位址（`db/<docId>/<chunkId>.md`），編碼了它在樹中的位置：`01` 是第一個頂層段落，`01-02` 是其第二個子段落，`01-02-03` 再深一層。
 
-**3. 瀏覽器端搜尋。** 攝入步驟會產生 `_search_index.json`，這是所有區塊的平坦清單。瀏覽器載入一次後，即可在用戶端完成正規表示式搜尋、摘錄擷取與結構性導覽，完全不需要伺服器。
+**系統擁有索引。** Agent 的職責是查詢，而非維護索引完整性。Ingest pipeline 產生 `_search_index.json` 與 `_index.md` 標題樹，Agent 不寫入這些檔案。
 
-**4. 工具呼叫代理。** AI 助理透過工具導覽知識庫：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`。值得一提的是，代理透過 `get_instructions` 按需取得自身的使用說明，而非將其硬編碼於系統提示中——這份說明本身就是知識庫中的另一份文件。
+**查詢 API 沿著文件樹設計。** Agent 透過垂直移動（parent、expand）與水平跳轉（search、related）來導覽。它從最小的有用 context 開始，按需擴展——不是因為系統決定了 chunk 大小，而是因為 Agent 判斷需要更多資訊。
+
+---
+
+## 此原型
+
+Tier 1 實作刻意不使用任何檔案系統以外的基礎設施：
+
+- `npm run ingest <file.md>` 解析標題，將 chunk 檔案寫入 `db/`
+- `_search_index.json` 由瀏覽器一次性載入，所有搜尋在用戶端執行
+- UI 分為兩個面板：左側文件導覽，右側 Agent 問答
+- Agent 有七個工具：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`
+- 無後端，可部署至任何靜態主機
 
 ---
 
 ## 自行試用
 
 ```bash
-git clone https://github.com/yourname/knowdb.git
+git clone https://github.com/kirisame-wang/knowdb.git
 cd knowdb
 npm install
-npm run ingest raw/        # 攝入範例文件
-npm run dev                # 開啟 http://localhost:5173
+npm run ingest raw/   # 攝入隨附的範例文件
+npm run dev           # 開啟 http://localhost:5173
 ```
 
-在 UI 的金鑰欄位貼上您的 Anthropic API 金鑰，即可開始提問。
+在 UI 中貼上 Anthropic API 金鑰，即可對已攝入的文件提問。
 
----
-
-## 部署
-
-執行 `npm run build`，再將 `dist/` 與 `db/` 複製到任何靜態主機。API 金鑰永遠不會離開瀏覽器——它僅儲存於 `sessionStorage`。
+部署建置：`npm run build`——將 `dist/` 複製到任何靜態主機。API 金鑰僅存於 `sessionStorage`，不會離開瀏覽器。
