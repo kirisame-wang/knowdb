@@ -2,7 +2,7 @@
 
 > 繁體中文版本請見 [README-zh.md](README-zh.md)
 
-Most knowledge bases are built around a retrieval pipeline — documents go in, embeddings come out, and the LLM is handed a handful of chunks to summarise. KnowDB is a prototype exploring a different premise: what if the knowledge layer were a **document database** designed from the start for agent access patterns?
+Most knowledge bases are built around a retrieval pipeline — documents go in, embeddings come out, and the LLM is handed a handful of chunks to summarise. KnowDB is a prototype exploring a different premise: what if the knowledge layer were a **knowledge database** designed from the start for agent access patterns?
 
 The goal is not a RAG pipeline or an LLM wiki. It is a database where documents are ingested with enforced structure, the index is maintained by the system (not the LLM), and the query API is designed around how an agent actually navigates knowledge — following the document tree, expanding context on demand, jumping across related sections.
 
@@ -12,7 +12,7 @@ This repository is **Tier 1** of that idea: the simplest possible implementation
 
 ## Core idea
 
-A document database designed for agents has three properties that distinguish it from a knowledge base:
+A knowledge database designed for agents has three properties that distinguish it from a knowledge base:
 
 **Structure is preserved at ingest, not reconstructed at query time.** When a document enters the system, its heading hierarchy becomes the chunk tree. Each chunk has a stable address (`db/<docId>/<chunkId>.md`) that encodes its position in the tree: `01` is the first top-level section, `01-02` its second subsection, `01-02-03` one level deeper.
 
