@@ -79,9 +79,15 @@ Two ways to use it:
 **Option B — register as a persistent skill.** The agent loads the instructions automatically on every invocation:
 
 ```bash
-# Claude Code — register as a project skill
+# macOS / Linux
 mkdir -p .claude/skills/knowdb-local-search
 cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
+```
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Force .claude\skills\knowdb-local-search
+Copy-Item SKILL.md .claude\skills\knowdb-local-search\Skill.md
 ```
 
 Either way, the agent follows the same four-step workflow — discover → orient → search → read — to answer questions about documents ingested into `db/`.
