@@ -325,7 +325,7 @@ async function sendMessage() {
         max_tokens: 2048,
         system:
           "You are a helpful assistant with access to a knowledge base via tools. " +
-          "Call get_workflow first to learn how to use the tools. Be concise in your final answer.",
+          "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         messages: chatHistory,
       });

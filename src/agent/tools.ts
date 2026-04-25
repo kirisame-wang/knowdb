@@ -7,8 +7,8 @@ import type { SearchIndex } from "../types.js";
 
 export const KNOWDB_TOOLS: Tool[] = [
   {
-    name: "get_workflow",
-    description: "Get the step-by-step workflow for searching the knowledge base. Call this before using any other tool.",
+    name: "get_instructions",
+    description: "Get usage instructions for all available tools. Call this before using any other tool.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -112,7 +112,7 @@ export async function processToolCall(
   manifest?: Record<string, { originalFilename: string; title: string }>
 ): Promise<string> {
   switch (toolName) {
-    case "get_workflow":
+    case "get_instructions":
       return SKILL;
 
     case "list_docs": {
