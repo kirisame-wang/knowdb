@@ -68,7 +68,15 @@ npm run dev           # 開啟 http://localhost:5173
 
 repo 根目錄的 `SKILL.md` 是一份供本地 coding agent（例如 Claude Code）使用的技能檔案。它說明如何透過 `bash` 與 `grep` 查詢知識庫——不需要瀏覽器，也不需要 API 金鑰。
 
-若你的 agent 支援技能載入，將此檔案指向對應路徑即可：
+有兩種使用方式：
+
+**方式 A — 直接引用。** 在提示詞中提及檔案，agent 即時讀取：
+
+```
+@SKILL.md 請問 2023 年的營業收入是多少？
+```
+
+**方式 B — 註冊為持久技能。** agent 每次執行時自動載入指引：
 
 ```bash
 # Claude Code — 註冊為專案技能
@@ -76,7 +84,7 @@ mkdir -p .claude/skills/knowdb-local-search
 cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
 ```
 
-載入後，agent 即可依照技能中的四步驟工作流程（發現 → 定位 → 搜尋 → 讀取）回答關於 `db/` 中已攝入文件的問題。
+無論哪種方式，agent 都會遵循相同的四步驟工作流程——發現 → 定位 → 搜尋 → 讀取——回答關於 `db/` 中已攝入文件的問題。
 
 ---
 
