@@ -55,7 +55,7 @@ export const KNOWDB_TOOLS: Tool[] = [
   },
   {
     name: "read_chunk",
-    description: "Read a chunk's content. Use grep to return only lines matching a pattern (like grep -C), which avoids loading irrelevant content from long chunks.",
+    description: "Read a chunk's full content. Use pattern to return only lines matching a regex (like grep -C), avoiding irrelevant content in long chunks.",
     input_schema: {
       type: "object",
       properties: {
@@ -63,13 +63,13 @@ export const KNOWDB_TOOLS: Tool[] = [
           type: "string",
           description: "Chunk id — format: <doc_id>/<chunk_id>, e.g. a3f2b1c9/01-02",
         },
-        grep: {
+        pattern: {
           type: "string",
-          description: "If provided, return only lines matching this pattern (regex, case-insensitive) with context lines around them.",
+          description: "Regex pattern (case-insensitive). If provided, return only matching lines with context lines around them.",
         },
         context: {
           type: "number",
-          description: "Lines of context around each grep match. Default 2.",
+          description: "Lines of context around each pattern match. Default 2.",
         },
       },
       required: ["id"],
@@ -77,7 +77,7 @@ export const KNOWDB_TOOLS: Tool[] = [
   },
   {
     name: "read_chunks",
-    description: "Read a chunk plus its related chunks in one call — returns [{id, content}]. Prefer over calling read_chunk multiple times. level 1=chunk+siblings, 2=+parent, 3=full document.",
+    description: "List a chunk and its neighbours — returns [{id, preview}] where preview is the first line only. Use read_chunk to fetch full content for any item of interest. level 1=chunk+siblings, 2=+parent, 3=whole document.",
     input_schema: {
       type: "object",
       properties: {
@@ -141,16 +141,21 @@ export async function processToolCall(
 
     case "read_chunk": {
       const id = toolInput["id"] as string;
-      const grep = toolInput["grep"] as string | undefined;
+      const pattern = toolInput["pattern"] as string | undefined;
       const context = (toolInput["context"] as number | undefined) ?? 2;
       const content = await fetchChunk(id);
-      return grep ? grepChunk(content, grep, context) : content;
+      return pattern ? grepChunk(content, pattern, context) : content;
     }
 
     case "read_chunks": {
       const id = toolInput["id"] as string;
       const level = (toolInput["level"] as number | undefined) ?? 1;
-      return JSON.stringify(expandWithContent(index, id, level));
+      const chunks = expandWithContent(index, id, level);
+      const previews = chunks.map(({ id: cid, content }) => ({
+        id: cid,
+        preview: content.split("\n").find((l) => l.trim()) ?? "",
+      }));
+      return JSON.stringify(previews);
     }
 
     case "parent": {

@@ -24,19 +24,20 @@ Choose the right read tool:
 
 | Need | Tool |
 |---|---|
-| Read one chunk | \`read_chunk(id)\` |
-| Read only matching lines | \`read_chunk(id, grep, context)\` — like grep -C |
-| Read chunk + neighbours | \`read_chunks(id, 1)\` → chunk + siblings |
-| Read chunk + parent | \`read_chunks(id, 2)\` → chunk + siblings + parent header |
-| Read whole document | \`read_chunks(id, 3)\` — use sparingly |
+| Browse chunk + neighbours | \`read_chunks(id, 1)\` → returns [{id, preview}] (first line only) |
+| Browse chunk + parent | \`read_chunks(id, 2)\` → chunk + siblings + parent header |
+| Browse whole document | \`read_chunks(id, 3)\` — use sparingly |
+| Read one chunk in full | \`read_chunk(id)\` |
+| Read only matching lines | \`read_chunk(id, pattern, context)\` — like grep -C |
 | Go up the hierarchy | \`parent(id)\` → returns parent chunk id or null |
 
 ## Core rules
 1. **list_docs → read_index → scoped search → read_chunk** — always in this order.
 2. **Read excerpts before fetching full chunks** — avoid loading irrelevant content.
-3. **Use \`grep\`** when a chunk is long: \`read_chunk(id, "keyword", 3)\` returns
+3. **Use \`read_chunks\` to browse** — it returns one-line previews only.
+   Then call \`read_chunk(id)\` for full content of the chunk you need.
+4. **Use \`pattern\`** when a chunk is long: \`read_chunk(id, "keyword", 3)\` returns
    only lines matching "keyword" with 3 lines of context each side.
-4. **Use \`scope\`** on every \`search\` once you know the document.
-5. **Start at level 1** for \`read_chunks\`; escalate to level 2/3 only if needed.
+5. **Use \`scope\`** on every \`search\` once you know the document.
 6. **Never load a full document just to scan it** — search + read_index first.
 `.trim();
