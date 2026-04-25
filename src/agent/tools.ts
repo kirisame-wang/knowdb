@@ -1,10 +1,16 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import { search, fetchChunk, expand, expandWithContent, parent, grepChunk } from "../db_query.js";
+import { SKILL } from "./skill.js";
 import type { SearchIndex } from "../types.js";
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
 export const KNOWDB_TOOLS: Tool[] = [
+  {
+    name: "get_workflow",
+    description: "Get the step-by-step workflow for searching the knowledge base. Call this before using any other tool.",
+    input_schema: { type: "object", properties: {} },
+  },
   {
     name: "list_docs",
     description: "List all documents in the knowledge base. Call this first to discover available documents.",
@@ -106,6 +112,9 @@ export async function processToolCall(
   manifest?: Record<string, { originalFilename: string; title: string }>
 ): Promise<string> {
   switch (toolName) {
+    case "get_workflow":
+      return SKILL;
+
     case "list_docs": {
       const docs = Object.entries(manifest ?? {}).map(([id, info]) => ({
         id,

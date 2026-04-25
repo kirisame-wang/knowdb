@@ -1,6 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS, processToolCall } from "./agent/tools.js";
-import { SKILL } from "./agent/skill.js";
 import { search, expand, siblings, parent } from "./db_query.js";
 import type { SearchIndex } from "./types.js";
 
@@ -325,9 +324,8 @@ async function sendMessage() {
         model: "claude-haiku-4-5-20251001",
         max_tokens: 2048,
         system:
-          "You are a helpful assistant with access to a knowledge base via tools.\n\n" +
-          SKILL +
-          "\n\nFollow the workflow above. Be concise in your final answer.",
+          "You are a helpful assistant with access to a knowledge base via tools. " +
+          "Call get_workflow first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         messages: chatHistory,
       });
