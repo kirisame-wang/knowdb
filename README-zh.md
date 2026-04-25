@@ -72,7 +72,8 @@ repo 根目錄的 `SKILL.md` 是一份供本地 coding agent（例如 Claude Cod
 
 ```bash
 # Claude Code — 註冊為專案技能
-cp SKILL.md .claude/skills/knowdb-local-search.md
+mkdir -p .claude/skills/knowdb-local-search
+cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
 ```
 
 載入後，agent 即可依照技能中的四步驟工作流程（發現 → 定位 → 搜尋 → 讀取）回答關於 `db/` 中已攝入文件的問題。

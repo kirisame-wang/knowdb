@@ -72,7 +72,8 @@ If your agent supports skills, point it at this file:
 
 ```bash
 # Claude Code — register as a project skill
-cp SKILL.md .claude/skills/knowdb-local-search.md
+mkdir -p .claude/skills/knowdb-local-search
+cp SKILL.md .claude/skills/knowdb-local-search/Skill.md
 ```
 
 Once loaded, the agent can answer questions about any documents ingested into `db/` by following the skill's four-step workflow: discover → orient → search → read.
