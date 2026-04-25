@@ -61,3 +61,18 @@ npm run dev           # 開啟 http://localhost:5173
 在 UI 中貼上 Anthropic API 金鑰，即可對已攝入的文件提問。
 
 部署建置：`npm run build`——將 `dist/` 複製到任何靜態主機。API 金鑰僅存於 `sessionStorage`，不會離開瀏覽器。
+
+---
+
+## 貢獻指南
+
+歡迎提交 Issue 與 Pull Request。
+
+以下幾個方向特別有幫助：
+
+- **錯誤回報** — 若 ingest 產生非預期的 chunk 切割，或 Agent 行為異常，附上最小重現案例會很有幫助
+- **Ingest 邊緣案例** — 導致標題解析器出錯的 Markdown 結構
+- **Agent 工具回饋** — Agent 導覽過程中的觀察，包括卡住的情況，或有助於改善檢索的工具設計建議
+- **Tier 2 方向討論** — 關於 SQLite FTS5 路徑或嵌入式 DB 查詢 API 的想法
+
+較大幅度的修改，建議先開 Issue 討論方向，再著手撰寫程式碼。

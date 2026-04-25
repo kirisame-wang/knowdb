@@ -61,3 +61,18 @@ npm run dev           # open http://localhost:5173
 Paste your Anthropic API key into the UI and ask questions about the ingested documents.
 
 Build for deployment: `npm run build` — copy `dist/` to any static host. The API key stays in `sessionStorage` and never leaves the browser.
+
+---
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+A few things that would be especially useful:
+
+- **Bug reports** — if ingestion produces unexpected chunk splits or the agent behaves oddly, a minimal reproduction is very helpful
+- **Ingest edge cases** — Markdown structures that break the heading parser
+- **Agent tool feedback** — observations on how the agent navigates, where it gets stuck, or tool designs that would improve retrieval
+- **Ideas toward Tier 2** — thoughts on the SQLite FTS5 path or the embedded DB query API
+
+For larger changes, opening an issue to discuss the direction first is appreciated before writing code.
