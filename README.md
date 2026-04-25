@@ -1,181 +1,73 @@
 # KnowDB
 
-A minimal, browser-based knowledge base explorer. Ingest Markdown files into a flat chunk store on disk, then browse and search them through a two-panel web UI. The right panel runs an AI agent (Claude Haiku via the Anthropic API) that queries the knowledge base using tool use.
-
-No backend server is required. The app is a fully static site.
+A concept prototype exploring one question: can a knowledge base be just a folder of plain text files — no database, no server, no infrastructure — yet still support structured retrieval and AI-assisted Q&A?
 
 ---
 
-## Quick start
+## Design ideas
+
+**1. Filesystem as database.** Ingestion parses a Markdown file's heading hierarchy and writes one `.md` file per chunk under `db/<docId>/<chunkId>.md`. The chunk ID encodes position in the heading tree: `01` is the first top-level section, `01-02` is its second subsection, `01-02-03` goes one level deeper. The structure is navigable by any tool that can list files.
+
+**2. Static deployment.** The entire app — UI and knowledge base — is a folder of static files. No backend process, no build step at runtime. Drop it on GitHub Pages or any file server and it works.
+
+**3. Browser-side search.** The ingest step produces `_search_index.json`, a flat listing of every chunk. The browser loads it once and handles regex search, excerpt extraction, and structural navigation entirely client-side.
+
+**4. Tool-use agent.** The AI assistant navigates the knowledge base through tools: `get_instructions`, `list_docs`, `read_index`, `search`, `read_chunk`, `read_chunks`, `parent`. Notably, the agent fetches its own usage guide on demand via `get_instructions` rather than having it baked into the system prompt — the instructions are themselves just another document in the knowledge base.
+
+---
+
+## Try it yourself
 
 ```bash
+git clone https://github.com/yourname/knowdb.git
+cd knowdb
 npm install
-
-# Ingest a single file or an entire directory
-npm run ingest raw/my-notes.md
-npm run ingest raw/
-
-# Start the dev server
-npm run dev
+npm run ingest raw/        # ingest the sample documents
+npm run dev                # open http://localhost:5173
 ```
 
-Open the browser, paste your Anthropic API key into the key field in the UI, and start querying.
-
----
-
-## How ingestion works
-
-`npm run ingest <path>` (`scripts/ingest.ts`) parses heading hierarchy from each Markdown file and splits content into chunks. Output is written to `db/`.
-
-**File layout**
-
-```
-db/
-  <docId>/
-    _meta.json          # title, source path, chunk count
-    <chunkId>.md        # one file per chunk
-  _manifest.json        # list of all docIds + titles
-  _search_index.json    # flat index of all chunks for search
-```
-
-**ID conventions**
-
-| ID | Derivation |
-|----|-----------|
-| `docId` | `sha256(stem)[:8]` — e.g. `a3f8c21b` |
-| `chunkId` | Dot-separated heading counters reflecting depth: `01`, `01-02`, `01-02-03` |
-
-A chunk at `db/a3f8c21b/01-02.md` is the second H2-level section of the document whose filename hashes to `a3f8c21b`.
-
----
-
-## Agent tools
-
-The agent (defined in `src/agent/tools.ts`) has access to seven tools:
-
-| Tool | Purpose |
-|------|---------|
-| `get_instructions` | Returns the agent's own guidance text from `src/agent/skill.ts` |
-| `list_docs` | Lists all documents in the knowledge base via `_manifest.json` |
-| `read_index` | Reads the full `_search_index.json` for structural overview |
-| `search` | Full-text / regex search across chunks; supports doc scope and index-only mode; returns excerpts with context |
-| `read_chunk` | Reads a single chunk file by `docId` + `chunkId` |
-| `read_chunks` | Reads multiple chunks in one call |
-| `parent` | Resolves the parent chunk of a given `chunkId` (walks up the heading hierarchy) |
-
----
-
-## Development commands
-
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Vite dev server with HMR |
-| `npm run build` | Production build to `dist/` |
-| `npm run preview` | Serve the production build locally |
-| `npm test` | Run the Vitest suite (56 tests) |
-| `npm run test:watch` | Watch mode |
-| `npm run test:coverage` | Coverage report |
-| `npm run ingest <path>` | Ingest a Markdown file or directory |
-
-**Requirements:** Node.js 18+, npm
+Paste your Anthropic API key into the key field in the UI and start asking questions.
 
 ---
 
 ## Deployment
 
-The build output in `dist/` is a fully static site. Copy it (along with the `db/` directory) to any static host.
-
-For GitHub Pages, commit the `db/` directory and push `dist/` to your `gh-pages` branch. No server-side API key management is needed — users supply their own Anthropic API key in the UI, where it is stored only in `sessionStorage`.
+Build with `npm run build`, then copy `dist/` and `db/` to any static host. The API key never leaves the browser — it is stored only in `sessionStorage`.
 
 ---
 
----
+# KnowDB
 
-# KnowDB（繁體中文）
-
-KnowDB 是一個輕量級、純瀏覽器端的知識庫瀏覽器。將 Markdown 檔案攝入（ingest）為磁碟上的區塊（chunk）儲存，再透過雙面板網頁 UI 進行瀏覽與搜尋。右側面板執行一個以 Anthropic API（Claude Haiku）驅動的 AI 代理，能透過工具呼叫（tool use）查詢知識庫。
-
-本應用不需要後端伺服器，為完全靜態網站。
+一個概念原型，探索一個問題：知識庫能否只是一個純文字檔案的資料夾——沒有資料庫、沒有伺服器、沒有任何基礎設施——卻仍能支援結構化檢索與 AI 輔助問答？
 
 ---
 
-## 快速開始
+## 設計理念
+
+**1. 檔案系統即資料庫。** 攝入（ingest）步驟會解析 Markdown 檔案的標題層級，並將每個區塊寫成一個獨立的 `.md` 檔案，存放於 `db/<docId>/<chunkId>.md`。區塊 ID 編碼了該區塊在標題樹中的位置：`01` 為第一個頂層段落，`01-02` 為其第二個子段落，`01-02-03` 再深一層。整個結構可被任何能列出檔案的工具所遍歷。
+
+**2. 靜態部署。** 整個應用程式——UI 與知識庫——都只是一個靜態檔案資料夾。不需要後端程序，執行期間也不需要任何建置步驟。丟到 GitHub Pages 或任何靜態伺服器即可運作。
+
+**3. 瀏覽器端搜尋。** 攝入步驟會產生 `_search_index.json`，這是所有區塊的平坦清單。瀏覽器載入一次後，即可在用戶端完成正規表示式搜尋、摘錄擷取與結構性導覽，完全不需要伺服器。
+
+**4. 工具呼叫代理。** AI 助理透過工具導覽知識庫：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`。值得一提的是，代理透過 `get_instructions` 按需取得自身的使用說明，而非將其硬編碼於系統提示中——這份說明本身就是知識庫中的另一份文件。
+
+---
+
+## 自行試用
 
 ```bash
+git clone https://github.com/yourname/knowdb.git
+cd knowdb
 npm install
-
-# 攝入單一檔案或整個目錄
-npm run ingest raw/my-notes.md
-npm run ingest raw/
-
-# 啟動開發伺服器
-npm run dev
+npm run ingest raw/        # 攝入範例文件
+npm run dev                # 開啟 http://localhost:5173
 ```
 
-在瀏覽器中開啟後，將您的 Anthropic API 金鑰貼入 UI 中的金鑰欄位，即可開始查詢。
-
----
-
-## 攝入機制
-
-`npm run ingest <path>`（`scripts/ingest.ts`）會解析每個 Markdown 檔案的標題層級，並將內容切割為區塊，輸出寫入 `db/` 目錄。
-
-**目錄結構**
-
-```
-db/
-  <docId>/
-    _meta.json          # 標題、來源路徑、區塊數量
-    <chunkId>.md        # 每個區塊一個檔案
-  _manifest.json        # 所有 docId 與標題的清單
-  _search_index.json    # 所有區塊的平坦索引，供搜尋使用
-```
-
-**ID 命名慣例**
-
-| ID | 來源 |
-|----|------|
-| `docId` | `sha256(檔名不含副檔名)[:8]`，例如 `a3f8c21b` |
-| `chunkId` | 以標題計數器反映深度的點線分隔格式：`01`、`01-02`、`01-02-03` |
-
-`db/a3f8c21b/01-02.md` 代表雜湊為 `a3f8c21b` 之文件的第二個 H2 層級段落。
-
----
-
-## 代理工具
-
-代理（定義於 `src/agent/tools.ts`）可使用七種工具：
-
-| 工具 | 用途 |
-|------|------|
-| `get_instructions` | 回傳代理自身的操作指引（來自 `src/agent/skill.ts`） |
-| `list_docs` | 透過 `_manifest.json` 列出知識庫中的所有文件 |
-| `read_index` | 讀取完整的 `_search_index.json`，用於結構性總覽 |
-| `search` | 對區塊執行全文 / 正規表示式搜尋；支援文件範圍限定與純索引模式；回傳含上下文的摘錄 |
-| `read_chunk` | 透過 `docId` + `chunkId` 讀取單一區塊檔案 |
-| `read_chunks` | 單次呼叫讀取多個區塊 |
-| `parent` | 解析指定 `chunkId` 的父區塊（沿標題層級向上遍歷） |
-
----
-
-## 開發指令
-
-| 指令 | 說明 |
-|------|------|
-| `npm run dev` | 啟動 Vite 開發伺服器（含 HMR） |
-| `npm run build` | 產生正式版本至 `dist/` |
-| `npm run preview` | 在本機預覽正式版本 |
-| `npm test` | 執行 Vitest 測試套件（56 項測試） |
-| `npm run test:watch` | 監看模式 |
-| `npm run test:coverage` | 產生覆蓋率報告 |
-| `npm run ingest <path>` | 攝入 Markdown 檔案或目錄 |
-
-**環境需求：** Node.js 18+、npm
+在 UI 的金鑰欄位貼上您的 Anthropic API 金鑰，即可開始提問。
 
 ---
 
 ## 部署
 
-`dist/` 中的建置產出為完全靜態網站。將其連同 `db/` 目錄複製到任何靜態主機即可。
-
-若部署至 GitHub Pages，請提交 `db/` 目錄並將 `dist/` 推送至 `gh-pages` 分支。無需伺服器端的 API 金鑰管理——使用者在 UI 中自行提供 Anthropic API 金鑰，金鑰僅儲存於 `sessionStorage`，不會離開瀏覽器。
+執行 `npm run build`，再將 `dist/` 與 `db/` 複製到任何靜態主機。API 金鑰永遠不會離開瀏覽器——它僅儲存於 `sessionStorage`。
