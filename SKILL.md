@@ -1,3 +1,8 @@
+---
+name: knowdb-local-search
+description: Step-by-step guide for querying a KnowDB knowledge base using bash and grep. Use when answering questions from documents ingested into db/.
+---
+
 # KnowDB — Local Search Guide (bash / grep)
 
 For use by local coding agents with filesystem access.
