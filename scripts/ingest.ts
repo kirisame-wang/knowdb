@@ -179,7 +179,7 @@ async function rebuildSearchIndex(): Promise<void> {
     const docDir = join(DB_DIR, dirent.name);
     const files = await readdir(docDir);
     for (const file of files) {
-      if (file === "_index.md" || !file.endsWith(".md")) continue;
+      if (!file.endsWith(".md")) continue;
       const chunkId = file.replace(/\.md$/, "");
       const content = await readFile(join(docDir, file), "utf-8");
       index[`${dirent.name}/${chunkId}`] = content.trim();

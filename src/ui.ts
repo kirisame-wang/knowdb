@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS, processToolCall } from "./agent/tools.js";
+import { SKILL } from "./agent/skill.js";
 import { search, expand, siblings, parent } from "./db_query.js";
 import type { SearchIndex } from "./types.js";
 
@@ -322,11 +323,11 @@ async function sendMessage() {
     while (true) {
       const response = await client.messages.create({
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
+        max_tokens: 2048,
         system:
-          "You are a helpful assistant with access to a knowledge base. " +
-          "Use the search tool to find relevant chunks, then read_chunk to read them. " +
-          "Always search before answering. Be concise.",
+          "You are a helpful assistant with access to a knowledge base via tools.\n\n" +
+          SKILL +
+          "\n\nFollow the workflow above. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         messages: chatHistory,
       });
@@ -354,7 +355,8 @@ async function sendMessage() {
         const result = await processToolCall(
           block.name,
           block.input as Record<string, unknown>,
-          searchIndex
+          searchIndex,
+          manifest
         );
         appendToolTrace(block.name, block.input, result);
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });

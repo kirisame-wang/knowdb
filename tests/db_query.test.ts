@@ -1,9 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { search, expand, siblings, parent, related, fetchChunk } from "../src/db_query.js";
+import {
+  search,
+  expand,
+  expandWithContent,
+  siblings,
+  parent,
+  related,
+  fetchChunk,
+  grepChunk,
+} from "../src/db_query.js";
 import type { SearchIndex } from "../src/types.js";
 
-// Minimal fixture index with two docs
 const INDEX: SearchIndex = {
+  // _index entries (heading trees)
+  "aaa00001/_index": "# aaa00001 Index\n- 00: introduction\n- 01: BM25\n- 01-01: BM25 formula details\n- 01-02: BM25 implementation notes\n- 02: TF-IDF comparison\n- 02-01: TF-IDF formula",
+  "bbb00002/_index": "# bbb00002 Index\n- 00: welcome\n- 01: BM25 in Elasticsearch\n- 01-01: Elasticsearch configuration",
+  // content chunks
   "aaa00001/00": "introduction to BM25 ranking algorithm",
   "aaa00001/01": "BM25 is a bag-of-words retrieval function used in information retrieval",
   "aaa00001/01-01": "BM25 formula details and parameters",
@@ -51,6 +63,46 @@ describe("search", () => {
     expect(ids).toContain("aaa00001/02-01");
     expect(ids).not.toContain("aaa00001/01");
   });
+
+  it("skips _index entries by default", () => {
+    const results = search(INDEX, "BM25");
+    for (const r of results) {
+      expect(r.id).not.toMatch(/\/_index$/);
+    }
+  });
+
+  it("indexOnly returns only _index entries", () => {
+    const results = search(INDEX, "BM25", undefined, { indexOnly: true });
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.id).toMatch(/\/_index$/);
+    }
+  });
+
+  it("supports regex patterns", () => {
+    const results = search(INDEX, "BM25|TF-IDF");
+    const ids = results.map((r) => r.id);
+    expect(ids).toContain("aaa00001/01");
+    expect(ids).toContain("aaa00001/02");
+  });
+
+  it("is case-insensitive by default", () => {
+    const lower = search(INDEX, "bm25");
+    const upper = search(INDEX, "BM25");
+    expect(lower.map((r) => r.id).sort()).toEqual(upper.map((r) => r.id).sort());
+  });
+
+  it("respects case_sensitive option", () => {
+    const sensitive = search(INDEX, "bm25", undefined, { caseInsensitive: false });
+    expect(sensitive).toHaveLength(0);
+  });
+
+  it("includes a non-empty excerpt for each result", () => {
+    const results = search(INDEX, "BM25");
+    for (const r of results) {
+      expect(r.excerpt).toBeTruthy();
+    }
+  });
 });
 
 describe("parent", () => {
@@ -75,8 +127,14 @@ describe("siblings", () => {
   it("does not include deeper-nested chunks", () => {
     const result = siblings(INDEX, "aaa00001/01");
     for (const id of result) {
-      // siblings of 01 should be other top-level chunks (no dash in chunk part)
       expect(id.split("/")[1]).not.toContain("-");
+    }
+  });
+
+  it("does not include _index entries", () => {
+    const result = siblings(INDEX, "aaa00001/00");
+    for (const id of result) {
+      expect(id).not.toMatch(/\/_index$/);
     }
   });
 
@@ -95,7 +153,7 @@ describe("expand", () => {
     const result = expand(INDEX, "aaa00001/01-01", 1);
     expect(result).toContain("aaa00001/01-01");
     expect(result).toContain("aaa00001/01-02");
-    expect(result).not.toContain("aaa00001/01"); // parent not included in level 1
+    expect(result).not.toContain("aaa00001/01");
   });
 
   it("level 2 returns chunk + siblings + parent", () => {
@@ -105,12 +163,77 @@ describe("expand", () => {
     expect(result).toContain("aaa00001/01");
   });
 
-  it("level 3 returns all chunks in the same doc", () => {
+  it("level 3 returns all content chunks in the same doc (no _index)", () => {
     const result = expand(INDEX, "aaa00001/01", 3);
-    const docKeys = Object.keys(INDEX).filter((k) => k.startsWith("aaa00001/"));
+    const docKeys = Object.keys(INDEX).filter(
+      (k) => k.startsWith("aaa00001/") && !k.endsWith("/_index")
+    );
     for (const key of docKeys) {
       expect(result).toContain(key);
     }
+    for (const id of result) {
+      expect(id).not.toMatch(/\/_index$/);
+    }
+  });
+});
+
+describe("expandWithContent", () => {
+  it("returns objects with id and content", () => {
+    const result = expandWithContent(INDEX, "aaa00001/01-01", 1);
+    for (const item of result) {
+      expect(item).toHaveProperty("id");
+      expect(item).toHaveProperty("content");
+      expect(typeof item.content).toBe("string");
+    }
+  });
+
+  it("includes the queried chunk and its siblings", () => {
+    const result = expandWithContent(INDEX, "aaa00001/01-01", 1);
+    const ids = result.map((r) => r.id);
+    expect(ids).toContain("aaa00001/01-01");
+    expect(ids).toContain("aaa00001/01-02");
+  });
+
+  it("content matches the index for each id", () => {
+    const result = expandWithContent(INDEX, "aaa00001/01-01", 1);
+    for (const item of result) {
+      expect(item.content).toBe(INDEX[item.id] ?? "");
+    }
+  });
+});
+
+describe("grepChunk", () => {
+  const chunk = `line one about apples
+line two about bananas
+line three about apples and oranges
+line four about grapes
+line five about apples`;
+
+  it("returns matching lines with context", () => {
+    const result = grepChunk(chunk, "apples", 1);
+    expect(result).toContain("line one about apples");
+    expect(result).toContain("line two about bananas"); // context after line 1
+    expect(result).toContain("line five about apples");
+  });
+
+  it("returns (no matches) when pattern has no match", () => {
+    expect(grepChunk(chunk, "mango")).toBe("(no matches)");
+  });
+
+  it("is case-insensitive", () => {
+    const result = grepChunk(chunk, "APPLES");
+    expect(result).toContain("line one about apples");
+  });
+
+  it("uses --- separator between non-adjacent match groups", () => {
+    const result = grepChunk(chunk, "apples", 0);
+    expect(result).toContain("---");
+  });
+
+  it("supports regex patterns", () => {
+    const result = grepChunk(chunk, "apple|grape");
+    expect(result).toContain("apples");
+    expect(result).toContain("grapes");
   });
 });
 

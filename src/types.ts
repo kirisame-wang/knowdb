@@ -7,6 +7,7 @@ export interface ChunkEntry {
 export type SearchIndex = Record<string, string>; // "<docId>/<chunkId>" → content
 
 export interface SearchResult {
-  id: string;    // "<docId>/<chunkId>"
-  score: number; // keyword occurrence count
+  id: string;       // "<docId>/<chunkId>"
+  score: number;    // keyword occurrence count
+  excerpt?: string; // first matching line (truncated)
 }
