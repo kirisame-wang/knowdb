@@ -1,0 +1,15 @@
+node_modules/
+.node_modules/
+dist/
+coverage/
+*.swp
+**/.DS_Store
+**/.vs
+**/.vscode/*
+!**/.vscode/tasks.json
+!**/.vscode/settings.template.json
+!**/.vscode/launch.template.json
+!**/.vscode/extensions.json
+.idea
+.eslintcache
+docs/
