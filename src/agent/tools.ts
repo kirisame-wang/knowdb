@@ -1,7 +1,28 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
-import { search, fetchChunk, expand, expandWithContent, parent, grepChunk } from "../db_query.js";
+import {
+  search,
+  fetchChunk,
+  expand,
+  expandWithContent,
+  parent,
+  grepChunk,
+  related,
+  reconstructDocument,
+} from "../db_query.js";
 import { SKILL } from "./skill.js";
-import type { SearchIndex } from "../types.js";
+import type { SearchIndex, SearchResult } from "../types.js";
+
+type Manifest = Record<string, { originalFilename: string; title: string }>;
+
+/** Attach the human-readable doc_title (from _manifest) to each result. */
+function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
+  if (!manifest) return results;
+  return results.map((r) => {
+    const docId = r.id.slice(0, r.id.indexOf("/"));
+    const title = manifest[docId]?.title;
+    return title ? { ...r, doc_title: title } : r;
+  });
+}
 
 // ── Tool definitions ──────────────────────────────────────────────────────────
 
@@ -29,7 +50,7 @@ export const KNOWDB_TOOLS: Tool[] = [
   },
   {
     name: "search",
-    description: "Search the knowledge base by keyword (regex supported). Returns [{id, score, excerpt}] sorted by relevance. Always set scope once you know the target document. Use index_only:true to search heading trees only (fast navigation).",
+    description: "Search the knowledge base by keyword (regex supported). Returns [{id, score, excerpt, doc_title, breadcrumb, siblings, parent_summary}] sorted by relevance — each result carries its hierarchy position so you know where it sits without extra calls. Always set scope once you know the target document. Use index_only:true to search heading trees only (fast navigation).",
     input_schema: {
       type: "object",
       properties: {
@@ -101,6 +122,29 @@ export const KNOWDB_TOOLS: Tool[] = [
       required: ["id"],
     },
   },
+  {
+    name: "jump_to_ref",
+    description: "Lateral cross-document jump: given a chunk id, return related chunks in OTHER documents, ranked by implicit term overlap (not an explicit [[ref]] system). Use after reading a chunk to discover connected material elsewhere in the knowledge base.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Source chunk id — format: <doc_id>/<chunk_id>" },
+        top_k: { type: "number", description: "Max related chunks to return. Default 5." },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "reconstruct_document",
+    description: "Reassemble a document's full Markdown from its chunks, with headings restored from the heading tree. Use when chunked navigation isn't enough and you need the whole document as continuous text.",
+    input_schema: {
+      type: "object",
+      properties: {
+        doc_id: { type: "string", description: "8-hex doc_id from list_docs" },
+      },
+      required: ["doc_id"],
+    },
+  },
 ];
 
 // ── Tool dispatcher ───────────────────────────────────────────────────────────
@@ -136,7 +180,7 @@ export async function processToolCall(
       const indexOnly = toolInput["index_only"] as boolean | undefined;
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
-      return JSON.stringify(results.slice(0, 20));
+      return JSON.stringify(withDocTitles(results.slice(0, 20), manifest));
     }
 
     case "read_chunk": {
@@ -161,6 +205,18 @@ export async function processToolCall(
     case "parent": {
       const id = toolInput["id"] as string;
       return JSON.stringify(parent(id));
+    }
+
+    case "jump_to_ref": {
+      const id = toolInput["id"] as string;
+      const topK = (toolInput["top_k"] as number | undefined) ?? 5;
+      const results = related(index, id, { topK });
+      return JSON.stringify(withDocTitles(results, manifest));
+    }
+
+    case "reconstruct_document": {
+      const docId = toolInput["doc_id"] as string;
+      return reconstructDocument(index, docId);
     }
 
     default:

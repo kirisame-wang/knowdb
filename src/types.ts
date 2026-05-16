@@ -6,8 +6,19 @@ export interface ChunkEntry {
 
 export type SearchIndex = Record<string, string>; // "<docId>/<chunkId>" → content
 
+export interface Breadcrumb {
+  id: string;    // "<docId>/<chunkId>" of this ancestor (or the chunk itself)
+  title: string; // heading title from _index
+}
+
 export interface SearchResult {
   id: string;       // "<docId>/<chunkId>"
   score: number;    // keyword occurrence count
   excerpt?: string; // first matching line (truncated)
+  // Navigation metadata — all optional, backward compatible.
+  // Absent for _index entries (the index is itself the map).
+  doc_title?: string;             // human-readable doc title (added at tools layer)
+  breadcrumb?: Breadcrumb[];      // root → self, heading titles along the path
+  siblings?: string[];            // same-parent chunk ids, excluding self
+  parent_summary?: string | null; // parent heading title; null at root level
 }

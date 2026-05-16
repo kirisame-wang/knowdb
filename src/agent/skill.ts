@@ -18,6 +18,10 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
 - keyword supports regex: \`"term1|term2"\` matches either term.
 - Case-insensitive by default.
 - Each result includes an \`excerpt\` — read it before fetching the full chunk.
+- Each result also carries its position so you rarely need extra calls:
+  \`breadcrumb\` (root→self path with titles), \`siblings\` (same-level ids),
+  \`parent_summary\` (parent heading), \`doc_title\`. Read these before
+  calling \`parent\` or \`read_index\` — the answer is often already here.
 
 ## Step 4 — Read minimally
 Choose the right read tool:
@@ -30,6 +34,8 @@ Choose the right read tool:
 | Read one chunk in full | \`read_chunk(id)\` |
 | Read only matching lines | \`read_chunk(id, pattern, context)\` — like grep -C |
 | Go up the hierarchy | \`parent(id)\` → returns parent chunk id or null |
+| Jump to related material elsewhere | \`jump_to_ref(id, top_k)\` → related chunks in OTHER docs |
+| Need the whole document as text | \`reconstruct_document(doc_id)\` → full Markdown |
 
 ## Core rules
 1. **list_docs → read_index → scoped search → read_chunk** — always in this order.
@@ -40,4 +46,7 @@ Choose the right read tool:
    only lines matching "keyword" with 3 lines of context each side.
 5. **Use \`scope\`** on every \`search\` once you know the document.
 6. **Never load a full document just to scan it** — search + read_index first.
+   Use \`reconstruct_document\` only when you genuinely need the whole text.
+7. **Follow \`jump_to_ref\`** after reading a relevant chunk to find connected
+   material in other documents — it surfaces implicit cross-document links.
 `.trim();

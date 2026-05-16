@@ -1,4 +1,4 @@
-import type { SearchIndex, SearchResult } from "./types.js";
+import type { SearchIndex, SearchResult, Breadcrumb } from "./types.js";
 
 export async function load(url: string): Promise<SearchIndex> {
   const res = await fetch(url);
@@ -57,7 +57,11 @@ export function search(
       results.push({ id, score, excerpt });
     }
   }
-  return results.sort((a, b) => b.score - a.score);
+  const sorted = results.sort((a, b) => b.score - a.score);
+  // _index results are themselves the map — no hierarchy coordinates needed.
+  if (opts?.indexOnly) return sorted;
+  const cache: TitleCache = new Map();
+  return sorted.map((r) => enrich(index, r, cache));
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -180,7 +184,87 @@ export function related(
     const score = words.reduce((acc, w) => acc + countOccurrences(otherContent.toLowerCase(), w), 0);
     if (score > 0) scores.push({ id: otherId, score });
   }
-  return scores.sort((a, b) => b.score - a.score).slice(0, opts.topK);
+  const top = scores.sort((a, b) => b.score - a.score).slice(0, opts.topK);
+  const cache: TitleCache = new Map();
+  return top.map((r) => enrich(index, r, cache));
+}
+
+// ── Hierarchy enrichment ──────────────────────────────────────────────────────
+
+type TitleCache = Map<string, Map<string, string>>; // docId → (chunkId → title)
+
+/** Parse a docId's _index content into a chunkId → heading-title map. */
+function parseIndexTitles(indexContent: string): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const line of indexContent.split("\n")) {
+    const m = /^\s*-\s+(\S+):\s*(.*)$/.exec(line);
+    if (m) map.set(m[1]!, m[2]!.trim());
+  }
+  return map;
+}
+
+function titleMapFor(index: SearchIndex, docId: string, cache: TitleCache): Map<string, string> {
+  let m = cache.get(docId);
+  if (!m) {
+    m = parseIndexTitles(index[`${docId}/_index`] ?? "");
+    cache.set(docId, m);
+  }
+  return m;
+}
+
+/** Attach breadcrumb / siblings / parent_summary to a content-chunk result. */
+function enrich(index: SearchIndex, result: SearchResult, cache: TitleCache): SearchResult {
+  const [docId, chunkId] = splitId(result.id);
+  const titles = titleMapFor(index, docId, cache);
+
+  const segs = chunkId.split("-");
+  const breadcrumb: Breadcrumb[] = [];
+  for (let i = 1; i <= segs.length; i++) {
+    const ancestor = segs.slice(0, i).join("-");
+    breadcrumb.push({ id: `${docId}/${ancestor}`, title: titles.get(ancestor) ?? "" });
+  }
+
+  const p = parent(result.id);
+  const parent_summary = p ? titles.get(splitId(p)[1]) ?? null : null;
+
+  return { ...result, breadcrumb, siblings: siblings(index, result.id), parent_summary };
+}
+
+// ── Document reconstruction ───────────────────────────────────────────────────
+
+/**
+ * Reassemble a document's full Markdown from its chunks.
+ * Chunk files store body only; heading lines are re-derived from _index
+ * (depth = number of id segments). Structurally faithful, not byte-identical.
+ */
+export function reconstructDocument(index: SearchIndex, docId: string): string {
+  const blocks: string[] = [];
+
+  // Preamble (chunk "00") has no heading line, by the ingest data model.
+  const preamble = index[`${docId}/00`];
+  if (preamble?.trim()) blocks.push(preamble.trim());
+
+  const titles = parseIndexTitles(index[`${docId}/_index`] ?? "");
+  if (titles.size > 0) {
+    for (const [chunkId, title] of titles) {
+      if (chunkId === "00") continue; // preamble already emitted, never has a heading
+      const depth = Math.min(chunkId.split("-").length, 6);
+      blocks.push(`${"#".repeat(depth)} ${title}`);
+      const body = index[`${docId}/${chunkId}`];
+      if (body?.trim()) blocks.push(body.trim());
+    }
+    return blocks.join("\n\n") + "\n";
+  }
+
+  // Fallback: no _index — concatenate content chunks in id order, no headings.
+  const ids = Object.keys(index)
+    .filter((k) => k.startsWith(`${docId}/`) && !k.endsWith("/_index") && k !== `${docId}/00`)
+    .sort();
+  for (const id of ids) {
+    const body = index[id];
+    if (body?.trim()) blocks.push(body.trim());
+  }
+  return blocks.join("\n\n") + "\n";
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
