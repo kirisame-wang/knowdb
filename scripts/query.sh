@@ -1,12 +1,41 @@
 #!/usr/bin/env bash
 
 DB_DIR="${DB_DIR:-db}"
+GAPS_DIR="${GAPS_DIR:-gaps}"
 CMD="${1:-}"
 shift || true
 
 usage() {
   echo "Usage: query.sh <search|expand|siblings|parent> [args]" >&2
   exit 1
+}
+
+# Minimal JSON string escaping (backslash, quote, control whitespace).
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/ }"
+  s="${s//$'\t'/ }"
+  printf '%s' "$s"
+}
+
+# Layer 1 工具閉環: append a GapEvent line, schema-identical to the
+# browser sink (src/gaps.ts BrowserGapSink). The script owns recording.
+record_gap() {
+  local kw="$1" scope_in="$2"
+  mkdir -p "$GAPS_DIR"
+  local file="${GAPS_DIR}/query-gaps.jsonl"
+  local ymd ts n seq scope_json
+  ymd="$(date -u +%Y%m%d)"
+  ts="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+  n="$(grep -c "\"gap_id\":\"gap_${ymd}_" "$file" 2>/dev/null || true)"
+  n="${n//[^0-9]/}"; [[ -z "$n" ]] && n=0
+  seq="$(printf '%03d' "$((n + 1))")"
+  scope_json="null"
+  [[ -n "$scope_in" ]] && scope_json="\"$(json_escape "$scope_in")\""
+  printf '{"gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"}\n' \
+    "$ymd" "$seq" "$(json_escape "$kw")" "$scope_json" "$ts" >> "$file"
 }
 
 # Count dashes in a string
@@ -31,10 +60,16 @@ if [[ "$CMD" == "search" ]]; then
   SEARCH_DIR="${DB_DIR}"
   [[ -n "$SCOPE" ]] && SEARCH_DIR="${DB_DIR}/${SCOPE}"
 
-  grep -rl --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
+  RESULTS="$(grep -rl --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
     | grep -v "_index\.md" \
     | sort \
-    || true
+    || true)"
+
+  if [[ -z "$RESULTS" ]]; then
+    record_gap "$KEYWORD" "$SCOPE"
+  else
+    echo "$RESULTS"
+  fi
   exit 0
 fi
 

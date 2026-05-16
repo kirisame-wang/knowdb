@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "vite",
     "ingest": "tsx scripts/ingest.ts",
+    "gaps": "tsx scripts/gaps.ts",
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",

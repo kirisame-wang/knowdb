@@ -1,16 +1,30 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
+import { parseGapsJsonl } from "../src/gaps.js";
 import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
 
 const DB_DIR = dbDir("db-query-test");
+const GAPS_DIR = dbDir("gaps-query-test");
+const GAPS_FILE = join(GAPS_DIR, "query-gaps.jsonl");
+const GAPS_TS = join(QUERY_SH, "..", "gaps.ts"); // scripts/gaps.ts, beside query.sh
 
 function runQuery(args: string[]): { stdout: string; status: number } {
   const result = spawnSync("bash", [QUERY_SH, ...args], {
     encoding: "utf-8",
-    env: { ...process.env, DB_DIR },
+    env: { ...process.env, DB_DIR, GAPS_DIR },
   });
+  return { stdout: (result.stdout ?? "").trim(), status: result.status ?? 1 };
+}
+
+function runGapsAggregate(): { stdout: string; status: number } {
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx/esm", GAPS_TS, "aggregate"],
+    { encoding: "utf-8", env: { ...process.env, GAPS_DIR } }
+  );
   return { stdout: (result.stdout ?? "").trim(), status: result.status ?? 1 };
 }
 
@@ -28,6 +42,7 @@ describe("query CLI", () => {
 
   afterAll(async () => {
     await rm(DB_DIR, { recursive: true, force: true });
+    await rm(GAPS_DIR, { recursive: true, force: true });
   });
 
   describe("search", () => {
@@ -103,6 +118,54 @@ describe("query CLI", () => {
       expect(status).toBe(0);
       const lines = stdout.split("\n").filter(Boolean);
       expect(lines.length).toBeGreaterThan(3);
+    });
+  });
+
+  describe("gap recording (local sink)", () => {
+    const ABSENT = "zzz_absent_term";
+
+    beforeEach(async () => {
+      await rm(GAPS_DIR, { recursive: true, force: true });
+    });
+
+    it("appends a well-formed gap line when search has no hits", () => {
+      const { status } = runQuery(["search", ABSENT]);
+      expect(status).toBe(0);
+      expect(existsSync(GAPS_FILE)).toBe(true);
+
+      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      expect(events).toHaveLength(1);
+      const e = events[0]!;
+      expect(e.keyword).toBe(ABSENT);
+      expect(e.scope).toBeNull();
+      expect(e.gap_id).toMatch(/^gap_\d{8}_\d{3}$/);
+      expect(Number.isNaN(Date.parse(e.timestamp))).toBe(false);
+    });
+
+    it("does not record when the search has hits", () => {
+      const { status } = runQuery(["search", "Preamble"]);
+      expect(status).toBe(0);
+      const events = existsSync(GAPS_FILE)
+        ? parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"))
+        : [];
+      expect(events).toHaveLength(0);
+    });
+
+    it("captures the scope when the miss is scoped", () => {
+      runQuery(["search", ABSENT, "--scope", docId]);
+      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      expect(events[0]!.scope).toBe(docId);
+    });
+
+    it("is schema-compatible with aggregate() (cross-mode)", () => {
+      runQuery(["search", ABSENT]);
+      runQuery(["search", ABSENT]);
+      const { stdout, status } = runGapsAggregate();
+      expect(status).toBe(0);
+      const agg = JSON.parse(stdout);
+      const row = agg.find((a: { topic: string }) => a.topic === ABSENT);
+      expect(row).toBeTruthy();
+      expect(row.occurrence_count).toBe(2);
     });
   });
 });
