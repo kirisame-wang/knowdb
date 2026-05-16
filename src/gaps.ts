@@ -15,12 +15,22 @@ export function normalizeKeyword(keyword: string): string {
 
 // ── Gap id ────────────────────────────────────────────────────────────────────
 
-/** "gap_<yyyymmdd>_<seq3>" in UTC. `seq` is the per-day sequence (1-based). */
-export function makeGapId(date: Date, seq: number): string {
+function utcYmd(date: Date): string {
   const y = date.getUTCFullYear();
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
   const d = String(date.getUTCDate()).padStart(2, "0");
-  return `gap_${y}${m}${d}_${String(seq).padStart(3, "0")}`;
+  return `${y}${m}${d}`;
+}
+
+/** "gap_<yyyymmdd>_<seq3>" in UTC. `seq` is the per-day sequence (1-based). */
+export function makeGapId(date: Date, seq: number): string {
+  return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
+}
+
+/** 1-based sequence for `date`'s UTC day, given the events already recorded. */
+export function nextDailySeq(events: GapEvent[], date: Date): number {
+  const ymd = utcYmd(date);
+  return events.filter((e) => utcYmd(new Date(e.timestamp)) === ymd).length + 1;
 }
 
 // ── JSONL serialization ───────────────────────────────────────────────────────
@@ -35,6 +45,40 @@ export function parseGapsJsonl(text: string): GapEvent[] {
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
     .map((l) => JSON.parse(l) as GapEvent);
+}
+
+// ── Sink (G3 — two impls share one JSONL schema) ──────────────────────────────
+
+export interface GapSink {
+  record(event: GapEvent): void;
+  readAll(): GapEvent[];
+}
+
+/** Minimal Storage surface — `window.localStorage` satisfies this. */
+export interface KeyValueStore {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/** Browser sink: appends JSONL to localStorage; dump() feeds the export button. */
+export class BrowserGapSink implements GapSink {
+  constructor(
+    private readonly store: KeyValueStore,
+    private readonly key = "knowdb-gaps"
+  ) {}
+
+  record(event: GapEvent): void {
+    this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + serializeGap(event) + "\n");
+  }
+
+  readAll(): GapEvent[] {
+    return parseGapsJsonl(this.store.getItem(this.key) ?? "");
+  }
+
+  /** Raw JSONL for the Demo's user-triggered download (ui.ts wraps in a Blob). */
+  dump(): string {
+    return this.store.getItem(this.key) ?? "";
+  }
 }
 
 // ── Aggregation (G7 — pure, deterministic) ────────────────────────────────────

@@ -11,7 +11,8 @@ import {
   splitId,
 } from "../db_query.js";
 import { SKILL } from "./skill.js";
-import type { SearchIndex, SearchResult, Manifest } from "../types.js";
+import { makeGapId, nextDailySeq, checkKnownGap, type GapSink } from "../gaps.js";
+import type { SearchIndex, SearchResult, Manifest, GapEvent } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */
 function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
@@ -151,7 +152,8 @@ export async function processToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
   index: SearchIndex,
-  manifest?: Manifest
+  manifest?: Manifest,
+  sink?: GapSink
 ): Promise<string> {
   switch (toolName) {
     case "get_instructions":
@@ -178,6 +180,23 @@ export async function processToolCall(
       const indexOnly = toolInput["index_only"] as boolean | undefined;
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
+
+      // Layer 1 工具閉環: an empty keyword search is a recordable gap.
+      // index_only discovery misses are not gaps (spec G4).
+      if (results.length === 0 && !indexOnly && sink) {
+        const now = new Date();
+        const event: GapEvent = {
+          gap_id: makeGapId(now, nextDailySeq(sink.readAll(), now)),
+          keyword,
+          scope: scope ?? null,
+          timestamp: now.toISOString(),
+        };
+        sink.record(event);
+        // Current gap is now counted (spec §4); known gaps short-circuit.
+        const known = checkKnownGap(sink.readAll(), keyword);
+        return JSON.stringify(known ?? []);
+      }
+
       return JSON.stringify(withDocTitles(results.slice(0, 20), manifest));
     }
 

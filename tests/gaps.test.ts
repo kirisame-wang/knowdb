@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import {
   normalizeKeyword,
   makeGapId,
+  nextDailySeq,
   serializeGap,
   parseGapsJsonl,
   aggregate,
   checkKnownGap,
+  BrowserGapSink,
   HIGH,
   MID,
 } from "../src/gaps.js";
@@ -161,6 +163,57 @@ describe("checkKnownGap", () => {
     const evs = many("backup", MID);
     const r = checkKnownGap(evs, "backup")!;
     expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
+  });
+});
+
+describe("nextDailySeq", () => {
+  const day = new Date("2026-05-16T12:00:00Z");
+
+  it("is 1 when no events exist for that UTC day", () => {
+    expect(nextDailySeq([], day)).toBe(1);
+    expect(nextDailySeq([ev({ keyword: "x", timestamp: "2026-05-15T23:59:59Z" })], day)).toBe(1);
+  });
+
+  it("counts only same-UTC-day events", () => {
+    const events = [
+      ev({ keyword: "a", timestamp: "2026-05-16T00:00:01Z" }),
+      ev({ keyword: "b", timestamp: "2026-05-16T18:00:00Z" }),
+      ev({ keyword: "c", timestamp: "2026-05-15T10:00:00Z" }),
+    ];
+    expect(nextDailySeq(events, day)).toBe(3);
+  });
+});
+
+class FakeKV {
+  private m = new Map<string, string>();
+  getItem(k: string): string | null {
+    return this.m.has(k) ? this.m.get(k)! : null;
+  }
+  setItem(k: string, v: string): void {
+    this.m.set(k, v);
+  }
+}
+
+describe("BrowserGapSink", () => {
+  it("records and reads back events round-trip", () => {
+    const sink = new BrowserGapSink(new FakeKV());
+    const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
+    const b = ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" });
+    sink.record(a);
+    sink.record(b);
+    expect(sink.readAll()).toEqual([a, b]);
+  });
+
+  it("dump() returns the raw JSONL for export", () => {
+    const kv = new FakeKV();
+    const sink = new BrowserGapSink(kv);
+    const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
+    sink.record(a);
+    expect(sink.dump()).toBe(serializeGap(a) + "\n");
+  });
+
+  it("starts empty", () => {
+    expect(new BrowserGapSink(new FakeKV()).readAll()).toEqual([]);
   });
 });
 
