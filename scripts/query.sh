@@ -10,13 +10,19 @@ usage() {
   exit 1
 }
 
-# Minimal JSON string escaping (backslash, quote, control whitespace).
+# JSON string escaping matching JSON.stringify for the realistic cases:
+# backslash, quote, and the named control escapes (\b \f \n \r \t).
+# UTF-8 (e.g. CJK) passes through unescaped, exactly as JSON.stringify does.
+# Other raw control bytes (<0x20) are out of scope for a search keyword.
 json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
-  s="${s//$'\n'/ }"
-  s="${s//$'\t'/ }"
+  s="${s//$'\b'/\\b}"
+  s="${s//$'\f'/\\f}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
   printf '%s' "$s"
 }
 

@@ -167,5 +167,25 @@ describe("query CLI", () => {
       expect(row).toBeTruthy();
       expect(row.occurrence_count).toBe(2);
     });
+
+    // Cross-mode contract: the bash-written JSONL must JSON.parse back to the
+    // exact keyword (the property aggregate()/parseGapsJsonl actually rely on),
+    // for keywords JSON.stringify would escape.
+    // NOTE: a bare CR can't be delivered through Node→Win32→bash argv (it is
+    // truncated before query.sh sees it), so \r is not asserted here even
+    // though json_escape handles it correctly for POSIX local agents.
+    it.each([
+      ["double quote", 'zzqq_"x"'],
+      ["backslash", "zzqq_\\path"],
+      ["backslash + quote", 'zzqq_\\"'],
+      ["tab", "zzqq_a\tb"],
+      ["CJK passthrough", "zzqq_進階配置"],
+    ])("round-trips a keyword with %s through the bash sink", (_label, kw) => {
+      const { status } = runQuery(["search", kw]);
+      expect(status).toBe(0);
+      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      expect(events).toHaveLength(1);
+      expect(events[0]!.keyword).toBe(kw);
+    });
   });
 });
