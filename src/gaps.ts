@@ -40,17 +40,26 @@ export function serializeGap(event: GapEvent): string {
 }
 
 export function parseGapsJsonl(text: string): GapEvent[] {
-  return text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as GapEvent);
+  const out: GapEvent[] = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    try {
+      out.push(JSON.parse(line) as GapEvent);
+    } catch {
+      // Skip a corrupt line (truncated/interleaved >> append, partial
+      // localStorage write) rather than aborting the whole read — gap
+      // logging runs inside the live search path and must never break it.
+    }
+  }
+  return out;
 }
 
 // ── Sink (G3 — two impls share one JSONL schema) ──────────────────────────────
 
 export interface GapSink {
   record(event: GapEvent): void;
+  /** Returns a snapshot — a later record() must not mutate a prior result. */
   readAll(): GapEvent[];
 }
 

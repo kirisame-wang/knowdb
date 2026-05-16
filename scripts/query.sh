@@ -40,7 +40,7 @@ record_gap() {
   seq="$(printf '%03d' "$((n + 1))")"
   scope_json="null"
   [[ -n "$scope_in" ]] && scope_json="\"$(json_escape "$scope_in")\""
-  printf '{"gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"}\n' \
+  printf '{"source":"local","gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"}\n' \
     "$ymd" "$seq" "$(json_escape "$kw")" "$scope_json" "$ts" >> "$file"
 }
 

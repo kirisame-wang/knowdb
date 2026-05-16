@@ -9,7 +9,7 @@ class MemSink implements GapSink {
     this.events.push(e);
   }
   readAll() {
-    return this.events;
+    return [...this.events]; // snapshot, per the GapSink contract
   }
 }
 
@@ -165,6 +165,7 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(JSON.parse(raw)).toEqual([]);
     expect(sink.events).toHaveLength(1);
     const e = sink.events[0]!;
+    expect(e.source).toBe("browser");
     expect(e.keyword).toBe(ABSENT);
     expect(e.scope).toBe("aaa00001");
     expect(e.gap_id).toMatch(/^gap_\d{8}_\d{3}$/);

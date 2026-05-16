@@ -136,6 +136,7 @@ describe("query CLI", () => {
       const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
       expect(events).toHaveLength(1);
       const e = events[0]!;
+      expect(e.source).toBe("local");
       expect(e.keyword).toBe(ABSENT);
       expect(e.scope).toBeNull();
       expect(e.gap_id).toMatch(/^gap_\d{8}_\d{3}$/);

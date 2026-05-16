@@ -35,7 +35,11 @@ export interface SearchResult {
 // and all three stages (recording / aggregation / known-gap check).
 
 export interface GapEvent {
-  gap_id: string;          // "gap_<yyyymmdd>_<seq3>" — de-identified
+  // gap_id is unique only WITHIN a source; (source, gap_id) is globally
+  // unique. The two sinks run independent per-day sequencers, so cross-source
+  // merges (G2) must de-dup on the pair, not gap_id alone.
+  source: "local" | "browser";
+  gap_id: string;          // "gap_<yyyymmdd>_<seq3>" — per-source, de-identified
   keyword: string;         // raw query keyword (un-normalized)
   scope: string | null;    // scoped 8-hex doc_id, or null if unscoped
   timestamp: string;       // ISO 8601 UTC

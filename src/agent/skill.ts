@@ -22,12 +22,12 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
   \`breadcrumb\` (root→self path with titles), \`siblings\` (same-level ids),
   \`parent_summary\` (parent heading), \`doc_title\`. Read these before
   calling \`parent\` or \`read_index\` — the answer is often already here.
-- **Known-gap response**: if \`search\` returns an object with
-  \`status: "known_gap"\` instead of an array, this keyword has repeatedly
-  returned nothing. Act on \`recommendation\`:
-  - "不在當前知識庫覆蓋範圍內" → tell the user it is not covered; do NOT
-    keep retrying the same keyword.
-  - "嘗試替代關鍵字" → try a different term or a broader concept.
+- **Known-gap response**: detect it structurally — if \`search\` returns an
+  object whose \`status === "known_gap"\` (not an array), this keyword has
+  repeatedly returned nothing. Read the human-readable \`recommendation\`
+  field and follow it; use \`gap_info.occurrence_count\` to gauge how firmly
+  to stop. Either tell the user it is not covered or try a genuinely
+  different term — never re-run the same fruitless keyword.
 
 ## Step 4 — Read minimally
 Choose the right read tool:

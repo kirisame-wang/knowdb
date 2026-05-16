@@ -185,15 +185,17 @@ export async function processToolCall(
       // index_only discovery misses are not gaps (spec G4).
       if (results.length === 0 && !indexOnly && sink) {
         const now = new Date();
+        const existing = sink.readAll(); // single parse; reused below
         const event: GapEvent = {
-          gap_id: makeGapId(now, nextDailySeq(sink.readAll(), now)),
+          source: "browser",
+          gap_id: makeGapId(now, nextDailySeq(existing, now)),
           keyword,
           scope: scope ?? null,
           timestamp: now.toISOString(),
         };
         sink.record(event);
-        // Current gap is now counted (spec §4); known gaps short-circuit.
-        const known = checkKnownGap(sink.readAll(), keyword);
+        // Count the just-recorded gap (spec §4) without a second full parse.
+        const known = checkKnownGap([...existing, event], keyword);
         return JSON.stringify(known ?? []);
       }
 

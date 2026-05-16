@@ -14,6 +14,7 @@ import {
 import type { GapEvent } from "../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
+  source: "browser",
   gap_id: "gap_20260516_001",
   scope: null,
   ...over,
@@ -47,6 +48,7 @@ describe("makeGapId", () => {
 describe("serializeGap / parseGapsJsonl", () => {
   it("round-trips a full event including optional context", () => {
     const e: GapEvent = {
+      source: "local",
       gap_id: "gap_20260516_002",
       keyword: "進階配置",
       scope: "aaa00001",
@@ -71,6 +73,14 @@ describe("serializeGap / parseGapsJsonl", () => {
   it("returns [] for empty input", () => {
     expect(parseGapsJsonl("")).toEqual([]);
     expect(parseGapsJsonl("\n  \n")).toEqual([]);
+  });
+
+  it("skips malformed lines instead of throwing (corrupt-append tolerance)", () => {
+    const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
+    const b = ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" });
+    const text =
+      serializeGap(a) + "\n" + '{"gap_id":"gap_2026' + "\n" + "not json" + "\n" + serializeGap(b) + "\n";
+    expect(parseGapsJsonl(text)).toEqual([a, b]);
   });
 });
 
