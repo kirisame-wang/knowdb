@@ -13,3 +13,5 @@ coverage/
 .idea
 .eslintcache
 docs/
+gaps/
+gaps-query-test/

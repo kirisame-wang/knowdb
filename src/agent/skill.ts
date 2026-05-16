@@ -22,6 +22,12 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
   \`breadcrumb\` (root→self path with titles), \`siblings\` (same-level ids),
   \`parent_summary\` (parent heading), \`doc_title\`. Read these before
   calling \`parent\` or \`read_index\` — the answer is often already here.
+- **Known-gap response**: if \`search\` returns an object with
+  \`status: "known_gap"\` instead of an array, this keyword has repeatedly
+  returned nothing. Act on \`recommendation\`:
+  - "不在當前知識庫覆蓋範圍內" → tell the user it is not covered; do NOT
+    keep retrying the same keyword.
+  - "嘗試替代關鍵字" → try a different term or a broader concept.
 
 ## Step 4 — Read minimally
 Choose the right read tool:
@@ -49,4 +55,6 @@ Choose the right read tool:
    Use \`reconstruct_document\` only when you genuinely need the whole text.
 7. **Follow \`jump_to_ref\`** after reading a relevant chunk to find connected
    material in other documents — it surfaces implicit cross-document links.
+8. **Respect a \`known_gap\`** — don't loop the same fruitless keyword; either
+   tell the user it's out of coverage or try a genuinely different term.
 `.trim();
