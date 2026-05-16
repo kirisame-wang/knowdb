@@ -5,6 +5,7 @@ import {
   serializeGap,
   parseGapsJsonl,
   aggregate,
+  checkKnownGap,
   HIGH,
   MID,
 } from "../src/gaps.js";
@@ -110,6 +111,56 @@ describe("aggregate", () => {
 
   it("returns [] for no events", () => {
     expect(aggregate([])).toEqual([]);
+  });
+});
+
+describe("checkKnownGap", () => {
+  const many = (kw: string, n: number): GapEvent[] =>
+    Array.from({ length: n }, (_, i) =>
+      ev({ keyword: kw, timestamp: new Date(Date.UTC(2026, 4, 1, 0, 0, i)).toISOString() })
+    );
+
+  it("returns null below MID (caller falls back to [])", () => {
+    expect(checkKnownGap(many("ksql", MID - 1), "ksql")).toBeNull();
+  });
+
+  it("returns null when the keyword has never been a gap", () => {
+    expect(checkKnownGap(many("other", 20), "never asked")).toBeNull();
+  });
+
+  it("at MID returns a known_gap recommending alternative keywords", () => {
+    const r = checkKnownGap(many("sharding", MID), "sharding")!;
+    expect(r).not.toBeNull();
+    expect(r.status).toBe("known_gap");
+    expect(r.gap_info.occurrence_count).toBe(MID);
+    expect(r.recommendation).toContain("替代");
+  });
+
+  it("between MID and HIGH stays in the alternative-keyword tier", () => {
+    const r = checkKnownGap(many("sharding", MID + 1), "sharding")!;
+    expect(r.recommendation).toContain("替代");
+    expect(r.recommendation).not.toContain("覆蓋範圍");
+  });
+
+  it("at/above HIGH recommends out-of-coverage", () => {
+    const r = checkKnownGap(many("federation", HIGH), "federation")!;
+    expect(r.gap_info.occurrence_count).toBe(HIGH);
+    expect(r.recommendation).toContain("覆蓋範圍");
+    const r2 = checkKnownGap(many("federation", HIGH + 5), "federation")!;
+    expect(r2.recommendation).toContain("覆蓋範圍");
+  });
+
+  it("matches via normalized keyword and reports the count + topic", () => {
+    const r = checkKnownGap(many("Advanced  Config", HIGH), "  advanced config ")!;
+    expect(r.gap_info.topic).toBe("advanced config");
+    expect(r.gap_info.occurrence_count).toBe(HIGH);
+    expect(r.message).toContain(String(HIGH));
+  });
+
+  it("propagates first_seen into gap_info", () => {
+    const evs = many("backup", MID);
+    const r = checkKnownGap(evs, "backup")!;
+    expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
   });
 });
 

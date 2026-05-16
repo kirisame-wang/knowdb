@@ -1,4 +1,4 @@
-import type { GapEvent, GapAggregate } from "./types.js";
+import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
 
 // ── Known-gap thresholds (G8, tunable) ────────────────────────────────────────
 
@@ -65,4 +65,28 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
     });
   }
   return result.sort((a, b) => b.occurrence_count - a.occurrence_count);
+}
+
+// ── Known-gap check (G8 — pure; caller records the current gap first) ──────────
+
+/**
+ * Decide whether an empty search hit a known gap. `events` must already
+ * include the just-recorded gap (spec §4). Returns null below MID so the
+ * caller keeps the original `[]` behavior (backward compatible).
+ */
+export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
+  const topic = normalizeKeyword(keyword);
+  const agg = aggregate(events).find((a) => a.topic === topic);
+  const count = agg?.occurrence_count ?? 0;
+  if (count < MID) return null;
+
+  const recommendation =
+    count >= HIGH ? "此主題不在當前知識庫覆蓋範圍內" : "嘗試替代關鍵字或更上層的概念";
+
+  return {
+    status: "known_gap",
+    message: `已知缺口：『${keyword.trim()}』已被查詢 ${count} 次都無結果`,
+    gap_info: { topic, occurrence_count: count, first_seen: agg!.first_seen },
+    recommendation,
+  };
 }
