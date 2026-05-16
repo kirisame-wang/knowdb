@@ -29,3 +29,34 @@ export interface SearchResult {
   siblings?: string[];            // same-parent chunk ids, excluding self
   parent_summary?: string | null; // opaque parent characterization (currently the parent title; may widen). null = no parent, "" = title unresolved
 }
+
+// ── Gap Recording (Layer 1 工具閉環) ──────────────────────────────────────────
+// Single shared contract for both sinks (local jsonl / browser localStorage)
+// and all three stages (recording / aggregation / known-gap check).
+
+export interface GapEvent {
+  gap_id: string;          // "gap_<yyyymmdd>_<seq3>" — de-identified
+  keyword: string;         // raw query keyword (un-normalized)
+  scope: string | null;    // scoped 8-hex doc_id, or null if unscoped
+  timestamp: string;       // ISO 8601 UTC
+  // Best-effort context (G5) — omitted when not cheaply available.
+  user_question?: string;
+  current_document?: string;
+  navigation_path?: string[];
+  query_id?: string;       // reserved link to future Query Audit Trail (G6)
+}
+
+export interface GapAggregate {
+  topic: string;                 // normalized keyword (G7 rule)
+  occurrence_count: number;
+  first_seen: string;            // ISO 8601
+  last_seen: string;             // ISO 8601
+  scopes: (string | null)[];     // de-duplicated scopes seen for this topic
+}
+
+export interface KnownGapResponse {
+  status: "known_gap";           // discriminant; SearchResult[] has no `status`
+  message: string;
+  gap_info: { topic: string; occurrence_count: number; first_seen: string };
+  recommendation: string;
+}
