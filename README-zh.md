@@ -33,12 +33,12 @@ Tier 1 實作刻意不使用任何檔案系統以外的基礎設施：
 - `npm run ingest <file.md>` 解析標題，將 chunk 檔案寫入 `db/`
 - `_search_index.json` 由瀏覽器一次性載入，所有搜尋在用戶端執行
 - UI 分為兩個面板：左側文件導覽，右側 Agent 問答
-- Agent 有七個工具：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`
+- Agent 有九個工具：`get_instructions`、`list_docs`、`read_index`、`search`、`read_chunk`、`read_chunks`、`parent`、`jump_to_ref`、`reconstruct_document`
 - 無後端，可部署至任何靜態主機
 
 ### 查詢 API
 
-七個工具依兩條導航軸分類：
+九個工具依兩條導航軸分類：
 
 | 工具 | 導航軸 | 用途 |
 |------|--------|------|
@@ -48,9 +48,11 @@ Tier 1 實作刻意不使用任何檔案系統以外的基礎設施：
 | `read_chunk` | 垂直 | 透過穩定位址讀取單一 chunk 完整內容 |
 | `read_chunks` | 垂直 | 一次呼叫取得多個 chunk 的 preview，供漸進探索後決定是否展開 |
 | `parent` | 垂直 | 向上移動到父段落 |
-| `search` | 水平 | 跨所有文件以關鍵字搜尋 chunk |
+| `reconstruct_document` | 垂直 | 當 chunk 導航不足時，重組文件的完整 Markdown |
+| `search` | 水平 | 跨所有文件以關鍵字搜尋 chunk——每筆結果自帶 `breadcrumb`、`siblings`、`parent_summary`，Agent 即知其所在位置 |
+| `jump_to_ref` | 水平 | 透過隱式跨文件關聯，跳轉到其他文件中的相關 chunk |
 
-良好的 Agent 工作流模式：以 `list_docs` 和 `read_index` 定向，以 `search` 定位，以 `read_chunks` 預覽候選段落，以 `read_chunk` 展開完整內容，以 `parent` 縮放視角。
+良好的 Agent 工作流模式：以 `list_docs` 和 `read_index` 定向，以 `search` 定位（結果自帶層級座標），以 `read_chunk` 展開完整內容，以 `parent` 縮放視角，並以 `jump_to_ref` 追蹤其他文件中的關聯內容。
 
 ---
 
