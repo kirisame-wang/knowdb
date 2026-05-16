@@ -8,6 +8,7 @@ import {
   grepChunk,
   related,
   reconstructDocument,
+  splitId,
 } from "../db_query.js";
 import { SKILL } from "./skill.js";
 import type { SearchIndex, SearchResult } from "../types.js";
@@ -18,8 +19,7 @@ type Manifest = Record<string, { originalFilename: string; title: string }>;
 function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
   if (!manifest) return results;
   return results.map((r) => {
-    const docId = r.id.slice(0, r.id.indexOf("/"));
-    const title = manifest[docId]?.title;
+    const title = manifest[splitId(r.id)[0]]?.title;
     return title ? { ...r, doc_title: title } : r;
   });
 }

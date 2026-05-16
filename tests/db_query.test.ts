@@ -133,6 +133,20 @@ describe("search hierarchy enrichment", () => {
     expect(r.parent_summary).toBeNull();
   });
 
+  it("uses '' (not null) when a parent exists but its title is absent from _index", () => {
+    const idx: SearchIndex = {
+      // 01 (the parent) deliberately omitted from the heading tree
+      "fff00006/_index": "# fff00006 Index\n- 01-01: Orphan Child",
+      "fff00006/01-01": "orphan child body about zebra",
+    };
+    const r = search(idx, "zebra", "fff00006").find((x) => x.id === "fff00006/01-01")!;
+    expect(r.breadcrumb).toEqual([
+      { id: "fff00006/01", title: "" },
+      { id: "fff00006/01-01", title: "Orphan Child" },
+    ]);
+    expect(r.parent_summary).toBe("");
+  });
+
   it("siblings matches the standalone siblings() helper", () => {
     const r = find("implementation", "aaa00001/01-02", "aaa00001");
     expect(r.siblings).toEqual(siblings(INDEX, "aaa00001/01-02"));
@@ -350,6 +364,20 @@ describe("reconstructDocument", () => {
     expect(md).toContain("the child body text");
     // "Parent Only" heading present but has no following body block
     expect(md.indexOf("# Parent Only")).toBeLessThan(md.indexOf("## Child With Body"));
+  });
+
+  it("orders sections by chunk id even when _index lines are out of order", () => {
+    const idx: SearchIndex = {
+      "eee00005/_index": "# eee00005 Index\n- 02: Beta\n- 01: Alpha\n- 01-01: Gamma",
+      "eee00005/01": "alpha body",
+      "eee00005/01-01": "gamma body",
+      "eee00005/02": "beta body",
+    };
+    const md = reconstructDocument(idx, "eee00005");
+    expect(md.indexOf("Alpha")).toBeLessThan(md.indexOf("Gamma"));
+    expect(md.indexOf("Gamma")).toBeLessThan(md.indexOf("Beta"));
+    expect(md).toContain("# Alpha");
+    expect(md).toContain("## Gamma");
   });
 
   it("falls back to chunk concatenation when _index is absent", () => {

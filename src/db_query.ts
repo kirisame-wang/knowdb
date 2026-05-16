@@ -224,8 +224,9 @@ function enrich(index: SearchIndex, result: SearchResult, cache: TitleCache): Se
     breadcrumb.push({ id: `${docId}/${ancestor}`, title: titles.get(ancestor) ?? "" });
   }
 
+  // null = no parent (root); "" = parent exists but its title is unresolved.
   const p = parent(result.id);
-  const parent_summary = p ? titles.get(splitId(p)[1]) ?? null : null;
+  const parent_summary = p ? titles.get(splitId(p)[1]) ?? "" : null;
 
   return { ...result, breadcrumb, siblings: siblings(index, result.id), parent_summary };
 }
@@ -246,7 +247,10 @@ export function reconstructDocument(index: SearchIndex, docId: string): string {
 
   const titles = parseIndexTitles(index[`${docId}/_index`] ?? "");
   if (titles.size > 0) {
-    for (const [chunkId, title] of titles) {
+    // Spec §3: traverse by chunk id, not _index line order. Segment ids are
+    // zero-padded 2-digit (ingest), so lexical order == hierarchical order.
+    const ordered = [...titles.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    for (const [chunkId, title] of ordered) {
       if (chunkId === "00") continue; // preamble already emitted, never has a heading
       const depth = Math.min(chunkId.split("-").length, 6);
       blocks.push(`${"#".repeat(depth)} ${title}`);
@@ -269,7 +273,7 @@ export function reconstructDocument(index: SearchIndex, docId: string): string {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function splitId(id: string): [string, string] {
+export function splitId(id: string): [string, string] {
   const slash = id.indexOf("/");
   return [id.slice(0, slash), id.slice(slash + 1)];
 }
