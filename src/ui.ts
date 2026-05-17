@@ -1,12 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS, processToolCall } from "./agent/tools.js";
 import { search, expand, siblings, parent } from "./db_query.js";
-import type { SearchIndex } from "./types.js";
+import type { SearchIndex, Manifest } from "./types.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
 let searchIndex: SearchIndex = {};
-let manifest: Record<string, { originalFilename: string; title: string }> = {};
+let manifest: Manifest = {};
 let selectedId: string | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
 

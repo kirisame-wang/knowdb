@@ -6,6 +6,13 @@ export interface ChunkEntry {
 
 export type SearchIndex = Record<string, string>; // "<docId>/<chunkId>" → content
 
+export interface DocMeta {
+  originalFilename: string; // source file name as ingested
+  title: string;            // human-readable document title
+}
+
+export type Manifest = Record<string, DocMeta>; // doc_id → metadata, from db/_manifest.json
+
 export interface Breadcrumb {
   id: string;    // "<docId>/<chunkId>" of this ancestor (or the chunk itself)
   title: string; // heading title from _index

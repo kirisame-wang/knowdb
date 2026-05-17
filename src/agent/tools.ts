@@ -11,9 +11,7 @@ import {
   splitId,
 } from "../db_query.js";
 import { SKILL } from "./skill.js";
-import type { SearchIndex, SearchResult } from "../types.js";
-
-type Manifest = Record<string, { originalFilename: string; title: string }>;
+import type { SearchIndex, SearchResult, Manifest } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */
 function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
@@ -153,7 +151,7 @@ export async function processToolCall(
   toolName: string,
   toolInput: Record<string, unknown>,
   index: SearchIndex,
-  manifest?: Record<string, { originalFilename: string; title: string }>
+  manifest?: Manifest
 ): Promise<string> {
   switch (toolName) {
     case "get_instructions":
