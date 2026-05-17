@@ -123,7 +123,8 @@ describe("search hierarchy enrichment", () => {
     expect(r.breadcrumb).toEqual([{ id: "aaa00001/01", title: "BM25" }]);
   });
 
-  it("parent_summary is the parent heading title", () => {
+  // Pins current behavior: parent_summary == parent title today; will change if the field widens.
+  it("parent_summary currently resolves to the parent heading title", () => {
     const r = find("implementation", "aaa00001/01-02", "aaa00001");
     expect(r.parent_summary).toBe("BM25");
   });
