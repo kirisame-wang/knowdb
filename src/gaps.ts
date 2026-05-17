@@ -69,15 +69,24 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
+/** Ephemeral per-conversation id. One per page load (the sink is built at
+ *  app init); rotate by constructing a new sink on a "new"/reset action.
+ *  Not user-identifying; only groups a session for post-hoc analysis. */
+export function newSessionId(): string {
+  return globalThis.crypto?.randomUUID?.() ?? `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /** Browser sink: appends JSONL to localStorage; dump() feeds the export button. */
 export class BrowserGapSink implements GapSink {
   constructor(
     private readonly store: KeyValueStore,
-    private readonly key = "knowdb-gaps"
+    private readonly key = "knowdb-gaps",
+    private readonly sessionId: string = newSessionId()
   ) {}
 
   record(event: GapEvent): void {
-    this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + serializeGap(event) + "\n");
+    const stamped: GapEvent = { ...event, session_id: this.sessionId };
+    this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + serializeGap(stamped) + "\n");
   }
 
   readAll(): GapEvent[] {

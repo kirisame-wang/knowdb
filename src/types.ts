@@ -48,6 +48,7 @@ export interface GapEvent {
   current_document?: string;
   navigation_path?: string[];
   query_id?: string;       // reserved link to future Query Audit Trail (G6)
+  session_id?: string;     // ephemeral per-conversation id; groups a session for post-hoc analysis (not user-identifying, not read by Tier 1)
 }
 
 export interface GapAggregate {

@@ -40,8 +40,12 @@ record_gap() {
   seq="$(printf '%03d' "$((n + 1))")"
   scope_json="null"
   [[ -n "$scope_in" ]] && scope_json="\"$(json_escape "$scope_in")\""
-  printf '{"source":"local","gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"}\n' \
-    "$ymd" "$seq" "$(json_escape "$kw")" "$scope_json" "$ts" >> "$file"
+  # session_id only when the caller (e.g. a multi-step coding agent) sets it;
+  # a one-shot CLI invocation has no intrinsic session, so omit the key.
+  local sess_json=""
+  [[ -n "${KNOWDB_SESSION_ID:-}" ]] && sess_json=",\"session_id\":\"$(json_escape "$KNOWDB_SESSION_ID")\""
+  printf '{"source":"local","gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"%s}\n' \
+    "$ymd" "$seq" "$(json_escape "$kw")" "$scope_json" "$ts" "$sess_json" >> "$file"
 }
 
 # Count dashes in a string

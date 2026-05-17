@@ -205,25 +205,42 @@ class FakeKV {
 }
 
 describe("BrowserGapSink", () => {
-  it("records and reads back events round-trip", () => {
-    const sink = new BrowserGapSink(new FakeKV());
+  const SID = "sess-test-1";
+
+  it("records and reads back events round-trip (stamped with the session id)", () => {
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     const b = ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" });
     sink.record(a);
     sink.record(b);
-    expect(sink.readAll()).toEqual([a, b]);
+    expect(sink.readAll()).toEqual([
+      { ...a, session_id: SID },
+      { ...b, session_id: SID },
+    ]);
   });
 
   it("dump() returns the raw JSONL for export", () => {
-    const kv = new FakeKV();
-    const sink = new BrowserGapSink(kv);
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     sink.record(a);
-    expect(sink.dump()).toBe(serializeGap(a) + "\n");
+    expect(sink.dump()).toBe(serializeGap({ ...a, session_id: SID }) + "\n");
   });
 
   it("starts empty", () => {
     expect(new BrowserGapSink(new FakeKV()).readAll()).toEqual([]);
+  });
+
+  it("stamps an ephemeral session id: stable within an instance, distinct across instances", () => {
+    const s1 = new BrowserGapSink(new FakeKV());
+    const s2 = new BrowserGapSink(new FakeKV());
+    s1.record(ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" }));
+    s1.record(ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z" }));
+    s2.record(ev({ keyword: "z", timestamp: "2026-05-16T12:00:00Z" }));
+    const a1 = s1.readAll();
+    const a2 = s2.readAll();
+    expect(typeof a1[0]!.session_id).toBe("string");
+    expect(a1[0]!.session_id).toBe(a1[1]!.session_id); // stable within instance
+    expect(a1[0]!.session_id).not.toBe(a2[0]!.session_id); // distinct across instances
   });
 });
 
