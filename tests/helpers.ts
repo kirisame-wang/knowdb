@@ -7,7 +7,7 @@ const HERE = fileURLToPath(new URL(".", import.meta.url)); // tests/
 export const FIXTURE = join(HERE, "fixtures/sample.md");
 export const QUERY_SH = join(HERE, "../scripts/query.sh");
 
-// Per-test-file DB dir, kept distinct so parallel suites don't clobber each other.
+// Builds a repo-root DB dir path; callers pass distinct names so test files don't share one.
 export const dbDir = (name: string): string => join(HERE, "..", name);
 
 // Run scripts/ingest.ts via the current node + tsx (avoids npx resolution).
