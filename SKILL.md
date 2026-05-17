@@ -82,7 +82,7 @@ Read the surrounding lines before fetching the full chunk.
 | Find parent chunk | strip the last `-XX` segment: `01-02-03` → parent is `01-02` |
 | Read parent chunk | `cat db/<doc_id>/<parent_id>.md` |
 | Read siblings | `ls db/<doc_id>/ \| grep "^<parent_id>-"` |
-| Read the whole document (chunked nav not enough) | `cat $(ls db/<doc_id>/*.md \| grep -v _index.md \| sort)` — chunk-ID order; pair with `_index.md` for the heading skeleton |
+| Read the whole document (chunked nav not enough) | `cat $(ls db/<doc_id>/*.md \| grep -v _index.md \| sort)` — body-only concat in chunk-ID order; **no headings** (unlike browser `reconstruct_document`) — read `_index.md` alongside for the heading tree |
 
 ---
 
