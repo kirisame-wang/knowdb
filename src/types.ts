@@ -27,5 +27,5 @@ export interface SearchResult {
   doc_title?: string;             // human-readable doc title (added at tools layer)
   breadcrumb?: Breadcrumb[];      // root → self, heading titles along the path
   siblings?: string[];            // same-parent chunk ids, excluding self
-  parent_summary?: string | null; // opaque parent characterization; currently the parent title, may later widen. null at root
+  parent_summary?: string | null; // opaque parent characterization (currently the parent title; may widen). null = no parent, "" = title unresolved
 }
