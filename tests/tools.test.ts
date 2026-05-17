@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { KNOWDB_TOOLS, processToolCall } from "../src/agent/tools.js";
 import type { SearchIndex } from "../src/types.js";
 
@@ -54,17 +54,23 @@ describe("KNOWDB_TOOLS interface contract", () => {
 
   // Orphan tool → agent gets "Unknown tool"; only that sentinel is a gap (per-tool runtime errors aren't).
   it("dispatches every advertised tool (no orphan definitions)", async () => {
-    const orphans: string[] = [];
-    for (const name of names) {
-      try {
-        await processToolCall(name, {}, INDEX, MANIFEST);
-      } catch (e) {
-        if (e instanceof Error && e.message === `Unknown tool: ${name}`) {
-          orphans.push(name);
+    // Stub fetch so fetching tools fail offline & deterministically — proves dispatch-completeness without real I/O.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("stubbed")));
+    try {
+      const orphans: string[] = [];
+      for (const name of names) {
+        try {
+          await processToolCall(name, {}, INDEX, MANIFEST);
+        } catch (e) {
+          if (e instanceof Error && e.message === `Unknown tool: ${name}`) {
+            orphans.push(name);
+          }
         }
       }
+      expect(orphans).toEqual([]);
+    } finally {
+      vi.unstubAllGlobals();
     }
-    expect(orphans).toEqual([]);
   });
 });
 
@@ -87,7 +93,7 @@ describe("processToolCall — doc_title enrichment", () => {
       { id: "aaa00001/01", title: "BM25" },
       { id: "aaa00001/01-01", title: "BM25 details" },
     ]);
-    expect(r.parent_summary).toBe("BM25");
+    expect(r.parent_summary).toBe("BM25"); // current-behavior pin; parent_summary may widen
   });
 });
 
