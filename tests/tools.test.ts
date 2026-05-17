@@ -16,13 +16,11 @@ const MANIFEST = {
   bbb00002: { originalFilename: "es.md", title: "Elasticsearch" },
 };
 
-describe("KNOWDB_TOOLS contract", () => {
-  it("exposes 9 tools", () => {
-    expect(KNOWDB_TOOLS).toHaveLength(9);
-  });
+describe("KNOWDB_TOOLS interface contract", () => {
+  const names = KNOWDB_TOOLS.map((t) => t.name);
 
-  it("keeps the original 7 tools and adds the 2 new ones", () => {
-    const names = KNOWDB_TOOLS.map((t) => t.name);
+  // Contract, not snapshot: published names must persist — assert a required floor, not exact set/count.
+  it("keeps every published tool name", () => {
     for (const n of [
       "get_instructions",
       "list_docs",
@@ -31,20 +29,42 @@ describe("KNOWDB_TOOLS contract", () => {
       "read_chunk",
       "read_chunks",
       "parent",
+      "jump_to_ref",
+      "reconstruct_document",
     ]) {
       expect(names).toContain(n);
     }
-    expect(names).toContain("jump_to_ref");
-    expect(names).toContain("reconstruct_document");
   });
 
-  it("leaves the original tools' input_schema unchanged", () => {
+  it("tool names are unique (unambiguous dispatch)", () => {
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  // Backward compat: known params stay present + required; new optional params are fine — assert presence.
+  it("does not break legacy tool input schemas", () => {
     const search = KNOWDB_TOOLS.find((t) => t.name === "search")!;
-    expect(Object.keys(search.input_schema.properties ?? {}).sort()).toEqual(
-      ["case_sensitive", "index_only", "keyword", "scope"].sort()
-    );
+    for (const p of ["keyword", "scope", "case_sensitive", "index_only"]) {
+      expect(search.input_schema.properties ?? {}).toHaveProperty(p);
+    }
+    expect(search.input_schema.required).toContain("keyword");
     const parent = KNOWDB_TOOLS.find((t) => t.name === "parent")!;
-    expect(Object.keys(parent.input_schema.properties ?? {})).toEqual(["id"]);
+    expect(parent.input_schema.properties ?? {}).toHaveProperty("id");
+    expect(parent.input_schema.required).toContain("id");
+  });
+
+  // Orphan tool → agent gets "Unknown tool"; only that sentinel is a gap (per-tool runtime errors aren't).
+  it("dispatches every advertised tool (no orphan definitions)", async () => {
+    const orphans: string[] = [];
+    for (const name of names) {
+      try {
+        await processToolCall(name, {}, INDEX, MANIFEST);
+      } catch (e) {
+        if (e instanceof Error && e.message === `Unknown tool: ${name}`) {
+          orphans.push(name);
+        }
+      }
+    }
+    expect(orphans).toEqual([]);
   });
 });
 
