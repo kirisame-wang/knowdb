@@ -233,6 +233,8 @@ function enrich(index: SearchIndex, result: SearchResult, cache: TitleCache): Se
 
 // ── Document reconstruction ───────────────────────────────────────────────────
 
+const MAX_MD_HEADING_DEPTH = 6; // CommonMark/HTML: headings only h1–h6
+
 /**
  * Reassemble a document's full Markdown from its chunks.
  * Chunk files store body only; heading lines are re-derived from _index
@@ -247,12 +249,12 @@ export function reconstructDocument(index: SearchIndex, docId: string): string {
 
   const titles = parseIndexTitles(index[`${docId}/_index`] ?? "");
   if (titles.size > 0) {
-    // Spec §3: traverse by chunk id, not _index line order. Segment ids are
+    // Traverse by chunk id, not _index line order. Segment ids are
     // zero-padded 2-digit (ingest), so lexical order == hierarchical order.
     const ordered = [...titles.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
     for (const [chunkId, title] of ordered) {
       if (chunkId === "00") continue; // preamble already emitted, never has a heading
-      const depth = Math.min(chunkId.split("-").length, 6);
+      const depth = Math.min(chunkId.split("-").length, MAX_MD_HEADING_DEPTH);
       blocks.push(`${"#".repeat(depth)} ${title}`);
       const body = index[`${docId}/${chunkId}`];
       if (body?.trim()) blocks.push(body.trim());
