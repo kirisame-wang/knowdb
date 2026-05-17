@@ -2,21 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
 import { join } from "path";
-import { fileURLToPath } from "url";
+import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const FIXTURE = join(__dirname, "fixtures/sample.md");
-const DB_DIR = join(__dirname, "../db-query-test");
-const QUERY_SH = join(__dirname, "../scripts/query.sh");
-
-function runIngest(fixture: string): void {
-  const result = spawnSync(
-    process.execPath,
-    ["--import", "tsx/esm", join(__dirname, "../scripts/ingest.ts"), fixture],
-    { encoding: "utf-8", env: { ...process.env, DB_DIR } }
-  );
-  if (result.status !== 0) throw new Error(`ingest failed: ${result.stderr}`);
-}
+const DB_DIR = dbDir("db-query-test");
 
 function runQuery(args: string[]): { stdout: string; status: number } {
   const result = spawnSync("bash", [QUERY_SH, ...args], {
@@ -31,7 +19,8 @@ describe("query CLI", () => {
 
   beforeAll(async () => {
     await mkdir(DB_DIR, { recursive: true });
-    runIngest(FIXTURE);
+    const r = runIngest([FIXTURE], DB_DIR);
+    if (r.status !== 0) throw new Error(`ingest failed: ${r.stderr}`);
     const { readFileSync } = await import("fs");
     const manifest = JSON.parse(readFileSync(join(DB_DIR, "_manifest.json"), "utf-8"));
     docId = Object.keys(manifest)[0] ?? "";

@@ -33,12 +33,12 @@ The Tier 1 implementation deliberately uses no infrastructure beyond the filesys
 - `npm run ingest <file.md>` parses headings and writes chunk files to `db/`
 - `_search_index.json` is loaded once by the browser; all search is client-side
 - The UI is two panels: document navigator on the left, agent Q&A on the right
-- The agent has seven tools: `get_instructions`, `list_docs`, `read_index`, `search`, `read_chunk`, `read_chunks`, `parent`
+- The agent has nine tools: `get_instructions`, `list_docs`, `read_index`, `search`, `read_chunk`, `read_chunks`, `parent`, `jump_to_ref`, `reconstruct_document`
 - No backend. Deployable to any static host.
 
 ### Query API
 
-The seven tools divide along the two navigation axes:
+The nine tools divide along the two navigation axes:
 
 | Tool | Axis | Purpose |
 |------|------|---------|
@@ -48,9 +48,11 @@ The seven tools divide along the two navigation axes:
 | `read_chunk` | Vertical | Read the full content of a specific chunk by its stable address |
 | `read_chunks` | Vertical | Fetch previews of multiple chunks in one call — for progressive exploration before deciding to expand |
 | `parent` | Vertical | Move up to the parent section |
-| `search` | Horizontal | Find chunks across all documents by keyword |
+| `reconstruct_document` | Vertical | Reassemble a document's full Markdown when chunked navigation isn't enough |
+| `search` | Horizontal | Find chunks across all documents by keyword — each result carries its `breadcrumb`, `siblings`, and `parent_summary` so the agent knows where it sits |
+| `jump_to_ref` | Horizontal | Jump to related chunks in other documents via implicit cross-document links |
 
-The pattern for a well-behaved agent: orient with `list_docs` and `read_index`, locate with `search`, preview candidates with `read_chunks`, expand with `read_chunk`, zoom out with `parent`.
+The pattern for a well-behaved agent: orient with `list_docs` and `read_index`, locate with `search` (results arrive with their hierarchy position), expand with `read_chunk`, zoom out with `parent`, and follow `jump_to_ref` to connected material elsewhere.
 
 ---
 

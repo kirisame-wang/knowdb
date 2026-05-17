@@ -8,6 +8,7 @@ import {
   related,
   fetchChunk,
   grepChunk,
+  reconstructDocument,
 } from "../src/db_query.js";
 import type { SearchIndex } from "../src/types.js";
 
@@ -101,6 +102,65 @@ describe("search", () => {
     const results = search(INDEX, "BM25");
     for (const r of results) {
       expect(r.excerpt).toBeTruthy();
+    }
+  });
+});
+
+describe("search hierarchy enrichment", () => {
+  const find = (kw: string, id: string, scope?: string) =>
+    search(INDEX, kw, scope).find((r) => r.id === id)!;
+
+  it("breadcrumb runs root → self with titles from _index", () => {
+    const r = find("implementation", "aaa00001/01-02", "aaa00001");
+    expect(r.breadcrumb).toEqual([
+      { id: "aaa00001/01", title: "BM25" },
+      { id: "aaa00001/01-02", title: "BM25 implementation notes" },
+    ]);
+  });
+
+  it("breadcrumb is a single entry for a top-level chunk", () => {
+    const r = find("bag-of-words", "aaa00001/01", "aaa00001");
+    expect(r.breadcrumb).toEqual([{ id: "aaa00001/01", title: "BM25" }]);
+  });
+
+  // Pins current behavior: parent_summary == parent title today; will change if the field widens.
+  it("parent_summary currently resolves to the parent heading title", () => {
+    const r = find("implementation", "aaa00001/01-02", "aaa00001");
+    expect(r.parent_summary).toBe("BM25");
+  });
+
+  it("parent_summary is null for a top-level chunk", () => {
+    const r = find("bag-of-words", "aaa00001/01", "aaa00001");
+    expect(r.parent_summary).toBeNull();
+  });
+
+  it("uses '' (not null) when a parent exists but its title is absent from _index", () => {
+    const idx: SearchIndex = {
+      // 01 (the parent) deliberately omitted from the heading tree
+      "fff00006/_index": "# fff00006 Index\n- 01-01: Orphan Child",
+      "fff00006/01-01": "orphan child body about zebra",
+    };
+    const r = search(idx, "zebra", "fff00006").find((x) => x.id === "fff00006/01-01")!;
+    expect(r.breadcrumb).toEqual([
+      { id: "fff00006/01", title: "" },
+      { id: "fff00006/01-01", title: "Orphan Child" },
+    ]);
+    expect(r.parent_summary).toBe("");
+  });
+
+  it("siblings matches the standalone siblings() helper", () => {
+    const r = find("implementation", "aaa00001/01-02", "aaa00001");
+    expect(r.siblings).toEqual(siblings(INDEX, "aaa00001/01-02"));
+    expect(r.siblings).toContain("aaa00001/01-01");
+  });
+
+  it("does not enrich _index results in indexOnly mode", () => {
+    const results = search(INDEX, "BM25", undefined, { indexOnly: true });
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.breadcrumb).toBeUndefined();
+      expect(r.siblings).toBeUndefined();
+      expect(r.parent_summary).toBeUndefined();
     }
   });
 });
@@ -255,6 +315,83 @@ describe("related", () => {
     for (let i = 1; i < results.length; i++) {
       expect(results[i - 1]!.score).toBeGreaterThanOrEqual(results[i]!.score);
     }
+  });
+
+  it("enriches cross-doc results with hierarchy metadata", () => {
+    const results = related(INDEX, "aaa00001/01", { topK: 5 });
+    expect(results.length).toBeGreaterThan(0);
+    for (const r of results) {
+      expect(r.breadcrumb).toBeDefined();
+      expect(r.breadcrumb![0]!.id).toBe(`${r.id.split("/")[0]}/${r.id.split("/")[1]!.split("-")[0]}`);
+      expect(r.siblings).toBeDefined();
+    }
+  });
+});
+
+describe("reconstructDocument", () => {
+  it("emits the preamble (chunk 00) with no heading line", () => {
+    const md = reconstructDocument(INDEX, "aaa00001");
+    expect(md.startsWith("introduction to BM25 ranking algorithm")).toBe(true);
+  });
+
+  it("derives heading depth from id segments (01 → H1, 01-01 → H2)", () => {
+    const md = reconstructDocument(INDEX, "aaa00001");
+    expect(md).toContain("# BM25");
+    expect(md).toContain("## BM25 formula details");
+    expect(md).toContain("# TF-IDF comparison");
+    expect(md).toContain("## TF-IDF formula");
+  });
+
+  it("keeps document order (parent heading before its children)", () => {
+    const md = reconstructDocument(INDEX, "aaa00001");
+    expect(md.indexOf("# BM25")).toBeLessThan(md.indexOf("## BM25 formula details"));
+    expect(md.indexOf("## BM25 formula details")).toBeLessThan(md.indexOf("# TF-IDF comparison"));
+  });
+
+  it("does not leak _index header lines", () => {
+    const md = reconstructDocument(INDEX, "aaa00001");
+    expect(md).not.toContain("aaa00001 Index");
+    expect(md).not.toContain("/_index");
+  });
+
+  it("emits a heading-only line for a section with no body chunk", () => {
+    const idx: SearchIndex = {
+      "ccc00003/_index": "# ccc00003 Index\n- 01: Parent Only\n- 01-01: Child With Body",
+      "ccc00003/01-01": "the child body text",
+    };
+    const md = reconstructDocument(idx, "ccc00003");
+    expect(md).toContain("# Parent Only");
+    expect(md).toContain("## Child With Body");
+    expect(md).toContain("the child body text");
+    // "Parent Only" heading present but has no following body block
+    expect(md.indexOf("# Parent Only")).toBeLessThan(md.indexOf("## Child With Body"));
+  });
+
+  it("orders sections by chunk id even when _index lines are out of order", () => {
+    const idx: SearchIndex = {
+      "eee00005/_index": "# eee00005 Index\n- 02: Beta\n- 01: Alpha\n- 01-01: Gamma",
+      "eee00005/01": "alpha body",
+      "eee00005/01-01": "gamma body",
+      "eee00005/02": "beta body",
+    };
+    const md = reconstructDocument(idx, "eee00005");
+    expect(md.indexOf("Alpha")).toBeLessThan(md.indexOf("Gamma"));
+    expect(md.indexOf("Gamma")).toBeLessThan(md.indexOf("Beta"));
+    expect(md).toContain("# Alpha");
+    expect(md).toContain("## Gamma");
+  });
+
+  it("falls back to chunk concatenation when _index is absent", () => {
+    const idx: SearchIndex = {
+      "ddd00004/00": "preamble text",
+      "ddd00004/01": "first section body",
+      "ddd00004/02": "second section body",
+    };
+    const md = reconstructDocument(idx, "ddd00004");
+    expect(md).toContain("preamble text");
+    expect(md).toContain("first section body");
+    expect(md).toContain("second section body");
+    expect(md).not.toContain("#");
   });
 });
 

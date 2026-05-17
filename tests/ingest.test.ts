@@ -2,33 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { readFile, rm, mkdir } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
-import { spawnSync } from "child_process";
-import { fileURLToPath } from "url";
+import { FIXTURE, dbDir, runIngest } from "./helpers.js";
 
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const FIXTURE = join(__dirname, "fixtures/sample.md");
-const DB_DIR = join(__dirname, "../db-test");
-const SCRIPTS_DIR = join(__dirname, "../scripts");
-
-function runIngest(args: string[]): { stdout: string; stderr: string; status: number } {
-  const result = spawnSync(
-    process.execPath, // use current node, avoids npx resolution issues
-    [
-      "--import", "tsx/esm",
-      join(SCRIPTS_DIR, "ingest.ts"),
-      ...args,
-    ],
-    {
-      encoding: "utf-8",
-      env: { ...process.env, DB_DIR },
-    }
-  );
-  return {
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? "",
-    status: result.status ?? 1,
-  };
-}
+const DB_DIR = dbDir("db-test");
 
 describe("ingest", () => {
   beforeAll(async () => {
@@ -43,7 +19,7 @@ describe("ingest", () => {
     let docId: string;
 
     beforeAll(() => {
-      const result = runIngest([FIXTURE]);
+      const result = runIngest([FIXTURE], DB_DIR);
       expect(result.status, result.stderr).toBe(0);
 
       // discover the doc_id from _manifest.json
@@ -134,7 +110,7 @@ describe("ingest", () => {
 
     it("is idempotent: running twice produces same output", async () => {
       const before = await readFile(join(DB_DIR, "_manifest.json"), "utf-8");
-      runIngest([FIXTURE]);
+      runIngest([FIXTURE], DB_DIR);
       const after = await readFile(join(DB_DIR, "_manifest.json"), "utf-8");
       expect(after).toBe(before);
     });
