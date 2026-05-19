@@ -10,6 +10,18 @@ The `db/` directory is the knowledge base. All commands below assume the repo ro
 
 ---
 
+## Step 0 — Session setup
+
+At session start — before your first search — unconditionally generate a
+stable id and write it to `.session_id` at the repo root (overwrite; a
+new session gets a new id):
+
+```bash
+date -u +%Y%m%dT%H%M%SZ-$RANDOM > .session_id
+```
+
+---
+
 ## Step 1 — Discover available documents
 
 ```bash

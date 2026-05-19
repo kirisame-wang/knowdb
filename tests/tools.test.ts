@@ -1,6 +1,17 @@
 import { describe, it, expect, vi } from "vitest";
 import { KNOWDB_TOOLS, processToolCall } from "../src/agent/tools.js";
-import type { SearchIndex } from "../src/types.js";
+import { MID, type GapSink } from "../src/gaps.js";
+import type { SearchIndex, GapEvent } from "../src/types.js";
+
+class MemSink implements GapSink {
+  events: GapEvent[] = [];
+  record(e: GapEvent) {
+    this.events.push(e);
+  }
+  readAll() {
+    return [...this.events]; // snapshot, per the GapSink contract
+  }
+}
 
 const INDEX: SearchIndex = {
   "aaa00001/_index": "# aaa00001 Index\n- 00: intro\n- 01: BM25\n- 01-01: BM25 details",
@@ -125,5 +136,80 @@ describe("processToolCall — reconstruct_document", () => {
     expect(md).toContain("# BM25");
     expect(md).toContain("## BM25 details");
     expect(md).not.toContain("/_index");
+  });
+});
+
+describe("processToolCall — gap recording on empty search", () => {
+  const ABSENT = "nonexistent_zzz";
+
+  it("does not record when search has results, and contract is unchanged", async () => {
+    const sink = new MemSink();
+    const out = JSON.parse(
+      await processToolCall("search", { keyword: "BM25" }, INDEX, MANIFEST, sink)
+    );
+    expect(Array.isArray(out)).toBe(true);
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0].doc_title).toBeTruthy();
+    expect(sink.events).toHaveLength(0);
+  });
+
+  it("records one well-formed gap and returns [] below MID", async () => {
+    const sink = new MemSink();
+    const raw = await processToolCall(
+      "search",
+      { keyword: ABSENT, scope: "aaa00001" },
+      INDEX,
+      MANIFEST,
+      sink
+    );
+    expect(JSON.parse(raw)).toEqual([]);
+    expect(sink.events).toHaveLength(1);
+    const e = sink.events[0]!;
+    expect(e.source).toBe("browser");
+    expect(e.keyword).toBe(ABSENT);
+    expect(e.scope).toBe("aaa00001");
+    expect(e.gap_id).toMatch(/^gap_\d{8}_\d{3}$/);
+    expect(typeof e.timestamp).toBe("string");
+  });
+
+  it("scope is null when the search is unscoped", async () => {
+    const sink = new MemSink();
+    await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
+    expect(sink.events[0]!.scope).toBeNull();
+  });
+
+  it("returns a known_gap response once occurrences reach MID", async () => {
+    const sink = new MemSink();
+    let raw = "";
+    for (let i = 0; i < MID; i++) {
+      raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
+    }
+    const out = JSON.parse(raw);
+    expect(out.status).toBe("known_gap");
+    expect(out.gap_info.occurrence_count).toBe(MID);
+    expect(sink.events).toHaveLength(MID);
+  });
+
+  it("does not record for index_only empty searches", async () => {
+    const sink = new MemSink();
+    await processToolCall(
+      "search",
+      { keyword: ABSENT, index_only: true },
+      INDEX,
+      MANIFEST,
+      sink
+    );
+    expect(sink.events).toHaveLength(0);
+  });
+
+  it("does not record for jump_to_ref (only search records)", async () => {
+    const sink = new MemSink();
+    await processToolCall("jump_to_ref", { id: "aaa00001/00" }, INDEX, MANIFEST, sink);
+    expect(sink.events).toHaveLength(0);
+  });
+
+  it("is backward compatible: no sink → no recording, still returns []", async () => {
+    const raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST);
+    expect(JSON.parse(raw)).toEqual([]);
   });
 });

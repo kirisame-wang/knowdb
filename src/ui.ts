@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS, processToolCall } from "./agent/tools.js";
 import { search, expand, siblings, parent } from "./db_query.js";
+import { BrowserGapSink } from "./gaps.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -9,6 +10,7 @@ let searchIndex: SearchIndex = {};
 let manifest: Manifest = {};
 let selectedId: string | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
+const gapSink = new BrowserGapSink(window.localStorage);
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 
@@ -36,6 +38,7 @@ async function init() {
   setupNav();
   setupApiKey();
   setupChat();
+  setupGapExport();
 }
 
 // ── Left Panel: Doc Tree ──────────────────────────────────────────────────────
@@ -247,6 +250,24 @@ function getApiKey(): string {
   );
 }
 
+// ── Right Panel: Gap export ───────────────────────────────────────────────────
+
+function setupGapExport() {
+  el("btn-export-gaps").addEventListener("click", () => {
+    const jsonl = gapSink.dump();
+    if (!jsonl.trim()) {
+      appendStatus("No query gaps recorded yet.");
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([jsonl], { type: "application/x-ndjson" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "query-gaps.jsonl";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
 function setupChat() {
@@ -354,7 +375,8 @@ async function sendMessage() {
           block.name,
           block.input as Record<string, unknown>,
           searchIndex,
-          manifest
+          manifest,
+          gapSink
         );
         appendToolTrace(block.name, block.input, result);
         toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });

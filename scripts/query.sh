@@ -1,12 +1,56 @@
 #!/usr/bin/env bash
 
 DB_DIR="${DB_DIR:-db}"
+GAPS_DIR="${GAPS_DIR:-gaps}"
+GAPS_FILE="${GAPS_FILE:-${GAPS_DIR}/query-gaps.jsonl}"
+SESSION_ID_FILE="${SESSION_ID_FILE:-.session_id}"
 CMD="${1:-}"
 shift || true
 
 usage() {
   echo "Usage: query.sh <search|expand|siblings|parent> [args]" >&2
   exit 1
+}
+
+# JSON string escaping matching JSON.stringify for the realistic cases:
+# backslash, quote, and the named control escapes (\b \f \n \r \t).
+# UTF-8 (e.g. CJK) passes through unescaped, exactly as JSON.stringify does.
+# Other raw control bytes (<0x20) are out of scope for a search keyword.
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\b'/\\b}"
+  s="${s//$'\f'/\\f}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# Append a GapEvent line, schema-identical to the browser sink
+# (src/gaps.ts BrowserGapSink). The script owns recording.
+record_gap() {
+  local kw="$1" scope_in="$2"
+  mkdir -p "$GAPS_DIR"
+  local ymd ts n seq scope_json
+  ymd="$(date -u +%Y%m%d)"
+  ts="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+  n="$(grep -c "\"gap_id\":\"gap_${ymd}_" "$GAPS_FILE" 2>/dev/null || true)"
+  n="${n//[^0-9]/}"; [[ -z "$n" ]] && n=0
+  seq="$(printf '%03d' "$((n + 1))")"
+  scope_json="null"
+  [[ -n "$scope_in" ]] && scope_json="\"$(json_escape "$scope_in")\""
+  # session_id: read the program-written .session_id (never user-supplied);
+  # absent → omit the key.
+  local sid=""
+  if [[ -f "$SESSION_ID_FILE" ]]; then
+    IFS= read -r sid < "$SESSION_ID_FILE" || true
+  fi
+  local sess_json=""
+  [[ -n "$sid" ]] && sess_json=",\"session_id\":\"$(json_escape "$sid")\""
+  printf '{"source":"local","gap_id":"gap_%s_%s","keyword":"%s","scope":%s,"timestamp":"%s"%s}\n' \
+    "$ymd" "$seq" "$(json_escape "$kw")" "$scope_json" "$ts" "$sess_json" >> "$GAPS_FILE"
 }
 
 # Count dashes in a string
@@ -31,10 +75,16 @@ if [[ "$CMD" == "search" ]]; then
   SEARCH_DIR="${DB_DIR}"
   [[ -n "$SCOPE" ]] && SEARCH_DIR="${DB_DIR}/${SCOPE}"
 
-  grep -rl --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
+  RESULTS="$(grep -rl --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
     | grep -v "_index\.md" \
     | sort \
-    || true
+    || true)"
+
+  if [[ -z "$RESULTS" ]]; then
+    record_gap "$KEYWORD" "$SCOPE"
+  else
+    echo "$RESULTS"
+  fi
   exit 0
 fi
 
