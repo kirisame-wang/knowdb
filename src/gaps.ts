@@ -95,11 +95,13 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
   if (count < MID) return null;
 
   const recommendation =
-    count >= HIGH ? "此主題不在當前知識庫覆蓋範圍內" : "嘗試替代關鍵字或更上層的概念";
+    count >= HIGH
+      ? "This topic is not within the current knowledge base's coverage."
+      : "Try alternative keywords or a higher-level concept.";
 
   return {
     status: "known_gap",
-    message: `已知缺口：『${keyword.trim()}』已被查詢 ${count} 次都無結果`,
+    message: `Known gap: "${keyword.trim()}" has returned no results ${count} times.`,
     gap_info: { topic, occurrence_count: count, first_seen: agg!.first_seen },
     recommendation,
   };

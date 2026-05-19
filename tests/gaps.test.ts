@@ -147,21 +147,21 @@ describe("checkKnownGap", () => {
     expect(r).not.toBeNull();
     expect(r.status).toBe("known_gap");
     expect(r.gap_info.occurrence_count).toBe(MID);
-    expect(r.recommendation).toContain("替代");
+    expect(r.recommendation).toContain("alternative");
   });
 
   it("between MID and HIGH stays in the alternative-keyword tier", () => {
     const r = checkKnownGap(many("sharding", MID + 1), "sharding")!;
-    expect(r.recommendation).toContain("替代");
-    expect(r.recommendation).not.toContain("覆蓋範圍");
+    expect(r.recommendation).toContain("alternative");
+    expect(r.recommendation).not.toContain("coverage");
   });
 
   it("at/above HIGH recommends out-of-coverage", () => {
     const r = checkKnownGap(many("federation", HIGH), "federation")!;
     expect(r.gap_info.occurrence_count).toBe(HIGH);
-    expect(r.recommendation).toContain("覆蓋範圍");
+    expect(r.recommendation).toContain("coverage");
     const r2 = checkKnownGap(many("federation", HIGH + 5), "federation")!;
-    expect(r2.recommendation).toContain("覆蓋範圍");
+    expect(r2.recommendation).toContain("coverage");
   });
 
   it("matches via normalized keyword and reports the count + topic", () => {
