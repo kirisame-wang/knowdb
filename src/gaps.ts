@@ -14,6 +14,19 @@ export function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/**
+ * Concept-shaped grouping key. `|` is the only multi-term operator;
+ * whitespace is literal (not a separator). Split on `|`, normalize each
+ * alternative, drop empties, dedupe, sort, rejoin — so `a|b`, `b|a`,
+ * `A | B` share one key while the phrase `a b` stays distinct.
+ * Deterministic, no LLM.
+ */
+export function gapTopicKey(keyword: string): string {
+  return [...new Set(keyword.split("|").map(normalizeKeyword).filter(Boolean))]
+    .sort()
+    .join("|");
+}
+
 // ── Gap id ────────────────────────────────────────────────────────────────────
 
 /** "gap_<yyyymmdd>_<seq3>" in UTC. `seq` is the per-day sequence (1-based). */
@@ -69,7 +82,7 @@ export class BrowserGapSink implements GapSink {
 export function aggregate(events: GapEvent[]): GapAggregate[] {
   const groups = new Map<string, GapEvent[]>();
   for (const e of events) {
-    const topic = normalizeKeyword(e.keyword);
+    const topic = gapTopicKey(e.keyword);
     (groups.get(topic) ?? groups.set(topic, []).get(topic)!).push(e);
   }
 
@@ -102,7 +115,7 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
  * keeps the original `[]` behavior (backward compatible).
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
-  const topic = normalizeKeyword(keyword);
+  const topic = gapTopicKey(keyword);
   const agg = aggregate(events).find((a) => a.topic === topic);
   const count = agg?.occurrence_count ?? 0;
   if (count < MID) return null;

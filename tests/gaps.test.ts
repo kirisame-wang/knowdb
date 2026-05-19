@@ -209,3 +209,36 @@ describe("threshold constants", () => {
     expect(MID).toBeGreaterThan(0);
   });
 });
+
+describe("gap key canonicalization (|-alternation)", () => {
+  it("aggregates |-alternation regardless of order/case/spacing into one topic", () => {
+    const agg = aggregate([
+      ev({ keyword: "redis|memcached", timestamp: "2026-05-20T01:00:00Z" }),
+      ev({ keyword: "memcached|redis", timestamp: "2026-05-20T02:00:00Z" }),
+      ev({ keyword: "Redis | Memcached", timestamp: "2026-05-20T03:00:00Z" }),
+    ]);
+    expect(agg).toHaveLength(1);
+    expect(agg[0]!.occurrence_count).toBe(3);
+  });
+
+  it("checkKnownGap counts |-alternation variants as one topic (reaches MID)", () => {
+    const variants = ["a|b", "b|a", "a | b", "B|A", "b |  a"]; // all → key "a|b"
+    const evs = Array.from({ length: MID }, (_, i) =>
+      ev({
+        keyword: variants[i % variants.length]!,
+        timestamp: new Date(Date.UTC(2026, 4, 20, 0, 0, i)).toISOString(),
+      })
+    );
+    const r = checkKnownGap(evs, "B | A");
+    expect(r).not.toBeNull();
+    expect(r!.gap_info.occurrence_count).toBe(MID);
+  });
+
+  it("keeps a phrase distinct from an OR (whitespace is literal)", () => {
+    const agg = aggregate([
+      ev({ keyword: "cache eviction", timestamp: "2026-05-20T01:00:00Z" }),
+      ev({ keyword: "cache|eviction", timestamp: "2026-05-20T02:00:00Z" }),
+    ]);
+    expect(agg).toHaveLength(2);
+  });
+});
