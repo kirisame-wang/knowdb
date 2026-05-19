@@ -73,10 +73,14 @@ Search across all documents:
 grep -rin "<keyword>" db/ --include="*.md" --exclude="_index.md"
 ```
 
+**Keyword contract**: the keyword is a single regex — use `a|b` for OR;
+whitespace is literal (a space matches a space, not multiple keywords);
+matching is case-insensitive by default.
+
 Useful flags:
 - `-r` recursive, `-i` case-insensitive, `-n` show line numbers
 - `-l` list matching files only (for a quick overview)
-- `-P` enable Perl-compatible regex: `grep -rinP "term1|term2" db/<doc_id>/`
+- `-P` enable Perl-compatible regex: `grep -rinP "a|b" db/<doc_id>/`
 
 Each result shows the file path (`<doc_id>/<chunk_id>.md`) and the matching line.
 Read the surrounding lines before fetching the full chunk.
