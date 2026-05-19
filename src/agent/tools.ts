@@ -181,8 +181,8 @@ export async function processToolCall(
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
 
-      // Layer 1 工具閉環: an empty keyword search is a recordable gap.
-      // index_only discovery misses are not gaps (spec G4).
+      // An empty keyword search is a recordable gap;
+      // index_only discovery misses are not gaps.
       if (results.length === 0 && !indexOnly && sink) {
         const now = new Date();
         const existing = sink.readAll(); // single parse; reused below

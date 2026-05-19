@@ -1,13 +1,13 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
 
-// ── Known-gap thresholds (G8, tunable) ────────────────────────────────────────
+// ── Known-gap thresholds (tunable) ────────────────────────────────────────
 
 /** ≥ HIGH occurrences → "not in coverage". */
 export const HIGH = 10;
 /** ≥ MID (and < HIGH) → "try alternative keywords". */
 export const MID = 3;
 
-// ── Keyword normalization (G7 — deterministic, no LLM) ────────────────────────
+// ── Keyword normalization (deterministic, no LLM) ────────────────────────
 
 export function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
@@ -55,7 +55,7 @@ export function parseGapsJsonl(text: string): GapEvent[] {
   return out;
 }
 
-// ── Sink (G3 — two impls share one JSONL schema) ──────────────────────────────
+// ── Sink (two impls share one JSONL schema) ──────────────────────────────
 
 export interface GapSink {
   record(event: GapEvent): void;
@@ -99,7 +99,7 @@ export class BrowserGapSink implements GapSink {
   }
 }
 
-// ── Aggregation (G7 — pure, deterministic) ────────────────────────────────────
+// ── Aggregation (pure, deterministic) ────────────────────────────────────
 
 export function aggregate(events: GapEvent[]): GapAggregate[] {
   const groups = new Map<string, GapEvent[]>();
@@ -129,7 +129,7 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
   return result.sort((a, b) => b.occurrence_count - a.occurrence_count);
 }
 
-// ── Known-gap check (G8 — pure; caller records the current gap first) ──────────
+// ── Known-gap check (pure; caller records the current gap first) ──────────
 
 /**
  * Decide whether an empty search hit a known gap. `events` must already

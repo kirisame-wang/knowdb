@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
 import { parseGapsJsonl } from "../src/gaps.js";
 import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
@@ -15,6 +15,17 @@ function runQuery(args: string[]): { stdout: string; status: number } {
   const result = spawnSync("bash", [QUERY_SH, ...args], {
     encoding: "utf-8",
     env: { ...process.env, DB_DIR, GAPS_DIR },
+  });
+  return { stdout: (result.stdout ?? "").trim(), status: result.status ?? 1 };
+}
+
+function runQueryEnv(
+  args: string[],
+  extraEnv: Record<string, string>
+): { stdout: string; status: number } {
+  const result = spawnSync("bash", [QUERY_SH, ...args], {
+    encoding: "utf-8",
+    env: { ...process.env, DB_DIR, GAPS_DIR, ...extraEnv },
   });
   return { stdout: (result.stdout ?? "").trim(), status: result.status ?? 1 };
 }
@@ -187,6 +198,38 @@ describe("query CLI", () => {
       const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
       expect(events).toHaveLength(1);
       expect(events[0]!.keyword).toBe(kw);
+    });
+  });
+
+  // local session_id is read from the program-generated .session_id file
+  // the agent writes once per session. The id is never user- or
+  // caller-supplied (no KNOWDB_SESSION_ID); SESSION_ID_FILE overrides only
+  // the file path, for test isolation.
+  describe("session_id correlator (local sink)", () => {
+    const ABSENT = "zzz_absent_sid";
+    const SESSION_FILE = dbDir("gaps-query-test-sid"); // sibling: survives beforeEach rm
+
+    beforeEach(async () => {
+      await rm(GAPS_DIR, { recursive: true, force: true });
+    });
+    afterEach(() => {
+      if (existsSync(SESSION_FILE)) rmSync(SESSION_FILE);
+    });
+
+    function lastEvent() {
+      return parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"))[0]!;
+    }
+
+    it("omits session_id when no .session_id file is present", () => {
+      // SESSION_FILE is intentionally absent (afterEach removed it)
+      runQueryEnv(["search", ABSENT], { SESSION_ID_FILE: SESSION_FILE });
+      expect(lastEvent().session_id).toBeUndefined();
+    });
+
+    it("reads the program-generated session_id from the .session_id file", () => {
+      writeFileSync(SESSION_FILE, "sess-from-file\n");
+      runQueryEnv(["search", ABSENT], { SESSION_ID_FILE: SESSION_FILE });
+      expect(lastEvent().session_id).toBe("sess-from-file");
     });
   });
 });

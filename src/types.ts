@@ -30,29 +30,29 @@ export interface SearchResult {
   parent_summary?: string | null; // opaque parent characterization (currently the parent title; may widen). null = no parent, "" = title unresolved
 }
 
-// ── Gap Recording (Layer 1 工具閉環) ──────────────────────────────────────────
+// ── Gap Recording ──────────────────────────────────────────
 // Single shared contract for both sinks (local jsonl / browser localStorage)
 // and all three stages (recording / aggregation / known-gap check).
 
 export interface GapEvent {
   // gap_id is unique only WITHIN a source; (source, gap_id) is globally
   // unique. The two sinks run independent per-day sequencers, so cross-source
-  // merges (G2) must de-dup on the pair, not gap_id alone.
+  // merges must de-dup on the pair, not gap_id alone.
   source: "local" | "browser";
   gap_id: string;          // "gap_<yyyymmdd>_<seq3>" — per-source, de-identified
   keyword: string;         // raw query keyword (un-normalized)
   scope: string | null;    // scoped 8-hex doc_id, or null if unscoped
   timestamp: string;       // ISO 8601 UTC
-  // Best-effort context (G5) — omitted when not cheaply available.
+  // Best-effort context — omitted when not cheaply available.
   user_question?: string;
   current_document?: string;
   navigation_path?: string[];
-  query_id?: string;       // reserved link to future Query Audit Trail (G6)
-  session_id?: string;     // ephemeral per-conversation id; groups a session for post-hoc analysis (not user-identifying, not read by Tier 1)
+  query_id?: string;       // reserved link to future Query Audit Trail
+  session_id?: string;     // ephemeral per-conversation id; groups a session for post-hoc analysis (not user-identifying, not read on the live query path)
 }
 
 export interface GapAggregate {
-  topic: string;                 // normalized keyword (G7 rule)
+  topic: string;                 // normalized keyword
   occurrence_count: number;
   first_seen: string;            // ISO 8601
   last_seen: string;             // ISO 8601
