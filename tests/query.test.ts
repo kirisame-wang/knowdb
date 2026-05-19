@@ -3,13 +3,14 @@ import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
 import { readFileSync, existsSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
-import { parseGapsJsonl } from "../src/utils.js";
+import { parseJsonl } from "../src/utils.js";
+import type { GapEvent } from "../src/types.js";
 import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
 
 const DB_DIR = dbDir("db-query-test");
 const GAPS_DIR = dbDir("gaps-query-test");
 const GAPS_FILE = join(GAPS_DIR, "query-gaps.jsonl");
-const GAPS_TS = join(QUERY_SH, "..", "gaps.ts"); // scripts/gaps.ts, beside query.sh
+const GAPS_TS = join(QUERY_SH, "..", "gaps.ts"); // scripts/gaps.ts
 
 function runQuery(args: string[]): { stdout: string; status: number } {
   const result = spawnSync("bash", [QUERY_SH, ...args], {
@@ -59,7 +60,7 @@ describe("query CLI", () => {
   describe("search", () => {
     it("returns chunk paths containing the keyword", () => {
       const { stdout, status } = runQuery(["search", "BM25"]);
-      // sample.md doesn't contain BM25, so expect empty or fall back to a present word
+      // sample.md may not contain BM25; assert exit status only
       expect(status).toBe(0);
     });
 
@@ -144,7 +145,7 @@ describe("query CLI", () => {
       expect(status).toBe(0);
       expect(existsSync(GAPS_FILE)).toBe(true);
 
-      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      const events = parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"));
       expect(events).toHaveLength(1);
       const e = events[0]!;
       expect(e.source).toBe("local");
@@ -158,14 +159,14 @@ describe("query CLI", () => {
       const { status } = runQuery(["search", "Preamble"]);
       expect(status).toBe(0);
       const events = existsSync(GAPS_FILE)
-        ? parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"))
+        ? parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"))
         : [];
       expect(events).toHaveLength(0);
     });
 
     it("captures the scope when the miss is scoped", () => {
       runQuery(["search", ABSENT, "--scope", docId]);
-      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      const events = parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"));
       expect(events[0]!.scope).toBe(docId);
     });
 
@@ -180,12 +181,9 @@ describe("query CLI", () => {
       expect(row.occurrence_count).toBe(2);
     });
 
-    // Cross-mode contract: the bash-written JSONL must JSON.parse back to the
-    // exact keyword (the property aggregate()/parseGapsJsonl actually rely on),
-    // for keywords JSON.stringify would escape.
-    // NOTE: a bare CR can't be delivered through Node→Win32→bash argv (it is
-    // truncated before query.sh sees it), so \r is not asserted here even
-    // though json_escape handles it correctly for POSIX local agents.
+    // Cross-mode contract: bash-written JSONL must JSON.parse back to the
+    // exact keyword. (A bare CR can't survive Node→Win32→bash argv, so \r
+    // isn't asserted, though json_escape handles it for POSIX agents.)
     it.each([
       ["double quote", 'zzqq_"x"'],
       ["backslash", "zzqq_\\path"],
@@ -195,16 +193,14 @@ describe("query CLI", () => {
     ])("round-trips a keyword with %s through the bash sink", (_label, kw) => {
       const { status } = runQuery(["search", kw]);
       expect(status).toBe(0);
-      const events = parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"));
+      const events = parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"));
       expect(events).toHaveLength(1);
       expect(events[0]!.keyword).toBe(kw);
     });
   });
 
-  // local session_id is read from the program-generated .session_id file
-  // the agent writes once per session. The id is never user- or
-  // caller-supplied (no KNOWDB_SESSION_ID); SESSION_ID_FILE overrides only
-  // the file path, for test isolation.
+  // Local session_id comes only from the program-written .session_id file
+  // (never user-supplied); SESSION_ID_FILE overrides the path for tests.
   describe("session_id correlator (local sink)", () => {
     const ABSENT = "zzz_absent_sid";
     const SESSION_FILE = dbDir("gaps-query-test-sid"); // sibling: survives beforeEach rm
@@ -217,11 +213,11 @@ describe("query CLI", () => {
     });
 
     function lastEvent() {
-      return parseGapsJsonl(readFileSync(GAPS_FILE, "utf-8"))[0]!;
+      return parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"))[0]!;
     }
 
     it("omits session_id when no .session_id file is present", () => {
-      // SESSION_FILE is intentionally absent (afterEach removed it)
+      // SESSION_FILE intentionally absent
       runQueryEnv(["search", ABSENT], { SESSION_ID_FILE: SESSION_FILE });
       expect(lastEvent().session_id).toBeUndefined();
     });

@@ -11,8 +11,7 @@ import {
   splitId,
 } from "../db_query.js";
 import { SKILL } from "./skill.js";
-import { makeGapId, nextDailySeq } from "../utils.js";
-import { checkKnownGap, type GapSink } from "../gaps.js";
+import { makeGapId, nextDailySeq, checkKnownGap, type GapSink } from "../gaps.js";
 import type { SearchIndex, SearchResult, Manifest, GapEvent } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */

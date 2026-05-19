@@ -1,5 +1,5 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
-import { serializeGap, parseGapsJsonl, newSessionId } from "./utils.js";
+import { utcYmd, newSessionId, toJsonLine, parseJsonl } from "./utils.js";
 
 // ── Known-gap thresholds (tunable) ────────────────────────────────────────
 
@@ -12,6 +12,19 @@ export const MID = 3;
 
 export function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// ── Gap id ────────────────────────────────────────────────────────────────────
+
+/** "gap_<yyyymmdd>_<seq3>" in UTC. `seq` is the per-day sequence (1-based). */
+export function makeGapId(date: Date, seq: number): string {
+  return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
+}
+
+/** 1-based sequence for `date`'s UTC day, given the events already recorded. */
+export function nextDailySeq(events: GapEvent[], date: Date): number {
+  const ymd = utcYmd(date);
+  return events.filter((e) => utcYmd(new Date(e.timestamp)) === ymd).length + 1;
 }
 
 // ── Sink (two impls share one JSONL schema) ──────────────────────────────
@@ -38,11 +51,11 @@ export class BrowserGapSink implements GapSink {
 
   record(event: GapEvent): void {
     const stamped: GapEvent = { ...event, session_id: this.sessionId };
-    this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + serializeGap(stamped) + "\n");
+    this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + toJsonLine(stamped) + "\n");
   }
 
   readAll(): GapEvent[] {
-    return parseGapsJsonl(this.store.getItem(this.key) ?? "");
+    return parseJsonl<GapEvent>(this.store.getItem(this.key) ?? "");
   }
 
   /** Raw JSONL for the Demo's user-triggered download (ui.ts wraps in a Blob). */
