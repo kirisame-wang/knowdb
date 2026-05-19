@@ -70,6 +70,21 @@ describe("query CLI", () => {
       expect(stdout).toContain(`db-query-test/${docId}/00.md`);
     });
 
+    // Contract parity with browser search: keyword is one regex —
+    // `a|b` is alternation (OR), not a literal pipe.
+    it("treats `|` as regex alternation, not a literal pipe", () => {
+      const { stdout, status } = runQuery(["search", "Preamble|zzznotpresent"]);
+      expect(status).toBe(0);
+      expect(stdout).toContain(`db-query-test/${docId}/00.md`);
+    });
+
+    // Contract parity with browser search: case-insensitive by default.
+    it("matches case-insensitively by default", () => {
+      const { stdout, status } = runQuery(["search", "preamble"]);
+      expect(status).toBe(0);
+      expect(stdout).toContain(`db-query-test/${docId}/00.md`);
+    });
+
     it("limits results with --scope", () => {
       const { stdout, status } = runQuery(["search", "Body", "--scope", docId]);
       expect(status).toBe(0);

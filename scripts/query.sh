@@ -75,7 +75,9 @@ if [[ "$CMD" == "search" ]]; then
   SEARCH_DIR="${DB_DIR}"
   [[ -n "$SCOPE" ]] && SEARCH_DIR="${DB_DIR}/${SCOPE}"
 
-  RESULTS="$(grep -rl --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
+  # keyword is one regex: -E so `a|b` is alternation (OR), -i to match the
+  # browser default (case-insensitive). Whitespace is literal (no multi-term).
+  RESULTS="$(grep -rlEi --include="*.md" "$KEYWORD" "$SEARCH_DIR" 2>/dev/null \
     | grep -v "_index\.md" \
     | sort \
     || true)"
