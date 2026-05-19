@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import { parseGapsJsonl, aggregate } from "../src/gaps.js";
+import { parseGapsJsonl } from "../src/utils.js";
+import { aggregate } from "../src/gaps.js";
 
 // Local analysis path. Reuses the tested aggregate() rather than
 // re-implementing JSON aggregation in bash (mirrors scripts/ingest.ts tsx).

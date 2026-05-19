@@ -1,4 +1,5 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
+import { serializeGap, parseGapsJsonl, newSessionId } from "./utils.js";
 
 // ── Known-gap thresholds (tunable) ────────────────────────────────────────
 
@@ -13,48 +14,6 @@ export function normalizeKeyword(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-// ── Gap id ────────────────────────────────────────────────────────────────────
-
-function utcYmd(date: Date): string {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(date.getUTCDate()).padStart(2, "0");
-  return `${y}${m}${d}`;
-}
-
-/** "gap_<yyyymmdd>_<seq3>" in UTC. `seq` is the per-day sequence (1-based). */
-export function makeGapId(date: Date, seq: number): string {
-  return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
-}
-
-/** 1-based sequence for `date`'s UTC day, given the events already recorded. */
-export function nextDailySeq(events: GapEvent[], date: Date): number {
-  const ymd = utcYmd(date);
-  return events.filter((e) => utcYmd(new Date(e.timestamp)) === ymd).length + 1;
-}
-
-// ── JSONL serialization ───────────────────────────────────────────────────────
-
-export function serializeGap(event: GapEvent): string {
-  return JSON.stringify(event);
-}
-
-export function parseGapsJsonl(text: string): GapEvent[] {
-  const out: GapEvent[] = [];
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line) continue;
-    try {
-      out.push(JSON.parse(line) as GapEvent);
-    } catch {
-      // Skip a corrupt line (truncated/interleaved >> append, partial
-      // localStorage write) rather than aborting the whole read — gap
-      // logging runs inside the live search path and must never break it.
-    }
-  }
-  return out;
-}
-
 // ── Sink (two impls share one JSONL schema) ──────────────────────────────
 
 export interface GapSink {
@@ -67,13 +26,6 @@ export interface GapSink {
 export interface KeyValueStore {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
-}
-
-/** Ephemeral per-conversation id. One per page load (the sink is built at
- *  app init); rotate by constructing a new sink on a "new"/reset action.
- *  Not user-identifying; only groups a session for post-hoc analysis. */
-export function newSessionId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** Browser sink: appends JSONL to localStorage; dump() feeds the export button. */
@@ -133,8 +85,8 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
 
 /**
  * Decide whether an empty search hit a known gap. `events` must already
- * include the just-recorded gap (spec §4). Returns null below MID so the
- * caller keeps the original `[]` behavior (backward compatible).
+ * include the just-recorded gap. Returns null below MID so the caller
+ * keeps the original `[]` behavior (backward compatible).
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
   const topic = normalizeKeyword(keyword);

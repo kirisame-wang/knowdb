@@ -1,16 +1,18 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeKeyword,
-  makeGapId,
-  nextDailySeq,
-  serializeGap,
-  parseGapsJsonl,
   aggregate,
   checkKnownGap,
   BrowserGapSink,
   HIGH,
   MID,
 } from "../src/gaps.js";
+import {
+  makeGapId,
+  nextDailySeq,
+  serializeGap,
+  parseGapsJsonl,
+} from "../src/utils.js";
 import type { GapEvent } from "../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({

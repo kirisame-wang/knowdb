@@ -3,7 +3,7 @@ import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
 import { readFileSync, existsSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
-import { parseGapsJsonl } from "../src/gaps.js";
+import { parseGapsJsonl } from "../src/utils.js";
 import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
 
 const DB_DIR = dbDir("db-query-test");
