@@ -1,5 +1,17 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
-import { utcYmd, newSessionId, toJsonLine, parseJsonl } from "./utils.js";
+import {
+  utcYmd,
+  newSessionId,
+  toJsonLine,
+  parseJsonl,
+  nextDailySeq as nextDailySeqGeneric,
+  SessionContext,
+  sessionId as resolveSessionId,
+} from "./utils.js";
+
+// Re-export the generic counter under the path gap callers already use,
+// so existing imports (`from "../src/gaps.js"`) keep working.
+export { nextDailySeqGeneric as nextDailySeq, SessionContext };
 
 // ── Known-gap thresholds (tunable) ────────────────────────────────────────
 
@@ -63,11 +75,7 @@ export function makeGapId(date: Date, seq: number): string {
   return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
 }
 
-/** 1-based sequence for `date`'s UTC day, given the events already recorded. */
-export function nextDailySeq(events: GapEvent[], date: Date): number {
-  const ymd = utcYmd(date);
-  return events.filter((e) => utcYmd(new Date(e.timestamp)) === ymd).length + 1;
-}
+// `nextDailySeq` for gaps is the generic helper from utils, re-exported above.
 
 // ── Sink (two impls share one JSONL schema) ──────────────────────────────
 
@@ -83,13 +91,19 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-/** Browser sink: appends JSONL to localStorage; dump() feeds the export button. */
+/** Browser sink: appends JSONL to localStorage; dump() feeds the export button.
+ *  The session arg accepts a SessionContext (preferred — lets trace/gap share
+ *  one id) or a bare string (legacy path for direct id injection). */
 export class BrowserGapSink implements GapSink {
+  private readonly sessionId: string;
+
   constructor(
     private readonly store: KeyValueStore,
     private readonly key = "knowdb-gaps",
-    private readonly sessionId: string = newSessionId()
-  ) {}
+    session: SessionContext | string = newSessionId()
+  ) {
+    this.sessionId = resolveSessionId(session);
+  }
 
   record(event: GapEvent): void {
     // Skip events with an empty canonical key (empty / |-only / whitespace
