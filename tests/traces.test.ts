@@ -8,7 +8,7 @@ import {
   makeQueryId,
   type TraceCollectorEvent,
 } from "../src/traces.js";
-import { SessionContext } from "../src/utils.js";
+import { makeGapId, SessionContext } from "../src/gaps.js";
 import type { LocalCommandEvent, QueryTrace } from "../src/types.js";
 
 class FakeKV {
@@ -36,6 +36,18 @@ describe("makeQueryId / makeCommandId", () => {
   it("q and c id namespaces are visibly distinct (no prefix collision)", () => {
     expect(makeQueryId(date, 1).startsWith("q_")).toBe(true);
     expect(makeCommandId(date, 1).startsWith("c_")).toBe(true);
+  });
+
+  // Spec T2: per-source daily seq each monotonic and independent. Three
+  // namespaces (gap / q / c) can simultaneously hold seq=1 on the same day
+  // without collision — the prefix carries the namespace, the seq does not.
+  it("gap / q / c ids on the same day at seq=1 are all distinct (no namespace collision)", () => {
+    const day = new Date("2026-05-16T12:00:00Z");
+    const ids = new Set([makeGapId(day, 1), makeQueryId(day, 1), makeCommandId(day, 1)]);
+    expect(ids.size).toBe(3);
+    expect([...ids]).toEqual(
+      expect.arrayContaining(["gap_20260516_001", "q_20260516_001", "c_20260516_001"])
+    );
   });
 });
 
@@ -75,6 +87,26 @@ describe("BrowserTraceSink", () => {
 
   it("starts empty", () => {
     expect(new BrowserTraceSink(new FakeKV()).readAll()).toEqual([]);
+  });
+
+  it("readAll() returns a snapshot — later flush() does not mutate a prior result", () => {
+    const sink = new BrowserTraceSink(new FakeKV());
+    const t1: QueryTrace = {
+      source: "browser",
+      query_id: "q_20260516_001",
+      user_question: "Q1",
+      started_at: "2026-05-16T10:00:00Z",
+      ended_at: "2026-05-16T10:00:01Z",
+      tool_calls: [],
+      api_rounds: [],
+    };
+    sink.flush(t1);
+    const snap = sink.readAll();
+    expect(snap).toHaveLength(1);
+    // Subsequent flush must not bleed into the snapshot already returned.
+    sink.flush({ ...t1, query_id: "q_20260516_002" });
+    expect(snap).toHaveLength(1);
+    expect(snap[0]!.query_id).toBe("q_20260516_001");
   });
 
   it("respects a custom key", () => {
@@ -206,6 +238,24 @@ describe("BrowserTraceCollector lifecycle", () => {
       "q_20260516_002",
       "q_20260516_003",
     ]);
+  });
+
+  it("endQuery clears internal partial state — same query_id cannot be ended twice", () => {
+    const collector = new BrowserTraceCollector(SID);
+    const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
+    collector.endQuery(q, "A", undefined, new Date("2026-05-16T10:00:01Z"));
+    // Second endQuery on the same id must throw (partial was deleted).
+    expect(() => collector.endQuery(q)).toThrow(/unknown query_id/);
+    // recordToolCall on a finalized id likewise rejected.
+    expect(() =>
+      collector.recordToolCall(q, {
+        tool: "x",
+        input: {},
+        output_summary: "",
+        duration_ms: 0,
+        timestamp: "2026-05-16T10:00:02Z",
+      })
+    ).toThrow(/unknown query_id/);
   });
 
   it("seeds the daily seq from persisted traces in the sink", () => {

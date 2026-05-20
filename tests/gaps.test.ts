@@ -7,6 +7,7 @@ import {
   aggregate,
   checkKnownGap,
   BrowserGapSink,
+  SessionContext,
   HIGH,
   MID,
 } from "../src/gaps.js";
@@ -209,6 +210,21 @@ describe("BrowserGapSink", () => {
     sink.record(ev({ keyword: "|", timestamp: "2026-05-20T02:00:00Z" }));
     sink.record(ev({ keyword: "  |  ", timestamp: "2026-05-20T03:00:00Z" }));
     expect(sink.readAll()).toEqual([]);
+  });
+
+  // The core promise of spec A7 / spec-gap-recording v0.1.3 G5: when a
+  // SessionContext is passed (instead of a bare string), the sink stamps
+  // events with the context's id — making it possible to share one id
+  // with a TraceCollector for cross-stream join.
+  it("accepts a SessionContext and stamps its id (cross-stream join enabler)", () => {
+    const ctx = new SessionContext("shared-ctx-1");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);
+    sink.record(ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" }));
+    sink.record(ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" }));
+    const all = sink.readAll();
+    expect(all).toHaveLength(2);
+    expect(all[0]!.session_id).toBe("shared-ctx-1");
+    expect(all[1]!.session_id).toBe("shared-ctx-1");
   });
 });
 
