@@ -15,18 +15,42 @@ export function normalizeKeyword(keyword: string): string {
 }
 
 /**
- * Concept-shaped grouping key. `|` is the only multi-term operator;
- * whitespace is literal (not a separator). Split on `|`, normalize each
- * alternative, drop empties, dedupe, sort, rejoin — so `a|b`, `b|a`,
- * `A | B` share one key while the phrase `a b` stays distinct.
- * Returns `""` for an empty / `|`-only / pure-whitespace input — callers
- * (e.g. `BrowserGapSink.record`) treat the empty key as a non-recordable
- * gap and skip it. The `|` split is lexical, not a regex-AST parse, so
- * `(a|b)c` and `(b|a)c` are intentionally distinct topics — accepted
- * gap-key heuristic, not full regex canonicalization.
+ * Simple-OR detector — the contract's supported shape: keyword contains
+ * `|` and no other regex metacharacter. Out-of-contract metachars
+ * (`. * + ? ^ $ { } ( ) [ ] \`) disqualify; such keywords fall back to a
+ * single raw topic everywhere `|`-splitting is used.
+ */
+export function isSimpleOR(keyword: string): boolean {
+  return keyword.includes("|") && !/[.*+?^${}()[\]\\]/.test(keyword);
+}
+
+/**
+ * Record-time decomposition. Simple-OR → one keyword per alternative
+ * (minimally trimmed, original case preserved so `GapEvent.keyword` stays
+ * raw). Single-term or out-of-contract regex → `[keyword]` (one event).
+ */
+export function expandKeywordToTopics(keyword: string): string[] {
+  if (!isSimpleOR(keyword)) return [keyword];
+  const alts = keyword.split("|").map((s) => s.trim()).filter(Boolean);
+  return alts.length > 0 ? alts : [keyword];
+}
+
+/**
+ * Concept-shaped grouping key. Simple-OR keywords share a canonical key
+ * regardless of order/case/spacing (`a|b`, `b|a`, `A | B` → `a|b`).
+ * Single-term → its normalized form. Out-of-contract regex containing
+ * `|` (e.g. `foo(a|b)`) returns the normalized raw keyword as ONE topic
+ * — `|` is NOT split when other regex metachars are present, because a
+ * lexical split would produce garbage like `b)|foo(a`. Empty / `|`-only /
+ * pure-whitespace input returns `""` — callers (e.g.
+ * `BrowserGapSink.record`) treat the empty key as non-recordable.
  * Deterministic, no LLM.
  */
 export function gapTopicKey(keyword: string): string {
+  if (!isSimpleOR(keyword) && keyword.includes("|")) {
+    // Out-of-contract regex containing `|`: do NOT split.
+    return normalizeKeyword(keyword);
+  }
   return [...new Set(keyword.split("|").map(normalizeKeyword).filter(Boolean))]
     .sort()
     .join("|");
@@ -123,9 +147,19 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
  * keeps the original `[]` behavior (backward compatible).
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
-  const topic = gapTopicKey(keyword);
-  const agg = aggregate(events).find((a) => a.topic === topic);
-  const count = agg?.occurrence_count ?? 0;
+  // Decompose simple-OR input into its alternatives so a query like `a|b`
+  // matches any alternative that has accumulated misses via record-time
+  // fan-out. Single-term and out-of-contract regex stay as one lookup.
+  const aggs = aggregate(events);
+  const topics = expandKeywordToTopics(keyword).map((alt) => gapTopicKey(alt));
+  const matches = topics
+    .map((t) => aggs.find((a) => a.topic === t))
+    .filter((a): a is GapAggregate => !!a);
+  if (matches.length === 0) return null;
+  const top = matches.reduce((m, c) =>
+    c.occurrence_count > m.occurrence_count ? c : m
+  );
+  const count = top.occurrence_count;
   if (count < MID) return null;
 
   const recommendation =
@@ -135,8 +169,8 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
 
   return {
     status: "known_gap",
-    message: `Known gap: "${keyword.trim()}" has returned no results ${count} times.`,
-    gap_info: { topic, occurrence_count: count, first_seen: agg!.first_seen },
+    message: `Known gap: "${top.topic}" has returned no results ${count} times.`,
+    gap_info: { topic: top.topic, occurrence_count: count, first_seen: top.first_seen },
     recommendation,
   };
 }

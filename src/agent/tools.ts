@@ -11,7 +11,13 @@ import {
   splitId,
 } from "../db_query.js";
 import { SKILL } from "./skill.js";
-import { makeGapId, nextDailySeq, checkKnownGap, type GapSink } from "../gaps.js";
+import {
+  makeGapId,
+  nextDailySeq,
+  checkKnownGap,
+  expandKeywordToTopics,
+  type GapSink,
+} from "../gaps.js";
 import type { SearchIndex, SearchResult, Manifest, GapEvent } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */
@@ -186,16 +192,20 @@ export async function processToolCall(
       if (results.length === 0 && !indexOnly && sink) {
         const now = new Date();
         const existing = sink.readAll(); // single parse; reused below
-        const event: GapEvent = {
+        // Record-time fan-out: simple-OR keyword becomes one event per
+        // alternative; out-of-contract regex stays as one raw event.
+        const topics = expandKeywordToTopics(keyword);
+        const baseSeq = nextDailySeq(existing, now);
+        const stamped: GapEvent[] = topics.map((kw, i) => ({
           source: "browser",
-          gap_id: makeGapId(now, nextDailySeq(existing, now)),
-          keyword,
+          gap_id: makeGapId(now, baseSeq + i),
+          keyword: kw,
           scope: scope ?? null,
           timestamp: now.toISOString(),
-        };
-        sink.record(event);
-        // Count the just-recorded gap (spec §4) without a second full parse.
-        const known = checkKnownGap([...existing, event], keyword);
+        }));
+        for (const e of stamped) sink.record(e);
+        // Count the just-recorded gaps without a second full parse.
+        const known = checkKnownGap([...existing, ...stamped], keyword);
         return JSON.stringify(known ?? []);
       }
 
