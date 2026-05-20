@@ -19,6 +19,11 @@ export function normalizeKeyword(keyword: string): string {
  * whitespace is literal (not a separator). Split on `|`, normalize each
  * alternative, drop empties, dedupe, sort, rejoin — so `a|b`, `b|a`,
  * `A | B` share one key while the phrase `a b` stays distinct.
+ * Returns `""` for an empty / `|`-only / pure-whitespace input — callers
+ * (e.g. `BrowserGapSink.record`) treat the empty key as a non-recordable
+ * gap and skip it. The `|` split is lexical, not a regex-AST parse, so
+ * `(a|b)c` and `(b|a)c` are intentionally distinct topics — accepted
+ * gap-key heuristic, not full regex canonicalization.
  * Deterministic, no LLM.
  */
 export function gapTopicKey(keyword: string): string {
@@ -63,6 +68,9 @@ export class BrowserGapSink implements GapSink {
   ) {}
 
   record(event: GapEvent): void {
+    // Skip events with an empty canonical key (empty / |-only / whitespace
+    // keyword). Symmetric with query.sh's CLI guard; keeps aggregate clean.
+    if (!gapTopicKey(event.keyword)) return;
     const stamped: GapEvent = { ...event, session_id: this.sessionId };
     this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + toJsonLine(stamped) + "\n");
   }

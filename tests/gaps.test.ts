@@ -201,6 +201,14 @@ describe("BrowserGapSink", () => {
     expect(a1[0]!.session_id).toBe(a1[1]!.session_id); // stable within instance
     expect(a1[0]!.session_id).not.toBe(a2[0]!.session_id); // distinct across instances
   });
+
+  it("rejects events whose canonical key is empty (empty / |-only / pure whitespace)", () => {
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", "sess-x");
+    sink.record(ev({ keyword: "", timestamp: "2026-05-20T01:00:00Z" }));
+    sink.record(ev({ keyword: "|", timestamp: "2026-05-20T02:00:00Z" }));
+    sink.record(ev({ keyword: "  |  ", timestamp: "2026-05-20T03:00:00Z" }));
+    expect(sink.readAll()).toEqual([]);
+  });
 });
 
 describe("threshold constants", () => {
@@ -240,5 +248,14 @@ describe("gap key canonicalization (|-alternation)", () => {
       ev({ keyword: "cache|eviction", timestamp: "2026-05-20T02:00:00Z" }),
     ]);
     expect(agg).toHaveLength(2);
+  });
+
+  it("canonical topic string is lexicographic, joined with `|`", () => {
+    const agg = aggregate([
+      ev({ keyword: "redis|memcached", timestamp: "2026-05-20T01:00:00Z" }),
+      ev({ keyword: "memcached|redis", timestamp: "2026-05-20T02:00:00Z" }),
+    ]);
+    expect(agg).toHaveLength(1);
+    expect(agg[0]!.topic).toBe("memcached|redis"); // sorted, not insertion order
   });
 });

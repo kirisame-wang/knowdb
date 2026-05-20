@@ -16,7 +16,8 @@ to match keywords against heading trees only — fast and low-noise.
 Call \`search(keyword, scope, ...)\` once you know the target document.
 - Always set \`scope\` to a doc_id to limit results to that document.
 - keyword is a single regex: \`"a|b"\` is OR (alternation); whitespace is
-  literal — a space matches a space, NOT a multi-keyword separator.
+  literal — a space matches a space, NOT a multi-keyword separator;
+  metacharacters are regex — escape with \`\\\` for a literal match.
 - Case-insensitive by default.
 - Each result includes an \`excerpt\` — read it before fetching the full chunk.
 - Each result also carries its position so you rarely need extra calls:
