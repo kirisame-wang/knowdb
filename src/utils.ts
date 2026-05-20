@@ -14,6 +14,29 @@ export function newSessionId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Holder for an ephemeral browser session id, shared across sinks/collectors
+ * so trace × gap join is unambiguous. A bare string id stays valid wherever
+ * a session is consumed — accepting `SessionContext | string` keeps the older
+ * call sites working unchanged.
+ */
+export class SessionContext {
+  constructor(public readonly id: string = newSessionId()) {}
+}
+
+/** Resolve a session source to its id string. Centralizes the union handling. */
+export function sessionId(s: SessionContext | string): string {
+  return typeof s === "string" ? s : s.id;
+}
+
+/**
+ * Truncate a string for trace/UX display. Sentinel suffix mirrors what the
+ * existing `appendToolTrace` UI shows so both call sites share one helper.
+ */
+export function truncateOutput(s: string, n = 600): string {
+  return s.length <= n ? s : s.slice(0, n) + "\n… (truncated)";
+}
+
 /** One JSON value per line (the "L" in JSONL). */
 export function toJsonLine<T>(value: T): string {
   return JSON.stringify(value);
@@ -33,4 +56,14 @@ export function parseJsonl<T>(text: string): T[] {
     }
   }
   return out;
+}
+
+/**
+ * 1-based per-day sequence number from a list of timestamped items. Same
+ * shape both gap and trace recording use; lives here so domain modules
+ * (gaps.ts / traces.ts) share one counter implementation rather than two.
+ */
+export function nextDailySeq<T extends { timestamp: string }>(items: T[], date: Date): number {
+  const ymd = utcYmd(date);
+  return items.filter((it) => utcYmd(new Date(it.timestamp)) === ymd).length + 1;
 }
