@@ -64,18 +64,19 @@ This is fast and low-noise — headings only, no body content.
 Search within one document (recommended):
 
 ```bash
-grep -rin "<keyword>" db/<doc_id>/
+grep -rinE "<keyword>" db/<doc_id>/
 ```
 
 Search across all documents:
 
 ```bash
-grep -rin "<keyword>" db/ --include="*.md" --exclude="_index.md"
+grep -rinE "<keyword>" db/ --include="*.md" --exclude="_index.md"
 ```
 
 **Keyword contract**: the keyword is a single regex — use `a|b` for OR;
 whitespace is literal (a space matches a space, not multiple keywords);
-matching is case-insensitive by default.
+matching is case-insensitive by default; metacharacters are regex
+operators — escape with `\` for a literal match.
 
 Useful flags:
 - `-r` recursive, `-i` case-insensitive, `-n` show line numbers
