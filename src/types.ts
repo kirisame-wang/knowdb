@@ -65,3 +65,75 @@ export interface KnownGapResponse {
   gap_info: { topic: string; occurrence_count: number; first_seen: string };
   recommendation: string;
 }
+
+// ── Query Audit Trail ──────────────────────────────────────────
+// Browser path: per-query bounded transaction (QueryTrace).
+// Local path:  per-command event stream (LocalCommandEvent) — query.sh has
+// no agent-loop central point, so reconstructing query boundaries would
+// require agent cooperation, violating the "script owns integrity" rule.
+// Asymmetry is deliberate (T1 in spec-audit-trail.md).
+
+export interface ToolCallEvent {
+  ordinal: number;                 // 1-based, monotonic within a query
+  tool: string;
+  input: Record<string, unknown>;  // raw input, deterministic
+  output_summary: string;          // truncated tool output (≤ 600 chars; shared truncate)
+  duration_ms: number;             // wall-clock of processToolCall
+  timestamp: string;               // ISO 8601 UTC, at tool-call return
+}
+
+export interface ApiRoundUsage {
+  ordinal: number;                 // 1-based, monotonic within a query
+  input_tokens: number;
+  output_tokens: number;
+  duration_ms: number;             // round-trip of messages.create
+}
+
+export interface QueryTrace {
+  source: "browser";               // browser-only; local goes through LocalCommandEvent
+  query_id: string;                // "q_<yyyymmdd>_<seq3>" — per-source, de-identified
+  session_id?: string;             // mirrors GapEvent.session_id for cross-stream join
+  user_question: string;
+  started_at: string;              // ISO 8601 UTC
+  ended_at: string;                // ISO 8601 UTC
+  tool_calls: ToolCallEvent[];
+  api_rounds: ApiRoundUsage[];
+  final_answer?: string;           // omitted if interrupted/errored
+  error?: string;                  // error message if the loop threw
+}
+
+export interface LocalCommandEvent {
+  source: "local";                 // local-only; browser goes through QueryTrace
+  command_id: string;              // "c_<yyyymmdd>_<seq3>" — per-source, de-identified
+  session_id?: string;             // from .session_id; groups commands into logical sessions
+  command: string;                 // subcommand name (search/expand/siblings/parent/…)
+  args: string[];                  // raw argv after the subcommand name
+  duration_ms: number;
+  exit_code: number;
+  timestamp: string;               // ISO 8601 UTC, at subcommand return
+  // No output field — local trace is skeletal, not content.
+}
+
+export interface TraceMetrics {
+  // Browser-side
+  total_queries: number;
+  avg_steps_per_query: number;
+  avg_query_duration_ms: number;
+  total_tokens: { input: number; output: number };
+  tool_call_distribution: Record<string, number>;
+  queries_with_zero_search_result: number;     // via trace × gap join (MVP: string sniff)
+  queries_with_final_answer: number;
+  // Local-side
+  total_local_sessions: number;
+  avg_commands_per_local_session: number;
+  avg_local_session_duration_ms: number;
+  local_command_distribution: Record<string, number>;
+}
+
+export interface LocalSessionMetrics {
+  session_id: string;              // "" sentinel for events without a session_id
+  command_count: number;
+  duration_ms: number;             // last - first command timestamp
+  commands: LocalCommandEvent[];   // ordered by timestamp
+  associated_gap_count?: number;   // optional cross-stream join (caller supplies GapEvent[])
+}
