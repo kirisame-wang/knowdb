@@ -83,7 +83,22 @@ if [[ "$CMD" == "search" ]]; then
     || true)"
 
   if [[ -z "$RESULTS" ]]; then
-    record_gap "$KEYWORD" "$SCOPE"
+    # Record-time fan-out: simple-OR keyword (contains `|` and no other
+    # regex metachar) becomes one gap per alternative. Out-of-contract
+    # regex stays as a single raw-keyword event.
+    if [[ "$KEYWORD" == *"|"* ]] \
+       && ! printf '%s' "$KEYWORD" | grep -qE '[].*+?^${}()[\]'; then
+      IFS='|' read -ra ALTS <<< "$KEYWORD"
+      for alt in "${ALTS[@]}"; do
+        # trim leading/trailing whitespace; preserve case + internal spaces
+        alt="${alt#"${alt%%[![:space:]]*}"}"
+        alt="${alt%"${alt##*[![:space:]]}"}"
+        [[ -z "$alt" ]] && continue
+        record_gap "$alt" "$SCOPE"
+      done
+    else
+      record_gap "$KEYWORD" "$SCOPE"
+    fi
   else
     echo "$RESULTS"
   fi

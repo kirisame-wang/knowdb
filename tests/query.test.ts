@@ -212,6 +212,25 @@ describe("query CLI", () => {
       expect(events).toHaveLength(1);
       expect(events[0]!.keyword).toBe(kw);
     });
+
+    // Simple-OR contract: `a|b` fans out into one jsonl line per alternative.
+    it("simple-OR keyword: fan-out into one jsonl line per alternative", () => {
+      const ABSENT_A = "zzz_absent_alpha";
+      const ABSENT_B = "zzz_absent_beta";
+      runQuery(["search", `${ABSENT_A}|${ABSENT_B}`]);
+      const events = parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"));
+      expect(events).toHaveLength(2);
+      expect(events.map((e) => e.keyword).sort()).toEqual([ABSENT_A, ABSENT_B]);
+    });
+
+    // Complex regex falls back to one raw-keyword event (no naive `|` split).
+    it("complex regex keyword: falls back to one jsonl line with the raw keyword", () => {
+      const KW = "(zzz_absent_a|zzz_absent_b)c";
+      runQuery(["search", KW]);
+      const events = parseJsonl<GapEvent>(readFileSync(GAPS_FILE, "utf-8"));
+      expect(events).toHaveLength(1);
+      expect(events[0]!.keyword).toBe(KW);
+    });
   });
 
   // Local session_id comes only from the program-written .session_id file

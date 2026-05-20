@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   normalizeKeyword,
+  gapTopicKey,
   makeGapId,
   nextDailySeq,
   aggregate,
@@ -229,16 +230,19 @@ describe("gap key canonicalization (|-alternation)", () => {
     expect(agg[0]!.occurrence_count).toBe(3);
   });
 
-  it("checkKnownGap counts |-alternation variants as one topic (reaches MID)", () => {
-    const variants = ["a|b", "b|a", "a | b", "B|A", "b |  a"]; // all → key "a|b"
+  it("checkKnownGap matches via per-alternative aggregate (record-time split view)", () => {
+    // Real flow: record-time emits one event per simple-OR alternative;
+    // aggregate then has single-term topics. A simple-OR query should find
+    // whichever alternative has accumulated misses.
     const evs = Array.from({ length: MID }, (_, i) =>
       ev({
-        keyword: variants[i % variants.length]!,
+        keyword: "alpha",
         timestamp: new Date(Date.UTC(2026, 4, 20, 0, 0, i)).toISOString(),
       })
     );
-    const r = checkKnownGap(evs, "B | A");
+    const r = checkKnownGap(evs, "alpha|beta");
     expect(r).not.toBeNull();
+    expect(r!.gap_info.topic).toBe("alpha");
     expect(r!.gap_info.occurrence_count).toBe(MID);
   });
 
@@ -257,5 +261,14 @@ describe("gap key canonicalization (|-alternation)", () => {
     ]);
     expect(agg).toHaveLength(1);
     expect(agg[0]!.topic).toBe("memcached|redis"); // sorted, not insertion order
+  });
+
+  // Out-of-contract regex (any metachar beyond `|`) is treated as one topic —
+  // a naive `|` split would otherwise produce garbage like "b)|foo(a".
+  it("treats complex regex as one topic — no split across regex metacharacters", () => {
+    expect(gapTopicKey("foo(a|b)")).toBe("foo(a|b)");
+    expect(gapTopicKey("z(a|b)")).toBe("z(a|b)");
+    expect(gapTopicKey("[abc]")).toBe("[abc]");
+    expect(gapTopicKey("foo\\b")).toBe("foo\\b");
   });
 });

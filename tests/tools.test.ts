@@ -212,4 +212,31 @@ describe("processToolCall — gap recording on empty search", () => {
     const raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST);
     expect(JSON.parse(raw)).toEqual([]);
   });
+
+  // Simple-OR contract: `a|b` records two single-term gaps (record-time fan-out).
+  it("simple-OR keyword: fan-out into one event per alternative", async () => {
+    const sink = new MemSink();
+    await processToolCall(
+      "search",
+      { keyword: "absent_alpha|absent_beta" },
+      INDEX,
+      MANIFEST,
+      sink
+    );
+    expect(sink.events).toHaveLength(2);
+    expect(sink.events.map((e) => e.keyword).sort()).toEqual([
+      "absent_alpha",
+      "absent_beta",
+    ]);
+  });
+
+  // Out-of-contract regex (any metachar beyond `|`) falls back to a single
+  // raw-keyword event — no naive `|` split that would produce garbage.
+  it("complex regex keyword: falls back to one event with the raw keyword", async () => {
+    const sink = new MemSink();
+    const KW = "(absent_a|absent_b)c";
+    await processToolCall("search", { keyword: KW }, INDEX, MANIFEST, sink);
+    expect(sink.events).toHaveLength(1);
+    expect(sink.events[0]!.keyword).toBe(KW);
+  });
 });
