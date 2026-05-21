@@ -4,11 +4,11 @@ import {
   BrowserTraceSink,
   aggregateLocalSession,
   aggregateMetrics,
-  makeCommandId,
-  makeQueryId,
+  newCommandId,
+  newQueryId,
   type TraceCollectorEvent,
 } from "../src/traces.js";
-import { makeGapId, SessionContext } from "../src/gaps.js";
+import { SessionContext } from "../src/gaps.js";
 import type { LocalCommandEvent, QueryTrace } from "../src/types.js";
 
 class FakeKV {
@@ -21,33 +21,20 @@ class FakeKV {
   }
 }
 
-describe("makeQueryId / makeCommandId", () => {
-  const date = new Date("2026-05-16T12:00:00Z");
-
-  it("formats q_<yyyymmdd>_<seq3> with zero-padded seq", () => {
-    expect(makeQueryId(date, 1)).toBe("q_20260516_001");
-    expect(makeQueryId(date, 123)).toBe("q_20260516_123");
+describe("newQueryId / newCommandId", () => {
+  it("each call returns a distinct opaque id", () => {
+    expect(new Set([newQueryId(), newQueryId(), newQueryId()]).size).toBe(3);
+    expect(new Set([newCommandId(), newCommandId(), newCommandId()]).size).toBe(3);
   });
 
-  it("formats c_<yyyymmdd>_<seq3> with zero-padded seq", () => {
-    expect(makeCommandId(date, 7)).toBe("c_20260516_007");
+  it("carries a `q_` / `c_` namespace prefix for at-a-glance JSONL triage", () => {
+    expect(newQueryId().startsWith("q_")).toBe(true);
+    expect(newCommandId().startsWith("c_")).toBe(true);
   });
 
-  it("q and c id namespaces are visibly distinct (no prefix collision)", () => {
-    expect(makeQueryId(date, 1).startsWith("q_")).toBe(true);
-    expect(makeCommandId(date, 1).startsWith("c_")).toBe(true);
-  });
-
-  // Spec T2: per-source daily seq each monotonic and independent. Three
-  // namespaces (gap / q / c) can simultaneously hold seq=1 on the same day
-  // without collision — the prefix carries the namespace, the seq does not.
-  it("gap / q / c ids on the same day at seq=1 are all distinct (no namespace collision)", () => {
-    const day = new Date("2026-05-16T12:00:00Z");
-    const ids = new Set([makeGapId(day, 1), makeQueryId(day, 1), makeCommandId(day, 1)]);
-    expect(ids.size).toBe(3);
-    expect([...ids]).toEqual(
-      expect.arrayContaining(["gap_20260516_001", "q_20260516_001", "c_20260516_001"])
-    );
+  it("body after the prefix is opaque (not the previous q_<yyyymmdd>_<seq3> format)", () => {
+    expect(newQueryId()).not.toMatch(/^q_\d{8}_\d{3}$/);
+    expect(newCommandId()).not.toMatch(/^c_\d{8}_\d{3}$/);
   });
 });
 
@@ -130,13 +117,28 @@ describe("BrowserTraceSink", () => {
 describe("BrowserTraceCollector lifecycle", () => {
   const SID = "sess-test-trace";
 
+  it("startQuery returns an opaque unique id per call (not a daily sequence)", () => {
+    const collector = new BrowserTraceCollector(new SessionContext("S"));
+    const t = new Date("2026-05-16T10:00:00Z");
+    const q1 = collector.startQuery("Q1", t);
+    const q2 = collector.startQuery("Q2", t);  // same Date — id must still differ
+    const q3 = collector.startQuery("Q3", t);
+    // Distinct: each call yields a unique id even at the same wall-clock.
+    expect(new Set([q1, q2, q3]).size).toBe(3);
+    // Opaque: ids are NOT the previous q_<yyyymmdd>_<seq3> daily-seq format.
+    // (Audit needs session_id + timestamp; query_id only needs uniqueness.)
+    expect(q1).not.toMatch(/^q_\d{8}_\d{3}$/);
+    expect(q2).not.toMatch(/^q_\d{8}_\d{3}$/);
+    expect(q3).not.toMatch(/^q_\d{8}_\d{3}$/);
+  });
+
   it("startQuery → recordToolCall/recordApiRound → endQuery produces a complete QueryTrace", () => {
     const collector = new BrowserTraceCollector(new SessionContext(SID));
     const t0 = new Date("2026-05-16T10:00:00Z");
     const t1 = new Date("2026-05-16T10:00:03Z");
 
     const q = collector.startQuery("how to back up?", t0);
-    expect(q).toMatch(/^q_20260516_\d{3}$/);
+    expect(q).toMatch(/^q_/);  // opaque body — uniqueness covered by newQueryId tests above
 
     collector.recordApiRound(q, { input_tokens: 50, output_tokens: 20, duration_ms: 800 });
     collector.recordToolCall(q, {
@@ -227,19 +229,6 @@ describe("BrowserTraceCollector lifecycle", () => {
     expect(log).toEqual(["query_start", "api_round_added", "tool_call_added", "query_end"]); // unchanged
   });
 
-  it("query_id daily seq is monotonic across multiple startQuery calls", () => {
-    const collector = new BrowserTraceCollector(new SessionContext(SID));
-    const t = new Date("2026-05-16T10:00:00Z");
-    const q1 = collector.startQuery("Q1", t);
-    const q2 = collector.startQuery("Q2", t);
-    const q3 = collector.startQuery("Q3", t);
-    expect([q1, q2, q3]).toEqual([
-      "q_20260516_001",
-      "q_20260516_002",
-      "q_20260516_003",
-    ]);
-  });
-
   it("endQuery clears internal partial state — same query_id cannot be ended twice", () => {
     const collector = new BrowserTraceCollector(new SessionContext(SID));
     const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
@@ -256,32 +245,6 @@ describe("BrowserTraceCollector lifecycle", () => {
         timestamp: "2026-05-16T10:00:02Z",
       })
     ).toThrow(/unknown query_id/);
-  });
-
-  it("seeds the daily seq from persisted traces in the sink", () => {
-    const sink = new BrowserTraceSink(new FakeKV());
-    // Pre-populate with two same-day traces.
-    sink.flush({
-      source: "browser",
-      query_id: "q_20260516_001",
-      user_question: "x",
-      started_at: "2026-05-16T08:00:00Z",
-      ended_at: "2026-05-16T08:00:01Z",
-      tool_calls: [],
-      api_rounds: [],
-    });
-    sink.flush({
-      source: "browser",
-      query_id: "q_20260516_002",
-      user_question: "y",
-      started_at: "2026-05-16T09:00:00Z",
-      ended_at: "2026-05-16T09:00:01Z",
-      tool_calls: [],
-      api_rounds: [],
-    });
-    const collector = new BrowserTraceCollector(new SessionContext(SID), sink);
-    const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
-    expect(q).toBe("q_20260516_003");
   });
 });
 

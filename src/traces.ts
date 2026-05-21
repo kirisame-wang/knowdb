@@ -8,22 +8,25 @@ import type {
 } from "./types.js";
 import {
   SessionContext,
-  nextDailySeq,
+  newSessionId,
   parseJsonl,
   toJsonLine,
-  utcYmd,
 } from "./utils.js";
 
 // ── ID helpers ───────────────────────────────────────────────────────────
+//
+// Trace ids are opaque — audit walks `session_id` + `timestamp`, the id only
+// needs uniqueness. The previous q_<yyyymmdd>_<seq3> daily-seq format
+// (mirrored from gap_id) cost a sink dependency in the collector to seed
+// the counter across reloads and never paid back. The `q_` / `c_` prefix
+// remains as a one-glance namespace marker when triaging mixed JSONL.
 
-/** "q_<yyyymmdd>_<seq3>" — per-day, per-source. Symmetric with makeGapId. */
-export function makeQueryId(date: Date, seq: number): string {
-  return `q_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
+export function newQueryId(): string {
+  return `q_${newSessionId()}`;
 }
 
-/** "c_<yyyymmdd>_<seq3>" — per-day, per-source. For LocalCommandEvent. */
-export function makeCommandId(date: Date, seq: number): string {
-  return `c_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
+export function newCommandId(): string {
+  return `c_${newSessionId()}`;
 }
 
 // ── Subscription event shape (UI layer contract) ─────────────────────────
@@ -96,32 +99,20 @@ const nowIso = (d: Date): string => d.toISOString();
  * to subscribers as they accrue, finalizes a QueryTrace at endQuery and
  * drops the partial state. Does not persist — caller flushes via TraceSink.
  *
- * `query_id` allocation uses `nextDailySeq` against the sink's existing
- * traces so ids stay monotonic across page reloads (counter persisted in
- * localStorage, not in memory).
+ * `query_id` is opaque (uuid-based via `newQueryId`); the collector has no
+ * sink dependency.
  */
 export class BrowserTraceCollector implements TraceCollector {
   private readonly partials = new Map<string, PartialTrace>();
   private readonly subs = new Set<(e: TraceCollectorEvent) => void>();
   private readonly session: SessionContext;
-  private readonly sink: { readAll(): QueryTrace[] } | null;
 
-  constructor(
-    session: SessionContext,
-    /** Optional sink — used to seed `query_id` daily counters from persisted traces. */
-    sink: { readAll(): QueryTrace[] } | null = null
-  ) {
+  constructor(session: SessionContext) {
     this.session = session;
-    this.sink = sink;
   }
 
   startQuery(user_question: string, now: Date = new Date()): string {
-    // Counter seeded from persisted traces (across reloads) + still-open
-    // partials (within this load). Both contribute by their start timestamp.
-    const persisted = (this.sink?.readAll() ?? []).map((t) => ({ timestamp: t.started_at }));
-    const inFlight = [...this.partials.values()].map((p) => ({ timestamp: p.started_at }));
-    const seq = nextDailySeq([...persisted, ...inFlight], now);
-    const query_id = makeQueryId(now, seq);
+    const query_id = newQueryId();
     const started_at = nowIso(now);
     this.partials.set(query_id, {
       query_id,
