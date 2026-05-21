@@ -6,7 +6,6 @@ import {
   parseJsonl,
   truncateOutput,
   SessionContext,
-  sessionId,
   nextDailySeq,
 } from "../src/utils.js";
 
@@ -83,7 +82,7 @@ describe("truncateOutput", () => {
   });
 });
 
-describe("SessionContext + sessionId helper", () => {
+describe("SessionContext", () => {
   it("generates an ephemeral id by default", () => {
     const a = new SessionContext();
     const b = new SessionContext();
@@ -94,11 +93,6 @@ describe("SessionContext + sessionId helper", () => {
 
   it("accepts an explicit id", () => {
     expect(new SessionContext("fixed-id").id).toBe("fixed-id");
-  });
-
-  it("sessionId() resolves SessionContext or bare string uniformly", () => {
-    expect(sessionId("raw")).toBe("raw");
-    expect(sessionId(new SessionContext("from-ctx"))).toBe("from-ctx");
   });
 });
 

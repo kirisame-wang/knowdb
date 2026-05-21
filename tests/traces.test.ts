@@ -131,7 +131,7 @@ describe("BrowserTraceCollector lifecycle", () => {
   const SID = "sess-test-trace";
 
   it("startQuery → recordToolCall/recordApiRound → endQuery produces a complete QueryTrace", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     const t0 = new Date("2026-05-16T10:00:00Z");
     const t1 = new Date("2026-05-16T10:00:03Z");
 
@@ -179,7 +179,7 @@ describe("BrowserTraceCollector lifecycle", () => {
   });
 
   it("endQuery on error records error and omits final_answer", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
     const t = collector.endQuery(q, undefined, "boom", new Date("2026-05-16T10:00:01Z"));
     expect(t.final_answer).toBeUndefined();
@@ -187,7 +187,7 @@ describe("BrowserTraceCollector lifecycle", () => {
   });
 
   it("recordToolCall on unknown query_id throws", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     expect(() =>
       collector.recordToolCall("q_nope", {
         tool: "x",
@@ -200,12 +200,12 @@ describe("BrowserTraceCollector lifecycle", () => {
   });
 
   it("endQuery on unknown query_id throws", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     expect(() => collector.endQuery("q_nope")).toThrow(/unknown query_id/);
   });
 
   it("subscribe emits events in operation order; unsubscribe stops delivery", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     const log: string[] = [];
     const unsub = collector.subscribe((e: TraceCollectorEvent) => log.push(e.kind));
 
@@ -228,7 +228,7 @@ describe("BrowserTraceCollector lifecycle", () => {
   });
 
   it("query_id daily seq is monotonic across multiple startQuery calls", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     const t = new Date("2026-05-16T10:00:00Z");
     const q1 = collector.startQuery("Q1", t);
     const q2 = collector.startQuery("Q2", t);
@@ -241,7 +241,7 @@ describe("BrowserTraceCollector lifecycle", () => {
   });
 
   it("endQuery clears internal partial state — same query_id cannot be ended twice", () => {
-    const collector = new BrowserTraceCollector(SID);
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
     const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
     collector.endQuery(q, "A", undefined, new Date("2026-05-16T10:00:01Z"));
     // Second endQuery on the same id must throw (partial was deleted).
@@ -279,7 +279,7 @@ describe("BrowserTraceCollector lifecycle", () => {
       tool_calls: [],
       api_rounds: [],
     });
-    const collector = new BrowserTraceCollector(SID, sink);
+    const collector = new BrowserTraceCollector(new SessionContext(SID), sink);
     const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
     expect(q).toBe("q_20260516_003");
   });

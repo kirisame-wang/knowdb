@@ -10,7 +10,6 @@ import {
   SessionContext,
   nextDailySeq,
   parseJsonl,
-  sessionId as resolveSessionId,
   toJsonLine,
   utcYmd,
 } from "./utils.js";
@@ -108,11 +107,11 @@ export class BrowserTraceCollector implements TraceCollector {
   private readonly sink: { readAll(): QueryTrace[] } | null;
 
   constructor(
-    session: SessionContext | string,
+    session: SessionContext,
     /** Optional sink — used to seed `query_id` daily counters from persisted traces. */
     sink: { readAll(): QueryTrace[] } | null = null
   ) {
-    this.session = typeof session === "string" ? new SessionContext(session) : session;
+    this.session = session;
     this.sink = sink;
   }
 
@@ -267,5 +266,3 @@ export function aggregateMetrics(
   };
 }
 
-// Re-export so trace consumers can resolve a SessionContext | string uniformly.
-export { resolveSessionId };

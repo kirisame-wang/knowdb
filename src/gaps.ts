@@ -1,12 +1,10 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
 import {
   utcYmd,
-  newSessionId,
   toJsonLine,
   parseJsonl,
   nextDailySeq as nextDailySeqGeneric,
   SessionContext,
-  sessionId as resolveSessionId,
 } from "./utils.js";
 
 // Re-export the generic counter under the path gap callers already use,
@@ -92,17 +90,17 @@ export interface KeyValueStore {
 }
 
 /** Browser sink: appends JSONL to localStorage; dump() feeds the export button.
- *  The session arg accepts a SessionContext (preferred — lets trace/gap share
- *  one id) or a bare string (legacy path for direct id injection). */
+ *  The session arg is a SessionContext — the holder lets the trace collector
+ *  share one id with this sink for cross-stream join. */
 export class BrowserGapSink implements GapSink {
   private readonly sessionId: string;
 
   constructor(
     private readonly store: KeyValueStore,
     private readonly key = "knowdb-gaps",
-    session: SessionContext | string = newSessionId()
+    session: SessionContext = new SessionContext()
   ) {
-    this.sessionId = resolveSessionId(session);
+    this.sessionId = session.id;
   }
 
   record(event: GapEvent): void {

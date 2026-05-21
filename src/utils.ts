@@ -16,17 +16,12 @@ export function newSessionId(): string {
 
 /**
  * Holder for an ephemeral browser session id, shared across sinks/collectors
- * so trace × gap join is unambiguous. A bare string id stays valid wherever
- * a session is consumed — accepting `SessionContext | string` keeps the older
- * call sites working unchanged.
+ * so trace × gap join is unambiguous. The shared holder (not a string) is
+ * the API surface — callers wrap their id in `new SessionContext(id)` when
+ * they want deterministic injection (tests, fixtures).
  */
 export class SessionContext {
   constructor(public readonly id: string = newSessionId()) {}
-}
-
-/** Resolve a session source to its id string. Centralizes the union handling. */
-export function sessionId(s: SessionContext | string): string {
-  return typeof s === "string" ? s : s.id;
 }
 
 /**

@@ -169,7 +169,7 @@ describe("BrowserGapSink", () => {
   const SID = "sess-test-1";
 
   it("records and reads back events round-trip (stamped with the session id)", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext(SID));
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     const b = ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" });
     sink.record(a);
@@ -181,7 +181,7 @@ describe("BrowserGapSink", () => {
   });
 
   it("dump() returns the raw JSONL for export", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext(SID));
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     sink.record(a);
     expect(sink.dump()).toBe(JSON.stringify({ ...a, session_id: SID }) + "\n");
@@ -205,7 +205,7 @@ describe("BrowserGapSink", () => {
   });
 
   it("rejects events whose canonical key is empty (empty / |-only / pure whitespace)", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", "sess-x");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext("sess-x"));
     sink.record(ev({ keyword: "", timestamp: "2026-05-20T01:00:00Z" }));
     sink.record(ev({ keyword: "|", timestamp: "2026-05-20T02:00:00Z" }));
     sink.record(ev({ keyword: "  |  ", timestamp: "2026-05-20T03:00:00Z" }));
@@ -225,6 +225,15 @@ describe("BrowserGapSink", () => {
     expect(all).toHaveLength(2);
     expect(all[0]!.session_id).toBe("shared-ctx-1");
     expect(all[1]!.session_id).toBe("shared-ctx-1");
+  });
+
+  // Tighter contract: the third arg must be a SessionContext. Bare string
+  // injection (previously the legacy escape hatch via union type) is no
+  // longer accepted at the type level. This guards against accidental
+  // raw-id passing that would silently bypass SessionContext sharing.
+  it("type-level rejects bare string as third argument", () => {
+    // @ts-expect-error — string is no longer accepted; wrap in new SessionContext(id) instead.
+    new BrowserGapSink(new FakeKV(), "knowdb-gaps", "raw-string-id");
   });
 });
 
