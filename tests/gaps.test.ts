@@ -9,7 +9,7 @@ import {
   HIGH,
   MID,
 } from "../src/gaps.js";
-import { nextDailySeq, SessionContext } from "../src/utils.js";
+import { SessionContext } from "../src/utils.js";
 import type { GapEvent } from "../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
@@ -133,24 +133,6 @@ describe("checkKnownGap", () => {
     const evs = many("backup", MID);
     const r = checkKnownGap(evs, "backup")!;
     expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
-  });
-});
-
-describe("nextDailySeq", () => {
-  const day = new Date("2026-05-16T12:00:00Z");
-
-  it("is 1 when no events exist for that UTC day", () => {
-    expect(nextDailySeq([], day)).toBe(1);
-    expect(nextDailySeq([ev({ keyword: "x", timestamp: "2026-05-15T23:59:59Z" })], day)).toBe(1);
-  });
-
-  it("counts only same-UTC-day events", () => {
-    const events = [
-      ev({ keyword: "a", timestamp: "2026-05-16T00:00:01Z" }),
-      ev({ keyword: "b", timestamp: "2026-05-16T18:00:00Z" }),
-      ev({ keyword: "c", timestamp: "2026-05-15T10:00:00Z" }),
-    ];
-    expect(nextDailySeq(events, day)).toBe(3);
   });
 });
 

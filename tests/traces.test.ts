@@ -207,6 +207,13 @@ describe("BrowserTraceCollector lifecycle", () => {
     expect(() => collector.endQuery("q_nope")).toThrow(/unknown query_id/);
   });
 
+  it("recordApiRound on unknown query_id throws", () => {
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
+    expect(() =>
+      collector.recordApiRound("q_nope", { input_tokens: 1, output_tokens: 1, duration_ms: 1 })
+    ).toThrow(/unknown query_id/);
+  });
+
   it("subscribe emits events in operation order; unsubscribe stops delivery", () => {
     const collector = new BrowserTraceCollector(new SessionContext(SID));
     const log: string[] = [];
@@ -284,6 +291,19 @@ describe("aggregateLocalSession", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0]!.session_id).toBe("");
     expect(sessions[0]!.command_count).toBe(2);
+  });
+
+  it("groups explicit session_id: '' together with undefined under the '' sentinel", () => {
+    const evs = [
+      cmd({ command: "search", timestamp: "2026-05-16T10:00:00Z" }),                     // undefined
+      cmd({ command: "expand", timestamp: "2026-05-16T10:00:01Z", session_id: "" }),    // explicit ""
+      cmd({ command: "parent", timestamp: "2026-05-16T10:00:02Z", session_id: "S" }),   // named
+    ];
+    const sessions = aggregateLocalSession(evs);
+    expect(sessions).toHaveLength(2);
+    const sentinel = sessions.find((s) => s.session_id === "")!;
+    expect(sentinel.command_count).toBe(2);
+    expect(sentinel.commands.map((c) => c.command)).toEqual(["search", "expand"]);
   });
 
   it("returns sessions newest-first by earliest command timestamp", () => {
@@ -380,8 +400,13 @@ describe("aggregateMetrics", () => {
     expect(m.avg_steps_per_query).toBe(0);
     expect(m.avg_query_duration_ms).toBe(0);
     expect(m.total_tokens).toEqual({ input: 0, output: 0 });
+    expect(m.tool_call_distribution).toEqual({});
+    expect(m.queries_with_zero_search_result).toBe(0);
+    expect(m.queries_with_final_answer).toBe(0);
     expect(m.total_local_sessions).toBe(0);
     expect(m.avg_commands_per_local_session).toBe(0);
+    expect(m.avg_local_session_duration_ms).toBe(0);
+    expect(m.local_command_distribution).toEqual({});
   });
 
   it("does NOT count an error trace as having a final_answer", () => {
