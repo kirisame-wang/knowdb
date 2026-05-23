@@ -125,8 +125,9 @@ describe("BrowserTraceCollector lifecycle", () => {
     const q3 = collector.startQuery("Q3", t);
     // Distinct: each call yields a unique id even at the same wall-clock.
     expect(new Set([q1, q2, q3]).size).toBe(3);
-    // Opaque: ids are NOT the previous q_<yyyymmdd>_<seq3> daily-seq format.
-    // (Audit needs session_id + timestamp; query_id only needs uniqueness.)
+    // Body after the q_ prefix is opaque — not a yyyymmdd/seq pattern that
+    // a caller might try to parse for ordering. Audit walks session_id +
+    // timestamp; query_id just needs to be unique.
     expect(q1).not.toMatch(/^q_\d{8}_\d{3}$/);
     expect(q2).not.toMatch(/^q_\d{8}_\d{3}$/);
     expect(q3).not.toMatch(/^q_\d{8}_\d{3}$/);

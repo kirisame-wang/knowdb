@@ -211,10 +211,9 @@ describe("BrowserGapSink", () => {
     expect(sink.readAll()).toEqual([]);
   });
 
-  // The core promise of spec A7 / spec-gap-recording v0.1.3 G5: when a
-  // SessionContext is passed (instead of a bare string), the sink stamps
-  // events with the context's id — making it possible to share one id
-  // with a TraceCollector for cross-stream join.
+  // A SessionContext passed in stamps every event with its id, so a trace
+  // collector sharing the same SessionContext produces events joinable on
+  // session_id with this sink's gap events.
   it("accepts a SessionContext and stamps its id (cross-stream join enabler)", () => {
     const ctx = new SessionContext("shared-ctx-1");
     const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);
@@ -226,12 +225,10 @@ describe("BrowserGapSink", () => {
     expect(all[1]!.session_id).toBe("shared-ctx-1");
   });
 
-  // Tighter contract: the third arg must be a SessionContext. Bare string
-  // injection (previously the legacy escape hatch via union type) is no
-  // longer accepted at the type level. This guards against accidental
-  // raw-id passing that would silently bypass SessionContext sharing.
+  // The third arg must be a SessionContext; a bare-string id would silently
+  // bypass the holder, breaking cross-stream session_id sharing.
   it("type-level rejects bare string as third argument", () => {
-    // @ts-expect-error — string is no longer accepted; wrap in new SessionContext(id) instead.
+    // @ts-expect-error — wrap in new SessionContext(id) instead.
     new BrowserGapSink(new FakeKV(), "knowdb-gaps", "raw-string-id");
   });
 });

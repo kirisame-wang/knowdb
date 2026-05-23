@@ -14,12 +14,9 @@ import {
 } from "./utils.js";
 
 // ── ID helpers ───────────────────────────────────────────────────────────
-//
-// Trace ids are opaque — audit walks `session_id` + `timestamp`, the id only
-// needs uniqueness. The previous q_<yyyymmdd>_<seq3> daily-seq format
-// (mirrored from gap_id) cost a sink dependency in the collector to seed
-// the counter across reloads and never paid back. The `q_` / `c_` prefix
-// remains as a one-glance namespace marker when triaging mixed JSONL.
+// Trace ids are opaque — audit walks session_id + timestamp, the id just
+// needs to be unique. The `q_` / `c_` prefix is a grep-friendly namespace
+// marker when triaging mixed JSONL.
 
 export function newQueryId(): string {
   return `q_${newSessionId()}`;
@@ -206,11 +203,8 @@ export function aggregateLocalSession(events: LocalCommandEvent[]): LocalSession
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
-/**
- * MVP zero-result sniff (T8 / §6): a trace counts as zero-result iff at least
- * one of its tool_calls is a `search` whose output_summary, trimmed, is `[]`.
- * Final version replaces this with a trace × gap join via query_id.
- */
+/** Counts a trace as zero-result when a `search` tool_call's output_summary
+ *  trims to the literal `[]`. Crude but sufficient for the headline metric. */
 function isZeroResultTrace(t: QueryTrace): boolean {
   return t.tool_calls.some((c) => c.tool === "search" && c.output_summary.trim() === "[]");
 }

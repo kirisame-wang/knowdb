@@ -67,11 +67,10 @@ export interface KnownGapResponse {
 }
 
 // ── Query Audit Trail ──────────────────────────────────────────
-// Browser path: per-query bounded transaction (QueryTrace).
-// Local path:  per-command event stream (LocalCommandEvent) — query.sh has
-// no agent-loop central point, so reconstructing query boundaries would
-// require agent cooperation, violating the "script owns integrity" rule.
-// Asymmetry is deliberate (T1 in spec-audit-trail.md).
+// Browser: per-query bounded transaction (QueryTrace). Local: per-command
+// event stream (LocalCommandEvent) — query.sh sees only one subcommand at
+// a time, so query boundaries can't be reconstructed without the agent
+// cooperating, which would mean the script no longer owns integrity.
 
 export interface ToolCallEvent {
   ordinal: number;                 // 1-based, monotonic within a query
@@ -121,7 +120,7 @@ export interface TraceMetrics {
   avg_query_duration_ms: number;
   total_tokens: { input: number; output: number };
   tool_call_distribution: Record<string, number>;
-  queries_with_zero_search_result: number;     // via trace × gap join (MVP: string sniff)
+  queries_with_zero_search_result: number;     // a search tool_call whose output trims to "[]"
   queries_with_final_answer: number;
   // Local-side
   total_local_sessions: number;

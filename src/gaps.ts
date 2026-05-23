@@ -63,8 +63,6 @@ export function makeGapId(date: Date, seq: number): string {
   return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
 }
 
-// `nextDailySeq` for gaps is the generic helper from utils, re-exported above.
-
 // ── Sink (two impls share one JSONL schema) ──────────────────────────────
 
 export interface GapSink {
