@@ -3,13 +3,13 @@ import {
   normalizeKeyword,
   gapTopicKey,
   makeGapId,
-  nextDailySeq,
   aggregate,
   checkKnownGap,
   BrowserGapSink,
   HIGH,
   MID,
 } from "../src/gaps.js";
+import { SessionContext } from "../src/utils.js";
 import type { GapEvent } from "../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
@@ -136,24 +136,6 @@ describe("checkKnownGap", () => {
   });
 });
 
-describe("nextDailySeq", () => {
-  const day = new Date("2026-05-16T12:00:00Z");
-
-  it("is 1 when no events exist for that UTC day", () => {
-    expect(nextDailySeq([], day)).toBe(1);
-    expect(nextDailySeq([ev({ keyword: "x", timestamp: "2026-05-15T23:59:59Z" })], day)).toBe(1);
-  });
-
-  it("counts only same-UTC-day events", () => {
-    const events = [
-      ev({ keyword: "a", timestamp: "2026-05-16T00:00:01Z" }),
-      ev({ keyword: "b", timestamp: "2026-05-16T18:00:00Z" }),
-      ev({ keyword: "c", timestamp: "2026-05-15T10:00:00Z" }),
-    ];
-    expect(nextDailySeq(events, day)).toBe(3);
-  });
-});
-
 class FakeKV {
   private m = new Map<string, string>();
   getItem(k: string): string | null {
@@ -168,7 +150,7 @@ describe("BrowserGapSink", () => {
   const SID = "sess-test-1";
 
   it("records and reads back events round-trip (stamped with the session id)", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext(SID));
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     const b = ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" });
     sink.record(a);
@@ -180,7 +162,7 @@ describe("BrowserGapSink", () => {
   });
 
   it("dump() returns the raw JSONL for export", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", SID);
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext(SID));
     const a = ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" });
     sink.record(a);
     expect(sink.dump()).toBe(JSON.stringify({ ...a, session_id: SID }) + "\n");
@@ -204,11 +186,32 @@ describe("BrowserGapSink", () => {
   });
 
   it("rejects events whose canonical key is empty (empty / |-only / pure whitespace)", () => {
-    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", "sess-x");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", new SessionContext("sess-x"));
     sink.record(ev({ keyword: "", timestamp: "2026-05-20T01:00:00Z" }));
     sink.record(ev({ keyword: "|", timestamp: "2026-05-20T02:00:00Z" }));
     sink.record(ev({ keyword: "  |  ", timestamp: "2026-05-20T03:00:00Z" }));
     expect(sink.readAll()).toEqual([]);
+  });
+
+  // A SessionContext passed in stamps every event with its id, so a trace
+  // collector sharing the same SessionContext produces events joinable on
+  // session_id with this sink's gap events.
+  it("accepts a SessionContext and stamps its id (cross-stream join enabler)", () => {
+    const ctx = new SessionContext("shared-ctx-1");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);
+    sink.record(ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" }));
+    sink.record(ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z", gap_id: "gap_20260516_002" }));
+    const all = sink.readAll();
+    expect(all).toHaveLength(2);
+    expect(all[0]!.session_id).toBe("shared-ctx-1");
+    expect(all[1]!.session_id).toBe("shared-ctx-1");
+  });
+
+  // The third arg must be a SessionContext; a bare-string id would silently
+  // bypass the holder, breaking cross-stream session_id sharing.
+  it("type-level rejects bare string as third argument", () => {
+    // @ts-expect-error — wrap in new SessionContext(id) instead.
+    new BrowserGapSink(new FakeKV(), "knowdb-gaps", "raw-string-id");
   });
 });
 

@@ -1,5 +1,5 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
-import { utcYmd, newSessionId, toJsonLine, parseJsonl } from "./utils.js";
+import { utcYmd, toJsonLine, parseJsonl, SessionContext } from "./utils.js";
 
 // ── Known-gap thresholds (tunable) ────────────────────────────────────────
 
@@ -63,12 +63,6 @@ export function makeGapId(date: Date, seq: number): string {
   return `gap_${utcYmd(date)}_${String(seq).padStart(3, "0")}`;
 }
 
-/** 1-based sequence for `date`'s UTC day, given the events already recorded. */
-export function nextDailySeq(events: GapEvent[], date: Date): number {
-  const ymd = utcYmd(date);
-  return events.filter((e) => utcYmd(new Date(e.timestamp)) === ymd).length + 1;
-}
-
 // ── Sink (two impls share one JSONL schema) ──────────────────────────────
 
 export interface GapSink {
@@ -83,13 +77,19 @@ export interface KeyValueStore {
   setItem(key: string, value: string): void;
 }
 
-/** Browser sink: appends JSONL to localStorage; dump() feeds the export button. */
+/** Browser sink: appends JSONL to localStorage; dump() feeds the export button.
+ *  The session arg is a SessionContext — the holder lets the trace collector
+ *  share one id with this sink for cross-stream join. */
 export class BrowserGapSink implements GapSink {
+  private readonly sessionId: string;
+
   constructor(
     private readonly store: KeyValueStore,
     private readonly key = "knowdb-gaps",
-    private readonly sessionId: string = newSessionId()
-  ) {}
+    session: SessionContext = new SessionContext()
+  ) {
+    this.sessionId = session.id;
+  }
 
   record(event: GapEvent): void {
     // Skip events with an empty canonical key (empty / |-only / whitespace

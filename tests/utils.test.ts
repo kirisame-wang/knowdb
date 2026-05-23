@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { utcYmd, newSessionId, toJsonLine, parseJsonl } from "../src/utils.js";
+import {
+  utcYmd,
+  newSessionId,
+  toJsonLine,
+  parseJsonl,
+  truncateOutput,
+  SessionContext,
+  nextDailySeq,
+} from "../src/utils.js";
 
 describe("utcYmd", () => {
   it("formats UTC yyyymmdd, zero-padded", () => {
@@ -52,5 +60,65 @@ describe("toJsonLine / parseJsonl", () => {
     const b: Rec = { id: 2, tag: "b" };
     const text = toJsonLine(a) + "\n" + '{"id":2' + "\n" + "not json" + "\n" + toJsonLine(b) + "\n";
     expect(parseJsonl<Rec>(text)).toEqual([a, b]);
+  });
+});
+
+describe("truncateOutput", () => {
+  it("returns the input unchanged when within the limit", () => {
+    expect(truncateOutput("hello", 600)).toBe("hello");
+    expect(truncateOutput("x".repeat(600), 600)).toBe("x".repeat(600));
+  });
+
+  it("truncates with the canonical suffix when over the limit", () => {
+    const out = truncateOutput("x".repeat(601), 600);
+    expect(out.startsWith("x".repeat(600))).toBe(true);
+    expect(out.endsWith("… (truncated)")).toBe(true);
+    expect(out).toBe("x".repeat(600) + "\n… (truncated)");
+  });
+
+  it("defaults the limit to 600 chars", () => {
+    expect(truncateOutput("x".repeat(600))).toBe("x".repeat(600));
+    expect(truncateOutput("x".repeat(601)).endsWith("… (truncated)")).toBe(true);
+  });
+});
+
+describe("SessionContext", () => {
+  it("generates an ephemeral id by default", () => {
+    const a = new SessionContext();
+    const b = new SessionContext();
+    expect(typeof a.id).toBe("string");
+    expect(a.id.length).toBeGreaterThan(0);
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it("accepts an explicit id", () => {
+    expect(new SessionContext("fixed-id").id).toBe("fixed-id");
+  });
+});
+
+describe("nextDailySeq (generic timestamped counter)", () => {
+  const day = new Date("2026-05-16T12:00:00Z");
+  const at = (ts: string) => ({ timestamp: ts });
+
+  it("is 1 when no items exist for that UTC day", () => {
+    expect(nextDailySeq([], day)).toBe(1);
+    expect(nextDailySeq([at("2026-05-15T23:59:59Z")], day)).toBe(1);
+  });
+
+  it("counts only same-UTC-day items", () => {
+    expect(
+      nextDailySeq(
+        [at("2026-05-16T00:00:01Z"), at("2026-05-16T18:00:00Z"), at("2026-05-15T10:00:00Z")],
+        day
+      )
+    ).toBe(3);
+  });
+
+  it("works on any shape with a timestamp string field (generic)", () => {
+    const traces = [
+      { query_id: "q1", started_at: "2026-05-16T01:00:00Z", timestamp: "2026-05-16T01:00:00Z" },
+      { query_id: "q2", started_at: "2026-05-16T02:00:00Z", timestamp: "2026-05-16T02:00:00Z" },
+    ];
+    expect(nextDailySeq(traces, day)).toBe(3);
   });
 });
