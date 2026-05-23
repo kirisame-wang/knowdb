@@ -13,11 +13,11 @@ import {
 import { SKILL } from "./skill.js";
 import {
   makeGapId,
-  nextDailySeq,
   checkKnownGap,
   expandKeywordToTopics,
   type GapSink,
 } from "../gaps.js";
+import { nextDailySeq } from "../utils.js";
 import type { SearchIndex, SearchResult, Manifest, GapEvent } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */

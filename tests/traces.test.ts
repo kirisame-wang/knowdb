@@ -8,7 +8,7 @@ import {
   newQueryId,
   type TraceCollectorEvent,
 } from "../src/traces.js";
-import { SessionContext } from "../src/gaps.js";
+import { SessionContext } from "../src/utils.js";
 import type { LocalCommandEvent, QueryTrace } from "../src/types.js";
 
 class FakeKV {

@@ -1,15 +1,5 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
-import {
-  utcYmd,
-  toJsonLine,
-  parseJsonl,
-  nextDailySeq as nextDailySeqGeneric,
-  SessionContext,
-} from "./utils.js";
-
-// Re-export the generic counter under the path gap callers already use,
-// so existing imports (`from "../src/gaps.js"`) keep working.
-export { nextDailySeqGeneric as nextDailySeq, SessionContext };
+import { utcYmd, toJsonLine, parseJsonl, SessionContext } from "./utils.js";
 
 // ── Known-gap thresholds (tunable) ────────────────────────────────────────
 

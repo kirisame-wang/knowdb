@@ -3,14 +3,13 @@ import {
   normalizeKeyword,
   gapTopicKey,
   makeGapId,
-  nextDailySeq,
   aggregate,
   checkKnownGap,
   BrowserGapSink,
-  SessionContext,
   HIGH,
   MID,
 } from "../src/gaps.js";
+import { nextDailySeq, SessionContext } from "../src/utils.js";
 import type { GapEvent } from "../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
