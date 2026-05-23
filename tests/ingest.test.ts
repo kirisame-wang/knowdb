@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { readFile, rm, mkdir } from "fs/promises";
+import { readFile, rm, mkdir, mkdtemp, writeFile as fsWriteFile } from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
+import { tmpdir } from "os";
 import { FIXTURE, dbDir, runIngest } from "./helpers.js";
 
 const DB_DIR = dbDir("db-test");
@@ -113,6 +114,36 @@ describe("ingest", () => {
       runIngest([FIXTURE], DB_DIR);
       const after = await readFile(join(DB_DIR, "_manifest.json"), "utf-8");
       expect(after).toBe(before);
+    });
+  });
+
+  describe("CRLF input tolerance (Windows-line-ended source must not silently degrade)", () => {
+    const DB = dbDir("db-test-crlf");
+    let tmp: string;
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("CRLF input: 01.md exists, no 00.md preamble, title in _index.md (single self-contained pin)", async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-crlf-"));
+      const path = join(tmp, "crlf-doc.md");
+      await fsWriteFile(path, "# H1 Title\n\nBody under H1.\n".replace(/\n/g, "\r\n"), "utf-8");
+      const r = runIngest([path], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      const docId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "crlf-doc.md")!;
+
+      // Without normalization the heading regex fails → all text → 00.md.
+      expect(existsSync(join(DB, docId, "01.md"))).toBe(true);
+      expect(existsSync(join(DB, docId, "00.md"))).toBe(false);
+      expect(await readFile(join(DB, docId, "01.md"), "utf-8")).toContain("Body under H1");
+      expect(await readFile(join(DB, docId, "_index.md"), "utf-8")).toContain("- 01: H1 Title");
     });
   });
 });

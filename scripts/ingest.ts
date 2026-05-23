@@ -111,7 +111,9 @@ function buildTree(flat: Section[]): Section[] {
 }
 
 async function ingestFile(filePath: string): Promise<void> {
-  const text = await readFile(filePath, "utf-8");
+  // Normalize CRLF so the heading regex (anchored to `$`) doesn't miss
+  // `# H\r` lines and silently collapse Windows sources into preamble.
+  const text = (await readFile(filePath, "utf-8")).replace(/\r\n/g, "\n");
   const stem = basename(filePath, extname(filePath));
   const id = docId(stem);
   const outDir = join(DB_DIR, id);
@@ -133,10 +135,6 @@ async function ingestFile(filePath: string): Promise<void> {
   const sections = parseSections(text);
 
   // write preamble (root content)
-  const rootSection = { id: "root", title: "", depth: 0, content: "", children: [] };
-  // preamble is the content before first heading — reconstruct from parseSections result
-  // The root preamble lives in the parseSections result as the pre-first-section content.
-  // We need to re-extract it. Let's get it directly:
   const preamble = extractPreamble(text);
   if (preamble.trim()) {
     await writeFile(join(outDir, "00.md"), preamble.trim() + "\n", "utf-8");
