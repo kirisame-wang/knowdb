@@ -9,7 +9,7 @@ import {
   type TraceCollectorEvent,
 } from "../../src/traces.js";
 import { SessionContext } from "../../src/utils.js";
-import type { LocalCommandEvent, QueryTrace } from "../../src/types.js";
+import type { GapEvent, LocalCommandEvent, QueryTrace } from "../../src/types.js";
 
 class FakeKV {
   private m = new Map<string, string>();
@@ -412,5 +412,62 @@ describe("aggregateMetrics", () => {
   it("does NOT count an error trace as having a final_answer", () => {
     const t = baseTrace({ final_answer: "partial", error: "boom" });
     expect(aggregateMetrics([t], []).queries_with_final_answer).toBe(0);
+  });
+
+  // queries_with_zero_search_result has two modes:
+  //  - no gaps[]: string-sniff on output_summary === "[]" (back-compat)
+  //  - with gaps[]: trace × gap join via query_id (catches KnownGapResponse too)
+  it("when gaps[] provided, counts via trace × gap join (catches known_gap responses)", () => {
+    const traces: QueryTrace[] = [
+      baseTrace({
+        query_id: "q_known_gap",
+        tool_calls: [
+          // KnownGapResponse shape — string-sniff would MISS this; the join catches it.
+          {
+            ordinal: 1,
+            tool: "search",
+            input: {},
+            output_summary: '{"status":"known_gap","message":"…","gap_info":{},"recommendation":"…"}',
+            duration_ms: 5,
+            timestamp: "2026-05-16T10:00:01Z",
+          },
+        ],
+      }),
+      baseTrace({ query_id: "q_with_hits", tool_calls: [] }),
+    ];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_known_gap" },
+    ];
+    const m = aggregateMetrics(traces, [], gaps);
+    expect(m.queries_with_zero_search_result).toBe(1);
+  });
+
+  it("when gaps[] absent, falls back to string-sniff on output_summary === '[]'", () => {
+    const traces: QueryTrace[] = [
+      baseTrace({
+        query_id: "q_empty_arr",
+        tool_calls: [
+          { ordinal: 1, tool: "search", input: {}, output_summary: "[]", duration_ms: 5, timestamp: "2026-05-16T10:00:01Z" },
+        ],
+      }),
+    ];
+    expect(aggregateMetrics(traces, []).queries_with_zero_search_result).toBe(1);
+  });
+
+  it("with gaps[]: a trace whose query_id matches no gap is not counted", () => {
+    const traces: QueryTrace[] = [baseTrace({ query_id: "q_no_match" })];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_other" },
+    ];
+    expect(aggregateMetrics(traces, [], gaps).queries_with_zero_search_result).toBe(0);
+  });
+
+  it("with gaps[]: multiple gaps for one trace are counted once (de-duped by query_id)", () => {
+    const traces: QueryTrace[] = [baseTrace({ query_id: "q_or" })];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "alpha", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_or" },
+      { source: "browser", gap_id: "gap_x_002", keyword: "beta", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_or" },
+    ];
+    expect(aggregateMetrics(traces, [], gaps).queries_with_zero_search_result).toBe(1);
   });
 });

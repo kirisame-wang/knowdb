@@ -1,5 +1,6 @@
 import type {
   ApiRoundUsage,
+  GapEvent,
   LocalCommandEvent,
   LocalSessionMetrics,
   QueryTrace,
@@ -203,15 +204,17 @@ export function aggregateLocalSession(events: LocalCommandEvent[]): LocalSession
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
-/** Counts a trace as zero-result when a `search` tool_call's output_summary
- *  trims to the literal `[]`. Crude but sufficient for the headline metric. */
+/** Fallback used when no gaps[] is supplied. Catches the literal `[]`
+ *  return path but misses KnownGapResponse; the trace × gap join is
+ *  the accurate signal. */
 function isZeroResultTrace(t: QueryTrace): boolean {
   return t.tool_calls.some((c) => c.tool === "search" && c.output_summary.trim() === "[]");
 }
 
 export function aggregateMetrics(
   browserTraces: QueryTrace[],
-  localEvents: LocalCommandEvent[]
+  localEvents: LocalCommandEvent[],
+  gaps?: GapEvent[]
 ): TraceMetrics {
   const stepsPerQuery = browserTraces.map((t) => t.tool_calls.length);
   const queryDurations = browserTraces.map(
@@ -236,13 +239,24 @@ export function aggregateMetrics(
     cmdDist[e.command] = (cmdDist[e.command] ?? 0) + 1;
   }
 
+  // Trace × gap join is the accurate path (catches KnownGapResponse outputs
+  // the string-sniff misses); falls back to the heuristic when no gaps[].
+  const traceIds = new Set(browserTraces.map((t) => t.query_id));
+  const zeroResultCount = gaps
+    ? new Set(
+        gaps
+          .map((g) => g.query_id)
+          .filter((qid): qid is string => qid !== undefined && traceIds.has(qid))
+      ).size
+    : browserTraces.filter(isZeroResultTrace).length;
+
   return {
     total_queries: browserTraces.length,
     avg_steps_per_query: mean(stepsPerQuery),
     avg_query_duration_ms: mean(queryDurations),
     total_tokens: { input: tokensIn, output: tokensOut },
     tool_call_distribution: toolDist,
-    queries_with_zero_search_result: browserTraces.filter(isZeroResultTrace).length,
+    queries_with_zero_search_result: zeroResultCount,
     queries_with_final_answer: browserTraces.filter((t) => t.final_answer && !t.error).length,
     total_local_sessions: sessions.length,
     avg_commands_per_local_session: mean(commandsPerSession),
