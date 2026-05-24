@@ -250,6 +250,15 @@ export function aggregateMetrics(
       ).size
     : browserTraces.filter(isZeroResultTrace).length;
 
+  // read_chunk pattern-usage: mirrors the tool's own truthy check (a falsy
+  // pattern means the agent didn't engage the filter — the signal we want).
+  const readChunks = browserTraces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
+  const withPattern = readChunks.filter((c) => Boolean(c.input["pattern"]));
+  const withoutPattern = readChunks.filter((c) => !c.input["pattern"]);
+  const patternRate = readChunks.length === 0 ? null : withPattern.length / readChunks.length;
+  const avgWithPattern = mean(withPattern.map((c) => c.output_summary.length));
+  const avgWithoutPattern = mean(withoutPattern.map((c) => c.output_summary.length));
+
   return {
     total_queries: browserTraces.length,
     avg_steps_per_query: mean(stepsPerQuery),
@@ -258,6 +267,8 @@ export function aggregateMetrics(
     tool_call_distribution: toolDist,
     queries_with_zero_search_result: zeroResultCount,
     queries_with_final_answer: browserTraces.filter((t) => t.final_answer && !t.error).length,
+    read_chunk_pattern_usage_rate: patternRate,
+    avg_read_chunk_output_chars: { with_pattern: avgWithPattern, without_pattern: avgWithoutPattern },
     total_local_sessions: sessions.length,
     avg_commands_per_local_session: mean(commandsPerSession),
     avg_local_session_duration_ms: mean(sessionDurations),

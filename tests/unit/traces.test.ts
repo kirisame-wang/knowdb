@@ -470,4 +470,83 @@ describe("aggregateMetrics", () => {
     ];
     expect(aggregateMetrics(traces, [], gaps).queries_with_zero_search_result).toBe(1);
   });
+
+  // read_chunk pattern-usage diagnostic — quantifies whether the agent
+  // uses read_chunk's `pattern` filter or falls back to full-body dumps.
+  describe("read_chunk pattern-usage diagnostic", () => {
+    const rc = (
+      input: Record<string, unknown>,
+      output_summary: string
+    ): QueryTrace["tool_calls"][number] => ({
+      ordinal: 1,
+      tool: "read_chunk",
+      input,
+      output_summary,
+      duration_ms: 1,
+      timestamp: "2026-05-16T10:00:00Z",
+    });
+
+    it("rate is null when no read_chunk calls are present (avoid false 0%)", () => {
+      const m = aggregateMetrics([baseTrace({ tool_calls: [] })], []);
+      expect(m.read_chunk_pattern_usage_rate).toBeNull();
+      expect(m.avg_read_chunk_output_chars).toEqual({ with_pattern: 0, without_pattern: 0 });
+    });
+
+    it("rate is 1 when every read_chunk carries a pattern; without_pattern avg = 0", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "foo" }, "matched line"),
+            rc({ id: "d/2", pattern: "bar" }, "another match"),
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(1);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(("matched line".length + "another match".length) / 2);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(0);
+    });
+
+    it("rate is 0 when no read_chunk carries a pattern; with_pattern avg = 0", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({ tool_calls: [rc({ id: "d/1" }, "full body of chunk")] }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(0);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(0);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe("full body of chunk".length);
+    });
+
+    it("mixed: rate is the fraction, each group averages its own outputs", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "x" }, "short"),         // with, 5 chars
+            rc({ id: "d/2" }, "this is much longer body"),    // without, 24 chars
+            rc({ id: "d/3", pattern: "y" }, "another short"), // with, 13 chars
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(2 / 3);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe((5 + 13) / 2);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(24);
+    });
+
+    it("empty-string pattern counts as without_pattern (pattern is missing, not present-but-empty)", () => {
+      // The contract: read_chunk treats falsy `pattern` as 'no pattern'. The
+      // diagnostic mirrors that — a value of "" or 0 means the agent did not
+      // engage the filter, which is the signal we want to surface.
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "" }, "x"),
+            rc({ id: "d/2", pattern: "real" }, "y"),
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(0.5);
+    });
+  });
 });

@@ -122,6 +122,10 @@ export interface TraceMetrics {
   tool_call_distribution: Record<string, number>;
   queries_with_zero_search_result: number;     // a search tool_call whose output trims to "[]"
   queries_with_final_answer: number;
+  // Diagnostic: does the agent engage read_chunk's `pattern` filter or
+  // fall back to full-body dumps? `null` rate means no read_chunk calls.
+  read_chunk_pattern_usage_rate: number | null;
+  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };
   // Local-side
   total_local_sessions: number;
   avg_commands_per_local_session: number;
