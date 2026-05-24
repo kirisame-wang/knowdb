@@ -1,7 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { KNOWDB_TOOLS, processToolCall } from "./agent/tools.js";
+import { KNOWDB_TOOLS } from "./agent/tools.js";
+import { runAgentTurn } from "./agent/loop.js";
 import { search, expand, siblings, parent } from "./db_query.js";
 import { BrowserGapSink } from "./gaps.js";
+import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
+import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -10,7 +13,12 @@ let searchIndex: SearchIndex = {};
 let manifest: Manifest = {};
 let selectedId: string | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
-const gapSink = new BrowserGapSink(window.localStorage);
+// One session for the page load: both sinks share it so trace x gap join
+// on session_id holds within a conversation.
+const session = new SessionContext();
+const gapSink = new BrowserGapSink(window.localStorage, "knowdb-gaps", session);
+const traceSink = new BrowserTraceSink(window.localStorage);
+const traceCollector = new BrowserTraceCollector(session);
 
 // ── DOM helpers ───────────────────────────────────────────────────────────────
 
@@ -39,6 +47,7 @@ async function init() {
   setupApiKey();
   setupChat();
   setupGapExport();
+  setupTraceExport();
 }
 
 // ── Left Panel: Doc Tree ──────────────────────────────────────────────────────
@@ -268,6 +277,23 @@ function setupGapExport() {
   });
 }
 
+function setupTraceExport() {
+  el("btn-export-traces").addEventListener("click", () => {
+    const jsonl = traceSink.dump();
+    if (!jsonl.trim()) {
+      appendStatus("No query traces recorded yet.");
+      return;
+    }
+    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const url = URL.createObjectURL(new Blob([jsonl], { type: "application/x-ndjson" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `knowdb-traces-${ymd}.jsonl`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+}
+
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
 function setupChat() {
@@ -311,7 +337,7 @@ function appendToolTrace(toolName: string, input: unknown, result: string) {
 
   const body = document.createElement("div");
   body.className = "tool-trace-body";
-  body.textContent = `Input:\n${JSON.stringify(input, null, 2)}\n\nResult:\n${result.length > 600 ? result.slice(0, 600) + "\n… (truncated)" : result}`;
+  body.textContent = `Input:\n${JSON.stringify(input, null, 2)}\n\nResult:\n${truncateOutput(result)}`;
 
   details.appendChild(summary);
   details.appendChild(body);
@@ -332,60 +358,48 @@ async function sendMessage() {
 
   input.value = "";
   el("btn-send").setAttribute("disabled", "");
-  appendBubble("user", text);
-  chatHistory.push({ role: "user", content: text });
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
-  const thinkingBubble = appendBubble("assistant", "Thinking…");
+  let thinkingBubble: HTMLElement | null = null;
 
   try {
-    // Tool-use agentic loop
-    while (true) {
-      const response = await client.messages.create({
+    await runAgentTurn(
+      {
+        client,
+        collector: traceCollector,
+        traceSink,
+        gapSink,
+        searchIndex,
+        manifest,
         model: "claude-haiku-4-5-20251001",
-        max_tokens: 2048,
+        maxTokens: 2048,
         system:
           "You are a helpful assistant with access to a knowledge base via tools. " +
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
-        messages: chatHistory,
-      });
-
-      const toolUseBlocks = response.content.filter((b) => b.type === "tool_use");
-
-      if (toolUseBlocks.length === 0) {
-        const finalText = response.content
-          .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")
-          .map((b) => b.text)
-          .join("");
-
-        thinkingBubble.remove();
-        appendBubble("assistant", finalText || "(no response)");
-        chatHistory.push({ role: "assistant", content: response.content });
-        break;
-      }
-
-      thinkingBubble.textContent = "Using tools…";
-      chatHistory.push({ role: "assistant", content: response.content });
-
-      const toolResults: Anthropic.Messages.ToolResultBlockParam[] = [];
-      for (const block of toolUseBlocks) {
-        if (block.type !== "tool_use") continue;
-        const result = await processToolCall(
-          block.name,
-          block.input as Record<string, unknown>,
-          searchIndex,
-          manifest,
-          gapSink
-        );
-        appendToolTrace(block.name, block.input, result);
-        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
-      }
-
-      chatHistory.push({ role: "user", content: toolResults });
-    }
-  } catch (err) {
-    thinkingBubble.textContent = `Error: ${err instanceof Error ? err.message : String(err)}`;
+        chatHistory,
+        hooks: {
+          onUserMessage: (t) => appendBubble("user", t),
+          onThinkingStart: () => {
+            thinkingBubble = appendBubble("assistant", "Thinking…");
+          },
+          onToolsStart: () => {
+            if (thinkingBubble) thinkingBubble.textContent = "Using tools…";
+          },
+          onToolCall: (name, inp, result) => appendToolTrace(name, inp, result),
+          onAssistantMessage: (t) => {
+            if (thinkingBubble) thinkingBubble.remove();
+            appendBubble("assistant", t || "(no response)");
+          },
+          onError: (err) => {
+            const msg = `Error: ${err instanceof Error ? err.message : String(err)}`;
+            if (thinkingBubble) thinkingBubble.textContent = msg;
+            else appendStatus(msg);
+          },
+        },
+      },
+      text
+    );
   } finally {
     el("btn-send").removeAttribute("disabled");
   }
