@@ -7,9 +7,9 @@ import {
   newCommandId,
   newQueryId,
   type TraceCollectorEvent,
-} from "../src/traces.js";
-import { SessionContext } from "../src/utils.js";
-import type { LocalCommandEvent, QueryTrace } from "../src/types.js";
+} from "../../src/traces.js";
+import { SessionContext } from "../../src/utils.js";
+import type { LocalCommandEvent, QueryTrace } from "../../src/types.js";
 
 class FakeKV {
   private m = new Map<string, string>();

@@ -9,8 +9,8 @@ import {
   fetchChunk,
   grepChunk,
   reconstructDocument,
-} from "../src/db_query.js";
-import type { SearchIndex } from "../src/types.js";
+} from "../../src/db_query.js";
+import type { SearchIndex } from "../../src/types.js";
 
 const INDEX: SearchIndex = {
   // _index entries (heading trees)

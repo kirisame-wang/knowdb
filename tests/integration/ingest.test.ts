@@ -3,7 +3,7 @@ import { readFile, rm, mkdir, mkdtemp, writeFile as fsWriteFile } from "fs/promi
 import { existsSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { FIXTURE, dbDir, runIngest } from "./helpers.js";
+import { FIXTURE, dbDir, runIngest } from "../helpers.js";
 
 const DB_DIR = dbDir("db-test");
 
