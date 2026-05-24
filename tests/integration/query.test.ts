@@ -3,9 +3,9 @@ import { spawnSync } from "child_process";
 import { rm, mkdir } from "fs/promises";
 import { readFileSync, existsSync, writeFileSync, rmSync } from "fs";
 import { join } from "path";
-import { parseJsonl } from "../src/utils.js";
-import type { GapEvent } from "../src/types.js";
-import { FIXTURE, QUERY_SH, dbDir, runIngest } from "./helpers.js";
+import { parseJsonl } from "../../src/utils.js";
+import type { GapEvent } from "../../src/types.js";
+import { FIXTURE, QUERY_SH, dbDir, runIngest } from "../helpers.js";
 
 const DB_DIR = dbDir("db-query-test");
 const GAPS_DIR = dbDir("gaps-query-test");

@@ -7,7 +7,7 @@ import {
   truncateOutput,
   SessionContext,
   nextDailySeq,
-} from "../src/utils.js";
+} from "../../src/utils.js";
 
 describe("utcYmd", () => {
   it("formats UTC yyyymmdd, zero-padded", () => {

@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
+    "test:unit": "vitest run --passWithNoTests tests/unit",
+    "test:integration": "vitest run --passWithNoTests tests/integration",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

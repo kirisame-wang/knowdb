@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { KNOWDB_TOOLS, processToolCall } from "../src/agent/tools.js";
-import { MID, type GapSink } from "../src/gaps.js";
-import type { SearchIndex, GapEvent } from "../src/types.js";
+import { KNOWDB_TOOLS, processToolCall } from "../../src/agent/tools.js";
+import { MID, type GapSink } from "../../src/gaps.js";
+import type { SearchIndex, GapEvent } from "../../src/types.js";
 
 class MemSink implements GapSink {
   events: GapEvent[] = [];

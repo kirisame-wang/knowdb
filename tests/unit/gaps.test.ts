@@ -8,9 +8,9 @@ import {
   BrowserGapSink,
   HIGH,
   MID,
-} from "../src/gaps.js";
-import { SessionContext } from "../src/utils.js";
-import type { GapEvent } from "../src/types.js";
+} from "../../src/gaps.js";
+import { SessionContext } from "../../src/utils.js";
+import type { GapEvent } from "../../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
   source: "browser",
