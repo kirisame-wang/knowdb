@@ -533,6 +533,38 @@ describe("aggregateMetrics", () => {
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe(24);
     });
 
+    // The diagnostic exists to surface that without_pattern dumps are large.
+    // If the metric is computed from output_summary (already truncated to 600),
+    // the very signal it tracks is compressed away. ToolCallEvent carries the
+    // raw pre-truncate length on output_chars; the aggregator prefers it.
+    it("uses output_chars (raw length) over output_summary.length so truncation does not compress the signal", () => {
+      const longBody = "x".repeat(5000);                 // a real full-body dump
+      const truncated = longBody.slice(0, 600) + "\n… (truncated)";
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            // with_pattern: small grep window, both summary and raw agree
+            { ...rc({ id: "d/1", pattern: "x" }, "short match"), output_chars: 11 },
+            // without_pattern: summary is truncated, output_chars is the raw 5000
+            { ...rc({ id: "d/2" }, truncated), output_chars: 5000 },
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(11);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(5000);
+    });
+
+    it("falls back to output_summary.length when output_chars is absent (legacy traces)", () => {
+      // Persisted traces from before output_chars existed have only
+      // output_summary. Aggregator must still produce a finite number.
+      const traces: QueryTrace[] = [
+        baseTrace({ tool_calls: [rc({ id: "d/1" }, "legacy body")] }),
+      ];
+      const m = aggregateMetrics(traces, []);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe("legacy body".length);
+    });
+
     it("empty-string pattern counts as without_pattern (pattern is missing, not present-but-empty)", () => {
       // The contract: read_chunk treats falsy `pattern` as 'no pattern'. The
       // diagnostic mirrors that — a value of "" or 0 means the agent did not

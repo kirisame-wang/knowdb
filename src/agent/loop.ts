@@ -108,6 +108,7 @@ export async function runAgentTurn(
           tool: block.name,
           input,
           output_summary: truncateOutput(result),
+          output_chars: result.length,
           duration_ms: Date.now() - tcT0,
           timestamp: now().toISOString(),
         });

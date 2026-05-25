@@ -255,9 +255,12 @@ export function aggregateMetrics(
   const readChunks = browserTraces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
   const withPattern = readChunks.filter((c) => Boolean(c.input["pattern"]));
   const withoutPattern = readChunks.filter((c) => !c.input["pattern"]);
+  // Prefer raw pre-truncate length when present; fall back to summary length
+  // for traces persisted before output_chars existed.
+  const rawChars = (c: ToolCallEvent) => c.output_chars ?? c.output_summary.length;
   const patternRate = readChunks.length === 0 ? null : withPattern.length / readChunks.length;
-  const avgWithPattern = mean(withPattern.map((c) => c.output_summary.length));
-  const avgWithoutPattern = mean(withoutPattern.map((c) => c.output_summary.length));
+  const avgWithPattern = mean(withPattern.map(rawChars));
+  const avgWithoutPattern = mean(withoutPattern.map(rawChars));
 
   return {
     total_queries: browserTraces.length,
