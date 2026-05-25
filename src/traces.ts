@@ -166,8 +166,18 @@ export class BrowserTraceCollector implements TraceCollector {
     };
   }
 
+  // Subscriber crashes are isolated: emit must not let a UI bug throw
+  // out of endQuery/recordToolCall and prevent the trace from being
+  // returned and flushed.
   private emit(e: TraceCollectorEvent): void {
-    for (const cb of this.subs) cb(e);
+    for (const cb of this.subs) {
+      try {
+        cb(e);
+      } catch {
+        // Intentionally swallow: observability bus has no recourse for a
+        // misbehaving consumer beyond not letting it poison the producer.
+      }
+    }
   }
 }
 

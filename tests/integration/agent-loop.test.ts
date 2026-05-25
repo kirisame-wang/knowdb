@@ -103,7 +103,7 @@ describe("runAgentTurn — integration", () => {
     ]);
     const deps = makeDeps(client);
 
-    const trace = await runAgentTurn(deps, "What is BM25?");
+    const trace = (await runAgentTurn(deps, "What is BM25?"))!;
 
     expect(trace.source).toBe("browser");
     expect(trace.user_question).toBe("What is BM25?");
@@ -131,7 +131,7 @@ describe("runAgentTurn — integration", () => {
     ]);
     const deps = makeDeps(client);
 
-    const trace = await runAgentTurn(deps, "Tell me about absent_xyz_int");
+    const trace = (await runAgentTurn(deps, "Tell me about absent_xyz_int"))!;
 
     const gaps = parseJsonl<GapEvent>(deps.gapKV.getItem("knowdb-gaps") ?? "");
     expect(gaps).toHaveLength(1);
@@ -150,13 +150,61 @@ describe("runAgentTurn — integration", () => {
     };
     const deps = makeDeps(client);
 
-    const trace = await runAgentTurn(deps, "Q during outage");
+    const trace = (await runAgentTurn(deps, "Q during outage"))!;
     expect(trace.final_answer).toBeUndefined();
     expect(trace.error).toBe("network down");
 
     const persisted = parseJsonl<QueryTrace>(deps.traceKV.getItem("knowdb-traces") ?? "");
     expect(persisted).toHaveLength(1);
     expect(persisted[0]!.error).toBe("network down");
+  });
+
+  // A trace subscriber crashing must not break the agent loop or corrupt
+  // the trace sink. The collector isolates subscriber errors so endQuery
+  // still returns the assembled trace.
+  it("throwing subscriber on query_end: trace still returned and flushed cleanly", async () => {
+    const client = scriptedClient([msg([text("Done.")])]);
+    const deps = makeDeps(client);
+    deps.collector.subscribe((e) => {
+      if (e.kind === "query_end") throw new Error("subscriber boom");
+    });
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+    expect(trace.final_answer).toBe("Done.");
+
+    const raw = deps.traceKV.getItem("knowdb-traces") ?? "";
+    expect(raw).not.toContain("undefined");
+    const persisted = parseJsonl<QueryTrace>(raw);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.query_id).toBe(trace.query_id);
+  });
+
+  // Defensive: even if a custom TraceCollector throws on endQuery in the
+  // catch path (no trace assembled), runAgentTurn must not flush a
+  // null/undefined trace and corrupt the JSONL.
+  it("catch-path endQuery failure: no garbage in trace sink", async () => {
+    const client: MessagesClient = {
+      messages: {
+        create: async () => {
+          throw new Error("network down");
+        },
+      },
+    };
+    const deps = makeDeps(client);
+    // Force the catch-path endQuery to throw by stubbing it.
+    const realEndQuery = deps.collector.endQuery.bind(deps.collector);
+    let endQueryCalls = 0;
+    deps.collector.endQuery = ((qid: string, fa?: string, err?: string, now?: Date) => {
+      endQueryCalls++;
+      if (err !== undefined) throw new Error("collector boom");
+      return realEndQuery(qid, fa, err, now);
+    }) as typeof deps.collector.endQuery;
+
+    await runAgentTurn(deps, "Q during outage");
+    expect(endQueryCalls).toBe(1); // the catch-path call
+
+    const raw = deps.traceKV.getItem("knowdb-traces") ?? "";
+    expect(raw).toBe(""); // no flush attempted with an undefined trace
   });
 
   it("hooks fire in order for the happy path", async () => {

@@ -43,11 +43,13 @@ export interface AgentLoopHooks {
 }
 
 /** Drive one user→final-answer turn: stamp the trace, run the tool-use loop,
- *  flush on completion (or error). Returns the finalized QueryTrace. */
+ *  flush on completion (or error). Returns the finalized QueryTrace, or
+ *  undefined when the catch-path collector itself failed (rare; e.g. a
+ *  buggy custom TraceCollector). The agent loop never re-throws. */
 export async function runAgentTurn(
   deps: AgentLoopDeps,
   userText: string
-): Promise<QueryTrace> {
+): Promise<QueryTrace | undefined> {
   const now = deps.now ?? (() => new Date());
   const query_id = deps.collector.startQuery(userText, now());
 
@@ -55,7 +57,7 @@ export async function runAgentTurn(
   deps.hooks?.onUserMessage?.(userText);
   deps.hooks?.onThinkingStart?.();
 
-  let trace: QueryTrace;
+  let trace: QueryTrace | undefined;
   try {
     // Tool-use agentic loop.
     // eslint-disable-next-line no-constant-condition
@@ -119,16 +121,23 @@ export async function runAgentTurn(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    trace = deps.collector.endQuery(query_id, undefined, msg, now());
     deps.hooks?.onError?.(err);
+    try {
+      trace = deps.collector.endQuery(query_id, undefined, msg, now());
+    } catch {
+      // Collector itself failed; trace is unrecoverable. Original err is
+      // already reported via onError above.
+    }
   }
 
   // Observability sink is best-effort: a full localStorage must not surface
   // as an agent-loop failure. Hook reports it so the UI can prompt export.
-  try {
-    deps.traceSink.flush(trace);
-  } catch (err) {
-    deps.hooks?.onError?.(err);
+  if (trace) {
+    try {
+      deps.traceSink.flush(trace);
+    } catch (err) {
+      deps.hooks?.onError?.(err);
+    }
   }
 
   return trace;
