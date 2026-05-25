@@ -121,7 +121,11 @@ export interface TraceMetrics {
   avg_query_duration_ms: number;
   total_tokens: { input: number; output: number };
   tool_call_distribution: Record<string, number>;
-  queries_with_zero_search_result: number;     // a search tool_call whose output trims to "[]"
+  // Count of queries whose search returned no hits. When aggregateMetrics
+  // is given gaps[], computed via trace × gap join on query_id (catches
+  // KnownGapResponse outputs too); otherwise falls back to a string-sniff
+  // on a search tool_call whose output trims to "[]".
+  queries_with_zero_search_result: number;
   queries_with_final_answer: number;
   // Diagnostic: does the agent engage read_chunk's `pattern` filter or
   // fall back to full-body dumps? `null` rate means no read_chunk calls.

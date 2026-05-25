@@ -259,40 +259,40 @@ function getApiKey(): string {
   );
 }
 
-// ── Right Panel: Gap export ───────────────────────────────────────────────────
+// ── Right Panel: JSONL exports (gaps / traces) ────────────────────────────────
 
-function setupGapExport() {
-  el("btn-export-gaps").addEventListener("click", () => {
-    const jsonl = gapSink.dump();
+/** Wire a button to download a JSONL blob; show a status line when empty. */
+function setupJsonlDownload(
+  buttonId: string,
+  dump: () => string,
+  filename: () => string,
+  emptyMessage: string
+) {
+  el(buttonId).addEventListener("click", () => {
+    const jsonl = dump();
     if (!jsonl.trim()) {
-      appendStatus("No query gaps recorded yet.");
+      appendStatus(emptyMessage);
       return;
     }
     const url = URL.createObjectURL(new Blob([jsonl], { type: "application/x-ndjson" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "query-gaps.jsonl";
+    a.download = filename();
     a.click();
     URL.revokeObjectURL(url);
   });
 }
 
-function setupTraceExport() {
-  el("btn-export-traces").addEventListener("click", () => {
-    const jsonl = traceSink.dump();
-    if (!jsonl.trim()) {
-      appendStatus("No query traces recorded yet.");
-      return;
-    }
-    const ymd = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    const url = URL.createObjectURL(new Blob([jsonl], { type: "application/x-ndjson" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `knowdb-traces-${ymd}.jsonl`;
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-}
+const setupGapExport = () =>
+  setupJsonlDownload("btn-export-gaps", () => gapSink.dump(), () => "query-gaps.jsonl", "No query gaps recorded yet.");
+
+const setupTraceExport = () =>
+  setupJsonlDownload(
+    "btn-export-traces",
+    () => traceSink.dump(),
+    () => `knowdb-traces-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.jsonl`,
+    "No query traces recorded yet."
+  );
 
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
