@@ -4,6 +4,7 @@ import { runAgentTurn } from "./agent/loop.js";
 import { search, expand, siblings, parent } from "./db_query.js";
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
+import { mount as mountAuditTrailViz } from "./ui/audit-trail-viz.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -28,6 +29,14 @@ function el<T extends HTMLElement>(id: string): T {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+let teardownAuditTrailViz: (() => void) | null = null;
+
+// 軌跡可視化（spec-audit-trail-ui）：訂閱同一個 traceCollector，投影到左 panel
+// 的 footprint root；保留 teardown 供日後 route 切換時 unmount（U8）。
+function setupAuditTrailViz() {
+  teardownAuditTrailViz = mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"));
+}
+
 async function init() {
   try {
     const [idx, man] = await Promise.all([
@@ -48,6 +57,7 @@ async function init() {
   setupChat();
   setupGapExport();
   setupTraceExport();
+  setupAuditTrailViz();
 }
 
 // ── Left Panel: Doc Tree ──────────────────────────────────────────────────────
