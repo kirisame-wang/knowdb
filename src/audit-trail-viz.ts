@@ -1,14 +1,14 @@
-// Query Audit Trail — UI 層（軌跡可視化）。訂閱資料層 collector 的事件流，
-// 投影為左 panel 的當前節點高亮 + footprint 列表。read-side only：不擁有
-// trace、不持久化、不 mutate collector（spec-audit-trail-ui.md）。
+// Query Audit Trail UI: subscribes to the trace collector's event stream and
+// projects it onto the left panel (current-node highlight + footprint list).
+// Read-side only — never owns, persists, or mutates the trace.
 
-import type { TraceCollectorEvent } from "../traces.js";
+import type { TraceCollectorEvent } from "./traces.js";
 
-/** Inline 截斷：超過 n 字元切到 n + 省略號（非 truncateOutput 的換行版）。 */
+/** Inline truncation to n chars with an ellipsis. */
 const truncate = (s: string, n: number): string => (s.length <= n ? s : s.slice(0, n) + "…");
 
-/** 當前定位 = 最近一次 read-class tool call 的目標 chunk id（spec §3, U2）。
- *  非 read-class（search 等）回 undefined，不更新高亮。 */
+/** Current location = the target chunk id of the latest read-class tool call.
+ *  Non-read tools (search, etc.) return undefined and don't move the highlight. */
 export function extractChunkId(tool: string, input: Record<string, unknown>): string | undefined {
   switch (tool) {
     case "read_chunk":
@@ -23,9 +23,9 @@ export function extractChunkId(tool: string, input: Record<string, unknown>): st
   }
 }
 
-/** 一行人類友善的 input 摘要（spec §4, U5）。read_chunk 明示是否帶 pattern——
- *  把 OPEN-read-chunk-pattern-underuse 的 T15 議題 affordance-level 視覺化。
- *  空字串 pattern 視為「未帶」，與 read_chunk_pattern_usage_rate 的 truthy 檢查一致。 */
+/** One-line, human-readable summary of a tool call's input. For read_chunk it
+ *  surfaces whether a pattern was used; an empty-string pattern counts as
+ *  not-used, matching the tool's own truthy check. */
 export function summarizeInput(tool: string, input: Record<string, unknown>): string {
   switch (tool) {
     case "search": {
@@ -55,14 +55,14 @@ export interface FootprintEntry {
   ordinal: number;
   tool: string;
   input_summary: string;
-  chunk_id?: string; // 若可從 input 推斷 (U2)
+  chunk_id?: string; // set when derivable from the tool input
 }
 
 export interface VizState {
   current_query_id: string | null;
   current_node_chunk_id: string | null;
   footprint: FootprintEntry[];
-  tokens: { input: number; output: number }; // U6: 累計自 api_round_added
+  tokens: { input: number; output: number }; // accumulated from api-round events
 }
 
 export const initialState = (): VizState => ({
@@ -72,9 +72,8 @@ export const initialState = (): VizState => ({
   tokens: { input: 0, output: 0 },
 });
 
-/** Pure reducer over the frozen TraceCollectorEvent stream (spec §2). The spec
- *  sketches in-place mutation; a pure reducer is the same behavior but unit-
- *  testable in isolation (same rationale as the data layer's loop extraction). */
+/** Pure reducer over the collector's event stream — kept pure (rather than
+ *  mutating in place) so state transitions are unit-testable without a DOM. */
 export function reduce(state: VizState, e: TraceCollectorEvent): VizState {
   switch (e.kind) {
     case "query_start":
@@ -107,13 +106,14 @@ export function reduce(state: VizState, e: TraceCollectorEvent): VizState {
         },
       };
     case "query_end":
-      return state; // 保留至下一 query_start (U3)
+      return state; // footprint retained until the next query_start
   }
 }
 
 // ── DOM rendering + mount ─────────────────────────────────────────────────
 
-/** 訂閱面：只需 subscribe（回傳 unsubscribe）。narrow 介面便於測試 stub。 */
+/** Subscribe-only view of the collector (returns an unsubscribe). Narrowed so
+ *  tests can stub it. */
 interface SubscribableCollector {
   subscribe(cb: (e: TraceCollectorEvent) => void): () => void;
 }
@@ -123,9 +123,9 @@ export interface Pricing {
   outputPerMTok: number; // USD per 1M output tokens
 }
 
-/** token ⓘ 的 hover 文字（U6）。明確標範圍為「this query」（= 一次 agent run；
- *  query_start 歸零，非整個 session）。有 pricing 時附一行費用試算。
- *  renderFootprint 與 api_round 的 title-only 更新共用。 */
+/** Hover text for the token ⓘ. Scoped to the current query (tokens reset each
+ *  query, so this is not a session total). Adds an estimated-cost line when
+ *  pricing is supplied. */
 const tokenTitle = (s: VizState, pricing?: Pricing): string => {
   const base = `this query — tokens in ${s.tokens.input} / out ${s.tokens.output}`;
   if (!pricing) return base;
@@ -133,16 +133,16 @@ const tokenTitle = (s: VizState, pricing?: Pricing): string => {
   return `${base}\nest. cost — $${cost.toFixed(4)}`;
 };
 
-/** 在既有 heading tree / search 節點上 toggle 當前節點 class（既有節點為 <div>
- *  標 data-id，見 src/ui.ts:createChunkItem）。 */
+/** Toggle the current-node class on the existing tree/search nodes (which are
+ *  <div>s tagged with data-id). */
 function renderHighlight(state: VizState): void {
   const current = state.current_node_chunk_id;
   document.querySelectorAll<HTMLElement>(".chunk-item, .search-result-item").forEach((node) => {
     const isCurrent = node.dataset.id === current;
     node.classList.toggle("knowdb-current-node", isCurrent);
     if (isCurrent) {
-      // chunk-item 預設收在折疊的 .chunk-list 內——展開其所屬 doc，讓高亮可見
-      // （對齊 demo 的 doc-label 展開：.open 同時加在 .chunk-list 與其前面的 .doc-label）。
+      // Expand the containing doc so the highlight is visible (the chunk list is
+      // collapsed by default; mirror the demo's doc-label toggle).
       const list = node.closest<HTMLElement>(".chunk-list");
       if (list) {
         list.classList.add("open");
@@ -153,8 +153,8 @@ function renderHighlight(state: VizState): void {
   });
 }
 
-/** 渲染 footprint 列表 + token ⓘ 到 root。token 僅 native title（hover 才現），
- *  不渲染為常駐文字（U6 / UR6）。 */
+/** Render the footprint list + token ⓘ into root. The token total is hover-only
+ *  (native title), never standing text. */
 function renderFootprint(
   state: VizState,
   root: HTMLElement,
@@ -198,15 +198,16 @@ function renderFootprint(
   root.append(head, ol);
 }
 
-/** api_round 的 title-only 更新（§2：footprint 不變，僅更新 ⓘ 的 title）。 */
+/** Update only the token ⓘ title; api rounds don't change the footprint. */
 function updateTokenTitle(state: VizState, footprintRoot: HTMLElement, pricing?: Pricing): void {
   const info = footprintRoot.querySelector<HTMLElement>(".knowdb-token-info");
   if (info) info.title = tokenTitle(state, pricing);
 }
 
-/** 訂閱 collector，把事件流投影為左 panel 的高亮 + footprint。回傳 teardown
- *  fn（每個 subscribe 配對 unsubscribe，U8）。onSelect（可選）讓 footprint 點擊
- *  亦載入預覽——由 caller 注入 demo 的 selectChunk，viz 不直接耦合 demo（C4）。 */
+/** Subscribe to the collector and project events onto the left panel. Returns a
+ *  teardown (unsubscribe). onSelect — optional, injected by the caller — lets a
+ *  footprint click or navigation open the chunk preview without coupling the viz
+ *  to the demo. */
 export function mount(
   collector: SubscribableCollector,
   footprintRoot: HTMLElement,
@@ -215,17 +216,17 @@ export function mount(
 ): () => void {
   let state = initialState();
   const onJump = (chunkId: string): void => {
-    state = { ...state, current_node_chunk_id: chunkId }; // read-side only — 不 mutate trace
-    renderHighlight(state); // §5: 移動當前節點高亮
-    onSelect?.(chunkId); // C4: 點擊亦載入預覽（注入 selectChunk）
+    state = { ...state, current_node_chunk_id: chunkId };
+    renderHighlight(state);
+    onSelect?.(chunkId); // also open the preview
   };
   const renderFull = (): void => {
     renderHighlight(state);
     renderFootprint(state, footprintRoot, onJump, pricing);
   };
   renderFull();
-  // 按事件種類分派渲染粒度（§2）：query_start / tool_call_added 重繪足跡，
-  // api_round_added 僅更新 token title，query_end noop。
+  // Render granularity per event kind: query_start / tool_call_added redraw the
+  // footprint; api_round_added updates only the token title; query_end is a noop.
   const unsubscribe = collector.subscribe((e) => {
     const prevNode = state.current_node_chunk_id;
     state = reduce(state, e);
@@ -235,7 +236,7 @@ export function mount(
         break;
       case "tool_call_added":
         renderFull();
-        // 導航時自動載入當前節點預覽：agent 讀到哪，左下預覽就顯示哪（無需手動點 footprint）。
+        // Auto-open the preview for the chunk the agent just read.
         if (state.current_node_chunk_id && state.current_node_chunk_id !== prevNode) {
           onSelect?.(state.current_node_chunk_id);
         }

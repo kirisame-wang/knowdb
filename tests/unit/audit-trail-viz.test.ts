@@ -5,11 +5,11 @@ import {
   reduce,
   initialState,
   type VizState,
-} from "../../src/ui/audit-trail-viz.js";
+} from "../../src/audit-trail-viz.js";
 import type { QueryTrace } from "../../src/types.js";
 import type { TraceCollectorEvent } from "../../src/traces.js";
 
-describe("extractChunkId (spec §3)", () => {
+describe("extractChunkId", () => {
   it("read_chunk → input.id", () => {
     expect(extractChunkId("read_chunk", { id: "aaa00001/01" })).toBe("aaa00001/01");
   });
@@ -33,7 +33,7 @@ describe("extractChunkId (spec §3)", () => {
   });
 });
 
-describe("summarizeInput (spec §4)", () => {
+describe("summarizeInput", () => {
   it("search: keyword only", () => {
     expect(summarizeInput("search", { keyword: "BM25" })).toBe("BM25");
   });
@@ -45,7 +45,7 @@ describe("summarizeInput (spec §4)", () => {
   it("read_chunk: id only", () => {
     expect(summarizeInput("read_chunk", { id: "aaa00001/01" })).toBe("aaa00001/01");
   });
-  it("read_chunk: id + pattern (T15 affordance visible)", () => {
+  it("read_chunk: id + pattern shown", () => {
     expect(summarizeInput("read_chunk", { id: "aaa00001/01", pattern: "Gap" })).toBe(
       'aaa00001/01, pattern="Gap"'
     );
@@ -53,7 +53,7 @@ describe("summarizeInput (spec §4)", () => {
   it("read_chunk: empty-string pattern counts as NOT set (mirrors metric truthy check)", () => {
     expect(summarizeInput("read_chunk", { id: "aaa00001/01", pattern: "" })).toBe("aaa00001/01");
   });
-  it("read_chunk: long pattern truncated to 20 chars + ellipsis (UR3)", () => {
+  it("read_chunk: long pattern truncated to 20 chars + ellipsis", () => {
     const long = "abcdefghijklmnopqrstuvwxyz"; // 26 chars
     expect(summarizeInput("read_chunk", { id: "aaa00001/01", pattern: long })).toBe(
       'aaa00001/01, pattern="abcdefghijklmnopqrst…"'
@@ -101,7 +101,7 @@ const qStart: TraceCollectorEvent = {
 };
 const qEnd: TraceCollectorEvent = { kind: "query_end", trace: {} as QueryTrace };
 
-describe("reduce (VizState reducer, spec §2)", () => {
+describe("reduce (VizState reducer)", () => {
   it("query_start resets state (footprint + tokens cleared, query_id set)", () => {
     const dirty: VizState = {
       current_query_id: "old",
@@ -133,12 +133,12 @@ describe("reduce (VizState reducer, spec §2)", () => {
     expect(afterSearch.current_node_chunk_id).toBe("aaa/01"); // unchanged
   });
 
-  it("api_round_added accumulates tokens across rounds (U6)", () => {
+  it("api_round_added accumulates tokens across rounds", () => {
     const s2 = reduce(reduce(initialState(), round(100, 30)), round(80, 25));
     expect(s2.tokens).toEqual({ input: 180, output: 55 });
   });
 
-  it("query_end is noop — footprint retained until next query_start (U3)", () => {
+  it("query_end is noop — footprint retained until next query_start", () => {
     const before = reduce(reduce(initialState(), qStart), tc(1, "parent", { id: "aaa/01" }));
     expect(reduce(before, qEnd)).toEqual(before);
   });

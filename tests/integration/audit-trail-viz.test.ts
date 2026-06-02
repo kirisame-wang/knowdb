@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from "vitest";
-import { mount } from "../../src/ui/audit-trail-viz.js";
+import { mount } from "../../src/audit-trail-viz.js";
 import type { TraceCollectorEvent } from "../../src/traces.js";
 
 // Minimal subscribe-only collector stub (mirrors BrowserTraceCollector's hook).
@@ -50,7 +50,7 @@ beforeEach(() => {
     <div id="fp-root"></div>`;
 });
 
-describe("audit-trail-viz DOM smoke (spec §5)", () => {
+describe("audit-trail-viz DOM smoke", () => {
   it("renders footprint entries and highlights the current tree node", () => {
     const c = new FakeCollector();
     mount(c, fpRoot());
@@ -69,7 +69,7 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     expect(document.querySelector(".doc-label")!.classList.contains("open")).toBe(true);
   });
 
-  it("token ⓘ title reflects accumulated tokens; no standing token text (U6)", () => {
+  it("token ⓘ title reflects accumulated tokens; no standing token text", () => {
     const c = new FakeCollector();
     mount(c, fpRoot());
     c.emit(qStart);
@@ -77,11 +77,11 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     c.emit(round(80, 25));
 
     const info = fpRoot().querySelector<HTMLElement>(".knowdb-token-info")!;
-    expect(info.title).toBe("this query — tokens in 180 / out 55"); // scope-labeled, per-run
-    expect(info.textContent).toBe("ⓘ"); // 只有圖示，無常駐 token 文字
+    expect(info.title).toBe("this query — tokens in 180 / out 55"); // scoped to the current query
+    expect(info.textContent).toBe("ⓘ"); // icon only, no standing token text
   });
 
-  it("with pricing, the ⓘ title adds an estimated cost line (this-query scope)", () => {
+  it("with pricing, the ⓘ title adds an estimated cost line", () => {
     const c = new FakeCollector();
     mount(c, fpRoot(), undefined, { inputPerMTok: 1, outputPerMTok: 5 });
     c.emit(qStart);
@@ -91,7 +91,7 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     expect(info.title).toBe("this query — tokens in 1000000 / out 200000\nest. cost — $2.0000");
   });
 
-  it("clicking a footprint entry jumps the highlight and opens the preview (C4)", () => {
+  it("clicking a footprint entry jumps the highlight and opens the preview", () => {
     const c = new FakeCollector();
     const selected: string[] = [];
     mount(c, fpRoot(), (id) => selected.push(id)); // onSelect injected (demo's selectChunk)
@@ -107,7 +107,7 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     expect(selected).toEqual(["aaa/00"]); // also navigates / opens preview
   });
 
-  it("auto-loads the preview for the current node during navigation, no click (#1)", () => {
+  it("auto-loads the preview for the current node during navigation, no click", () => {
     const c = new FakeCollector();
     const selected: string[] = [];
     mount(c, fpRoot(), (id) => selected.push(id));
@@ -120,7 +120,7 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     expect(selected).toEqual(["aaa/00", "aaa/01"]);
   });
 
-  it("after teardown, further events do not change the DOM (U8)", () => {
+  it("after teardown, further events do not change the DOM", () => {
     const c = new FakeCollector();
     const unmount = mount(c, fpRoot());
     c.emit(qStart);

@@ -4,8 +4,8 @@ import { runAgentTurn } from "./agent/loop.js";
 import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db_query.js";
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
-import { mount as mountAuditTrailViz } from "./ui/audit-trail-viz.js";
-import { MODEL } from "./constants.js";
+import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
+import { MODEL, MAX_OUTPUT_TOKENS } from "./constants.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -30,11 +30,11 @@ function el<T extends HTMLElement>(id: string): T {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-// 軌跡可視化（spec-audit-trail-ui）：訂閱同一個 traceCollector，投影到左 panel
-// 的 footprint root。mount() 回傳 teardown（U8 的 subscribe/unsubscribe 配對在
-// lib 層備妥）；demo 無 route 切換，viz 與 collector 同為 page lifetime，故捨棄。
+// Mount the trajectory viz against the same trace collector that feeds the
+// sink, rendering into the footprint root below the doc tree. mount() returns a
+// teardown; the demo lives for the page lifetime, so it is discarded.
 function setupAuditTrailViz() {
-  // onSelect = selectChunk：footprint 點擊載入預覽並連動 demo 選取（C4）。
+  // onSelect = selectChunk: a footprint click (or navigation) opens the preview.
   mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"), selectChunk, MODEL.pricing);
 }
 
@@ -367,7 +367,8 @@ async function sendMessage() {
 
   input.value = "";
   el("btn-send").setAttribute("disabled", "");
-  // 導航期間還原 doc tree 並鎖搜尋：使用者無法重建 #doc-tree，live 高亮全程不失效（C3）。
+  // Restore the doc tree and lock search for the turn so the user can't rebuild
+  // it out from under the live highlight (re-enabled in the finally below).
   renderDocTree();
   el("search-input").setAttribute("disabled", "");
 
@@ -384,7 +385,7 @@ async function sendMessage() {
         searchIndex,
         manifest,
         model: MODEL.id,
-        maxTokens: MODEL.maxTokens,
+        maxTokens: MAX_OUTPUT_TOKENS,
         system:
           "You are a helpful assistant with access to a knowledge base via tools. " +
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
