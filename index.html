@@ -387,6 +387,16 @@
 
       .btn-send:disabled { opacity: 0.55; cursor: not-allowed; }
 
+      /* ── Audit trail viz (spec-audit-trail-ui §6) ── */
+      .knowdb-current-node { background: #fff3a0; font-weight: bold; }
+      .knowdb-footprint-head { margin-top: 1em; font-size: 0.85em; font-weight: bold; }
+      .knowdb-token-info { margin-left: 0.4em; font-weight: normal; opacity: 0.5; cursor: help; }
+      .knowdb-footprint { margin-top: 0.4em; font-family: monospace; font-size: 0.85em; list-style: none; padding: 0; }
+      .knowdb-footprint li { padding: 2px 4px; cursor: pointer; }
+      .knowdb-footprint li:hover { background: #eee; }
+      .knowdb-footprint .ord { opacity: 0.6; }
+      .knowdb-footprint .tool { font-weight: bold; }
+
       /* ── Responsive ── */
       @media (max-width: 768px) {
         .layout { flex-direction: column; }

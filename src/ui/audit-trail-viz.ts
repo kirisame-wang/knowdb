@@ -110,3 +110,82 @@ export function reduce(state: VizState, e: TraceCollectorEvent): VizState {
       return state; // 保留至下一 query_start (U3)
   }
 }
+
+// ── DOM rendering + mount ─────────────────────────────────────────────────
+
+/** 訂閱面：只需 subscribe（回傳 unsubscribe）。narrow 介面便於測試 stub。 */
+interface SubscribableCollector {
+  subscribe(cb: (e: TraceCollectorEvent) => void): () => void;
+}
+
+/** 在既有 heading tree / search 節點上 toggle 當前節點 class（既有節點為 <div>
+ *  標 data-id，見 src/ui.ts:createChunkItem）。 */
+function renderHighlight(state: VizState): void {
+  document.querySelectorAll<HTMLElement>(".chunk-item, .search-result-item").forEach((node) => {
+    node.classList.toggle("knowdb-current-node", node.dataset.id === state.current_node_chunk_id);
+  });
+}
+
+/** 渲染 footprint 列表 + token ⓘ 到 root。token 僅 native title（hover 才現），
+ *  不渲染為常駐文字（U6 / UR6）。 */
+function renderFootprint(
+  state: VizState,
+  root: HTMLElement,
+  onJump: (chunkId: string) => void
+): void {
+  root.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "knowdb-footprint-head";
+  head.textContent = "Footprint";
+  const info = document.createElement("span");
+  info.className = "knowdb-token-info";
+  info.textContent = "ⓘ";
+  info.title = `tokens — in ${state.tokens.input} / out ${state.tokens.output}`;
+  head.appendChild(info);
+
+  const ol = document.createElement("ol");
+  ol.className = "knowdb-footprint";
+  for (const f of state.footprint) {
+    const li = document.createElement("li");
+    li.dataset.ordinal = String(f.ordinal);
+    const ord = document.createElement("span");
+    ord.className = "ord";
+    ord.textContent = `[${f.ordinal}]`;
+    const tool = document.createElement("span");
+    tool.className = "tool";
+    tool.textContent = f.tool;
+    const summary = document.createElement("span");
+    summary.className = "summary";
+    summary.textContent = f.input_summary;
+    li.append(ord, document.createTextNode(" "), tool, document.createTextNode(" "), summary);
+    if (f.chunk_id) {
+      const chunkId = f.chunk_id;
+      li.dataset.chunkId = chunkId;
+      li.addEventListener("click", () => onJump(chunkId));
+    }
+    ol.appendChild(li);
+  }
+
+  root.append(head, ol);
+}
+
+/** 訂閱 collector，把事件流投影為左 panel 的高亮 + footprint。回傳 teardown
+ *  fn（每個 subscribe 配對 unsubscribe，U8）。 */
+export function mount(collector: SubscribableCollector, footprintRoot: HTMLElement): () => void {
+  let state = initialState();
+  const onJump = (chunkId: string): void => {
+    state = { ...state, current_node_chunk_id: chunkId }; // read-side only — 不 mutate trace
+    renderHighlight(state); // §5: click → 僅重繪高亮
+  };
+  const renderAll = (): void => {
+    renderHighlight(state);
+    renderFootprint(state, footprintRoot, onJump);
+  };
+  renderAll();
+  const unsubscribe = collector.subscribe((e) => {
+    state = reduce(state, e);
+    renderAll();
+  });
+  return () => unsubscribe();
+}
