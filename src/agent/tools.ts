@@ -159,7 +159,8 @@ export async function processToolCall(
   toolInput: Record<string, unknown>,
   index: SearchIndex,
   manifest?: Manifest,
-  sink?: GapSink
+  sink?: GapSink,
+  query_id?: string
 ): Promise<string> {
   switch (toolName) {
     case "get_instructions":
@@ -202,6 +203,7 @@ export async function processToolCall(
           keyword: kw,
           scope: scope ?? null,
           timestamp: now.toISOString(),
+          ...(query_id !== undefined ? { query_id } : {}),
         }));
         for (const e of stamped) sink.record(e);
         // Count the just-recorded gaps without a second full parse.

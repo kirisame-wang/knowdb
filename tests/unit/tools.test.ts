@@ -240,3 +240,36 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events[0]!.keyword).toBe(KW);
   });
 });
+
+describe("processToolCall — query_id propagation", () => {
+  const ABSENT = "nonexistent_qid";
+  const QID = "q_test_query_001";
+
+  it("stamps query_id on the recorded GapEvent (single-term)", async () => {
+    const sink = new MemSink();
+    await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink, QID);
+    expect(sink.events).toHaveLength(1);
+    expect(sink.events[0]!.query_id).toBe(QID);
+  });
+
+  it("stamps the same query_id on every fan-out event from a simple-OR keyword", async () => {
+    const sink = new MemSink();
+    await processToolCall(
+      "search",
+      { keyword: "absent_alpha|absent_beta" },
+      INDEX,
+      MANIFEST,
+      sink,
+      QID
+    );
+    expect(sink.events).toHaveLength(2);
+    for (const e of sink.events) expect(e.query_id).toBe(QID);
+  });
+
+  it("omits query_id when none is provided (backward compat)", async () => {
+    const sink = new MemSink();
+    await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
+    expect(sink.events).toHaveLength(1);
+    expect(sink.events[0]!.query_id).toBeUndefined();
+  });
+});

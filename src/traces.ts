@@ -1,5 +1,6 @@
 import type {
   ApiRoundUsage,
+  GapEvent,
   LocalCommandEvent,
   LocalSessionMetrics,
   QueryTrace,
@@ -165,8 +166,17 @@ export class BrowserTraceCollector implements TraceCollector {
     };
   }
 
+  // Subscriber crashes are isolated: emit must not let a UI bug throw
+  // out of endQuery/recordToolCall and prevent the trace from being
+  // returned and flushed.
   private emit(e: TraceCollectorEvent): void {
-    for (const cb of this.subs) cb(e);
+    for (const cb of this.subs) {
+      try {
+        cb(e);
+      } catch {
+        // Swallow: a buggy consumer must not poison the producer.
+      }
+    }
   }
 }
 
@@ -203,15 +213,10 @@ export function aggregateLocalSession(events: LocalCommandEvent[]): LocalSession
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
-/** Counts a trace as zero-result when a `search` tool_call's output_summary
- *  trims to the literal `[]`. Crude but sufficient for the headline metric. */
-function isZeroResultTrace(t: QueryTrace): boolean {
-  return t.tool_calls.some((c) => c.tool === "search" && c.output_summary.trim() === "[]");
-}
-
 export function aggregateMetrics(
   browserTraces: QueryTrace[],
-  localEvents: LocalCommandEvent[]
+  localEvents: LocalCommandEvent[],
+  gaps: GapEvent[]
 ): TraceMetrics {
   const stepsPerQuery = browserTraces.map((t) => t.tool_calls.length);
   const queryDurations = browserTraces.map(
@@ -236,14 +241,38 @@ export function aggregateMetrics(
     cmdDist[e.command] = (cmdDist[e.command] ?? 0) + 1;
   }
 
+  // Zero-result queries via trace × gap join on query_id: a recorded gap whose
+  // query_id matches a trace means that query's search returned no hits. This
+  // catches KnownGapResponse outputs, not just searches whose output is "[]".
+  const traceIds = new Set(browserTraces.map((t) => t.query_id));
+  const zeroResultCount = new Set(
+    gaps
+      .map((g) => g.query_id)
+      .filter((qid): qid is string => qid !== undefined && traceIds.has(qid))
+  ).size;
+
+  // read_chunk pattern-usage: mirrors the tool's own truthy check (a falsy
+  // pattern means the agent didn't engage the filter — the signal we want).
+  const readChunks = browserTraces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
+  const withPattern = readChunks.filter((c) => Boolean(c.input["pattern"]));
+  const withoutPattern = readChunks.filter((c) => !c.input["pattern"]);
+  // Prefer raw pre-truncate length when present; fall back to summary length
+  // for traces persisted before output_chars existed.
+  const rawChars = (c: ToolCallEvent) => c.output_chars ?? c.output_summary.length;
+  const patternRate = readChunks.length === 0 ? null : withPattern.length / readChunks.length;
+  const avgWithPattern = mean(withPattern.map(rawChars));
+  const avgWithoutPattern = mean(withoutPattern.map(rawChars));
+
   return {
     total_queries: browserTraces.length,
     avg_steps_per_query: mean(stepsPerQuery),
     avg_query_duration_ms: mean(queryDurations),
     total_tokens: { input: tokensIn, output: tokensOut },
     tool_call_distribution: toolDist,
-    queries_with_zero_search_result: browserTraces.filter(isZeroResultTrace).length,
+    queries_with_zero_search_result: zeroResultCount,
     queries_with_final_answer: browserTraces.filter((t) => t.final_answer && !t.error).length,
+    read_chunk_pattern_usage_rate: patternRate,
+    avg_read_chunk_output_chars: { with_pattern: avgWithPattern, without_pattern: avgWithoutPattern },
     total_local_sessions: sessions.length,
     avg_commands_per_local_session: mean(commandsPerSession),
     avg_local_session_duration_ms: mean(sessionDurations),

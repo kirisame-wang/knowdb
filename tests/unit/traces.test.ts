@@ -9,7 +9,7 @@ import {
   type TraceCollectorEvent,
 } from "../../src/traces.js";
 import { SessionContext } from "../../src/utils.js";
-import type { LocalCommandEvent, QueryTrace } from "../../src/types.js";
+import type { GapEvent, LocalCommandEvent, QueryTrace } from "../../src/types.js";
 
 class FakeKV {
   private m = new Map<string, string>();
@@ -354,7 +354,12 @@ describe("aggregateMetrics", () => {
         // No final_answer (zero-result, no answer).
       }),
     ];
-    const m = aggregateMetrics(traces, []);
+    // q_20260516_002's search returned no hits; the recorded gap carries its
+    // query_id, and the trace × gap join is what counts it as zero-result.
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_002_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_20260516_002" },
+    ];
+    const m = aggregateMetrics(traces, [], gaps);
     expect(m.total_queries).toBe(2);
     expect(m.avg_steps_per_query).toBe((2 + 1) / 2);
     expect(m.avg_query_duration_ms).toBe((2000 + 4000) / 2);
@@ -387,7 +392,7 @@ describe("aggregateMetrics", () => {
         timestamp: "2026-05-16T10:00:02Z",
       },
     ];
-    const m = aggregateMetrics([], evs);
+    const m = aggregateMetrics([], evs, []);
     expect(m.total_local_sessions).toBe(1);
     expect(m.avg_commands_per_local_session).toBe(2);
     expect(m.avg_local_session_duration_ms).toBe(2000);
@@ -395,7 +400,7 @@ describe("aggregateMetrics", () => {
   });
 
   it("returns zeroed metrics for empty inputs", () => {
-    const m = aggregateMetrics([], []);
+    const m = aggregateMetrics([], [], []);
     expect(m.total_queries).toBe(0);
     expect(m.avg_steps_per_query).toBe(0);
     expect(m.avg_query_duration_ms).toBe(0);
@@ -411,6 +416,162 @@ describe("aggregateMetrics", () => {
 
   it("does NOT count an error trace as having a final_answer", () => {
     const t = baseTrace({ final_answer: "partial", error: "boom" });
-    expect(aggregateMetrics([t], []).queries_with_final_answer).toBe(0);
+    expect(aggregateMetrics([t], [], []).queries_with_final_answer).toBe(0);
+  });
+
+  // queries_with_zero_search_result has two modes:
+  //  - no gaps[]: string-sniff on output_summary === "[]" (back-compat)
+  //  - with gaps[]: trace × gap join via query_id (catches KnownGapResponse too)
+  it("when gaps[] provided, counts via trace × gap join (catches known_gap responses)", () => {
+    const traces: QueryTrace[] = [
+      baseTrace({
+        query_id: "q_known_gap",
+        tool_calls: [
+          // KnownGapResponse shape — string-sniff would MISS this; the join catches it.
+          {
+            ordinal: 1,
+            tool: "search",
+            input: {},
+            output_summary: '{"status":"known_gap","message":"…","gap_info":{},"recommendation":"…"}',
+            duration_ms: 5,
+            timestamp: "2026-05-16T10:00:01Z",
+          },
+        ],
+      }),
+      baseTrace({ query_id: "q_with_hits", tool_calls: [] }),
+    ];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_known_gap" },
+    ];
+    const m = aggregateMetrics(traces, [], gaps);
+    expect(m.queries_with_zero_search_result).toBe(1);
+  });
+
+  it("with gaps[]: a trace whose query_id matches no gap is not counted", () => {
+    const traces: QueryTrace[] = [baseTrace({ query_id: "q_no_match" })];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_other" },
+    ];
+    expect(aggregateMetrics(traces, [], gaps).queries_with_zero_search_result).toBe(0);
+  });
+
+  it("with gaps[]: multiple gaps for one trace are counted once (de-duped by query_id)", () => {
+    const traces: QueryTrace[] = [baseTrace({ query_id: "q_or" })];
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_x_001", keyword: "alpha", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_or" },
+      { source: "browser", gap_id: "gap_x_002", keyword: "beta", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_or" },
+    ];
+    expect(aggregateMetrics(traces, [], gaps).queries_with_zero_search_result).toBe(1);
+  });
+
+  // read_chunk pattern-usage diagnostic — quantifies whether the agent
+  // uses read_chunk's `pattern` filter or falls back to full-body dumps.
+  describe("read_chunk pattern-usage diagnostic", () => {
+    const rc = (
+      input: Record<string, unknown>,
+      output_summary: string
+    ): QueryTrace["tool_calls"][number] => ({
+      ordinal: 1,
+      tool: "read_chunk",
+      input,
+      output_summary,
+      duration_ms: 1,
+      timestamp: "2026-05-16T10:00:00Z",
+    });
+
+    it("rate is null when no read_chunk calls are present (avoid false 0%)", () => {
+      const m = aggregateMetrics([baseTrace({ tool_calls: [] })], [], []);
+      expect(m.read_chunk_pattern_usage_rate).toBeNull();
+      expect(m.avg_read_chunk_output_chars).toEqual({ with_pattern: 0, without_pattern: 0 });
+    });
+
+    it("rate is 1 when every read_chunk carries a pattern; without_pattern avg = 0", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "foo" }, "matched line"),
+            rc({ id: "d/2", pattern: "bar" }, "another match"),
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(1);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(("matched line".length + "another match".length) / 2);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(0);
+    });
+
+    it("rate is 0 when no read_chunk carries a pattern; with_pattern avg = 0", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({ tool_calls: [rc({ id: "d/1" }, "full body of chunk")] }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(0);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(0);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe("full body of chunk".length);
+    });
+
+    it("mixed: rate is the fraction, each group averages its own outputs", () => {
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "x" }, "short"),         // with, 5 chars
+            rc({ id: "d/2" }, "this is much longer body"),    // without, 24 chars
+            rc({ id: "d/3", pattern: "y" }, "another short"), // with, 13 chars
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(2 / 3);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe((5 + 13) / 2);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(24);
+    });
+
+    // The diagnostic exists to surface that without_pattern dumps are large.
+    // If the metric is computed from output_summary (already truncated to 600),
+    // the very signal it tracks is compressed away. ToolCallEvent carries the
+    // raw pre-truncate length on output_chars; the aggregator prefers it.
+    it("uses output_chars (raw length) over output_summary.length so truncation does not compress the signal", () => {
+      const longBody = "x".repeat(5000);                 // a real full-body dump
+      const truncated = longBody.slice(0, 600) + "\n… (truncated)";
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            // with_pattern: small grep window, both summary and raw agree
+            { ...rc({ id: "d/1", pattern: "x" }, "short match"), output_chars: 11 },
+            // without_pattern: summary is truncated, output_chars is the raw 5000
+            { ...rc({ id: "d/2" }, truncated), output_chars: 5000 },
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.avg_read_chunk_output_chars.with_pattern).toBe(11);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe(5000);
+    });
+
+    it("falls back to output_summary.length when output_chars is absent (legacy traces)", () => {
+      // Persisted traces from before output_chars existed have only
+      // output_summary. Aggregator must still produce a finite number.
+      const traces: QueryTrace[] = [
+        baseTrace({ tool_calls: [rc({ id: "d/1" }, "legacy body")] }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.avg_read_chunk_output_chars.without_pattern).toBe("legacy body".length);
+    });
+
+    it("empty-string pattern counts as without_pattern (pattern is missing, not present-but-empty)", () => {
+      // The contract: read_chunk treats falsy `pattern` as 'no pattern'. The
+      // diagnostic mirrors that — a value of "" or 0 means the agent did not
+      // engage the filter, which is the signal we want to surface.
+      const traces: QueryTrace[] = [
+        baseTrace({
+          tool_calls: [
+            rc({ id: "d/1", pattern: "" }, "x"),
+            rc({ id: "d/2", pattern: "real" }, "y"),
+          ],
+        }),
+      ];
+      const m = aggregateMetrics(traces, [], []);
+      expect(m.read_chunk_pattern_usage_rate).toBe(0.5);
+    });
   });
 });

@@ -3,9 +3,24 @@
 DB_DIR="${DB_DIR:-db}"
 GAPS_DIR="${GAPS_DIR:-gaps}"
 GAPS_FILE="${GAPS_FILE:-${GAPS_DIR}/query-gaps.jsonl}"
+TRACES_DIR="${TRACES_DIR:-traces}"
+TRACES_FILE="${TRACES_FILE:-${TRACES_DIR}/query-commands.jsonl}"
 SESSION_ID_FILE="${SESSION_ID_FILE:-.session_id}"
 CMD="${1:-}"
 shift || true
+# Snapshot argv after the subcommand, before any in-body shifts consume it.
+ORIGINAL_ARGS=("$@")
+# Record one trace per top-level invocation only — expand re-enters this
+# script via `bash $0 siblings/parent`, so KNOWDB_TRACE_ROOT (inherited via
+# the exported env) gates the sub-invocations out.
+if [[ -z "$KNOWDB_TRACE_ROOT" && -n "$CMD" ]]; then
+  export KNOWDB_TRACE_ROOT=1
+  __trace_t0="$(date +%s%3N 2>/dev/null)"
+  if [[ "$__trace_t0" == *N* || -z "$__trace_t0" ]]; then
+    __trace_t0="$(date +%s)000"
+  fi
+  trap 'record_command_trace "$CMD" "$?" "$__trace_t0" "${ORIGINAL_ARGS[@]}"' EXIT
+fi
 
 usage() {
   echo "Usage: query.sh <search|expand|siblings|parent> [args]" >&2
@@ -28,8 +43,54 @@ json_escape() {
   printf '%s' "$s"
 }
 
+# Wall-clock in epoch ms. Falls back to seconds*1000 when %3N is unsupported
+# (BSD date), keeping the field a plain integer either way.
+now_ms() {
+  local v
+  v="$(date +%s%3N 2>/dev/null)"
+  if [[ "$v" == *N* || -z "$v" ]]; then
+    v="$(date +%s)000"
+  fi
+  printf '%s' "$v"
+}
+
+# Append a LocalCommandEvent line, schema-identical to the browser
+# TraceCollector (src/traces.ts) — except command_id, intentionally a dated
+# daily-sequence here vs an opaque id in the browser. Best-effort: any IO error
+# is swallowed so the subcommand's contract (stdout + exit code) is never affected.
+record_command_trace() {
+  local cmd="$1" exit_code="$2" t0="$3"
+  shift 3
+  local args=("$@")
+  local ymd ts t1 dur n seq sid sess_json args_json first a
+  mkdir -p "$TRACES_DIR" 2>/dev/null || return 0
+  ymd="$(date -u +%Y%m%d)"
+  ts="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+  t1="$(now_ms)"
+  dur=$((t1 - t0))
+  n="$(grep -c "\"command_id\":\"c_${ymd}_" "$TRACES_FILE" 2>/dev/null || true)"
+  n="${n//[^0-9]/}"; [[ -z "$n" ]] && n=0
+  seq="$(printf '%03d' "$((n + 1))")"
+  sess_json=""
+  if [[ -f "$SESSION_ID_FILE" ]]; then
+    IFS= read -r sid < "$SESSION_ID_FILE" || true
+    [[ -n "$sid" ]] && sess_json=",\"session_id\":\"$(json_escape "$sid")\""
+  fi
+  args_json="["
+  first=1
+  for a in "${args[@]}"; do
+    [[ $first -eq 1 ]] && first=0 || args_json+=","
+    args_json+="\"$(json_escape "$a")\""
+  done
+  args_json+="]"
+  printf '{"source":"local","command_id":"c_%s_%s"%s,"command":"%s","args":%s,"duration_ms":%d,"exit_code":%d,"timestamp":"%s"}\n' \
+    "$ymd" "$seq" "$sess_json" "$(json_escape "$cmd")" "$args_json" "$dur" "$exit_code" "$ts" \
+    >> "$TRACES_FILE" 2>/dev/null || true
+}
+
 # Append a GapEvent line, schema-identical to the browser sink
-# (src/gaps.ts BrowserGapSink). The script owns recording.
+# (src/gaps.ts BrowserGapSink) — except gap_id (dated daily-sequence here,
+# opaque in browser). The script owns recording.
 record_gap() {
   local kw="$1" scope_in="$2"
   mkdir -p "$GAPS_DIR"

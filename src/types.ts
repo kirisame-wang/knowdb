@@ -77,6 +77,7 @@ export interface ToolCallEvent {
   tool: string;
   input: Record<string, unknown>;  // raw input, deterministic
   output_summary: string;          // truncated tool output (≤ 600 chars; shared truncate)
+  output_chars?: number;           // raw output length pre-truncate; pattern-usage diagnostic needs the uncompressed value
   duration_ms: number;             // wall-clock of processToolCall
   timestamp: string;               // ISO 8601 UTC, at tool-call return
 }
@@ -120,8 +121,15 @@ export interface TraceMetrics {
   avg_query_duration_ms: number;
   total_tokens: { input: number; output: number };
   tool_call_distribution: Record<string, number>;
-  queries_with_zero_search_result: number;     // a search tool_call whose output trims to "[]"
+  // Count of queries whose search returned no hits, computed via trace × gap
+  // join on query_id (a recorded gap's query_id matching a trace's). Catches
+  // KnownGapResponse outputs, not just searches whose output trims to "[]".
+  queries_with_zero_search_result: number;
   queries_with_final_answer: number;
+  // Diagnostic: does the agent engage read_chunk's `pattern` filter or
+  // fall back to full-body dumps? `null` rate means no read_chunk calls.
+  read_chunk_pattern_usage_rate: number | null;
+  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };
   // Local-side
   total_local_sessions: number;
   avg_commands_per_local_session: number;
