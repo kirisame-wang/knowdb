@@ -396,6 +396,8 @@
       .knowdb-footprint li:hover { background: #eee; }
       .knowdb-footprint .ord { opacity: 0.6; }
       .knowdb-footprint .tool { font-weight: bold; }
+      /* search is locked during a turn (C3) — make the disabled state obvious */
+      .search-input:disabled { opacity: 0.45; cursor: not-allowed; }
 
       /* ── Responsive ── */
       @media (max-width: 768px) {
