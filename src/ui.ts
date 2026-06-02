@@ -33,7 +33,8 @@ function el<T extends HTMLElement>(id: string): T {
 // 的 footprint root。mount() 回傳 teardown（U8 的 subscribe/unsubscribe 配對在
 // lib 層備妥）；demo 無 route 切換，viz 與 collector 同為 page lifetime，故捨棄。
 function setupAuditTrailViz() {
-  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"));
+  // onSelect = selectChunk：footprint 點擊載入預覽並連動 demo 選取（C4）。
+  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"), selectChunk);
 }
 
 async function init() {

@@ -180,12 +180,18 @@ function updateTokenTitle(state: VizState, footprintRoot: HTMLElement): void {
 }
 
 /** 訂閱 collector，把事件流投影為左 panel 的高亮 + footprint。回傳 teardown
- *  fn（每個 subscribe 配對 unsubscribe，U8）。 */
-export function mount(collector: SubscribableCollector, footprintRoot: HTMLElement): () => void {
+ *  fn（每個 subscribe 配對 unsubscribe，U8）。onSelect（可選）讓 footprint 點擊
+ *  亦載入預覽——由 caller 注入 demo 的 selectChunk，viz 不直接耦合 demo（C4）。 */
+export function mount(
+  collector: SubscribableCollector,
+  footprintRoot: HTMLElement,
+  onSelect?: (chunkId: string) => void
+): () => void {
   let state = initialState();
   const onJump = (chunkId: string): void => {
     state = { ...state, current_node_chunk_id: chunkId }; // read-side only — 不 mutate trace
-    renderHighlight(state); // §5: click → 僅重繪高亮
+    renderHighlight(state); // §5: 移動當前節點高亮
+    onSelect?.(chunkId); // C4: 點擊亦載入預覽（注入 selectChunk）
   };
   const renderFull = (): void => {
     renderHighlight(state);

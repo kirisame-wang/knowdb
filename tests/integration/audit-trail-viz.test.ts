@@ -72,9 +72,10 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     expect(info.textContent).toBe("ⓘ"); // 只有圖示，無常駐 token 文字
   });
 
-  it("clicking a footprint entry jumps the highlight to that chunk", () => {
+  it("clicking a footprint entry jumps the highlight and opens the preview (C4)", () => {
     const c = new FakeCollector();
-    mount(c, fpRoot());
+    const selected: string[] = [];
+    mount(c, fpRoot(), (id) => selected.push(id)); // onSelect injected (demo's selectChunk)
     c.emit(qStart);
     c.emit(tc(1, "read_chunk", { id: "aaa/00" }));
     c.emit(tc(2, "read_chunk", { id: "aaa/01" })); // current → aaa/01
@@ -83,6 +84,7 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
 
     expect(node("aaa/00").classList.contains("knowdb-current-node")).toBe(true);
     expect(node("aaa/01").classList.contains("knowdb-current-node")).toBe(false);
+    expect(selected).toEqual(["aaa/00"]); // also navigates / opens preview
   });
 
   it("after teardown, further events do not change the DOM (U8)", () => {
