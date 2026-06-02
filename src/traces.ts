@@ -214,17 +214,10 @@ export function aggregateLocalSession(events: LocalCommandEvent[]): LocalSession
 
 const mean = (xs: number[]): number => (xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length);
 
-/** Fallback used when no gaps[] is supplied. Catches the literal `[]`
- *  return path but misses KnownGapResponse; the trace × gap join is
- *  the accurate signal. */
-function isZeroResultTrace(t: QueryTrace): boolean {
-  return t.tool_calls.some((c) => c.tool === "search" && c.output_summary.trim() === "[]");
-}
-
 export function aggregateMetrics(
   browserTraces: QueryTrace[],
   localEvents: LocalCommandEvent[],
-  gaps?: GapEvent[]
+  gaps: GapEvent[]
 ): TraceMetrics {
   const stepsPerQuery = browserTraces.map((t) => t.tool_calls.length);
   const queryDurations = browserTraces.map(
@@ -249,16 +242,15 @@ export function aggregateMetrics(
     cmdDist[e.command] = (cmdDist[e.command] ?? 0) + 1;
   }
 
-  // Trace × gap join is the accurate path (catches KnownGapResponse outputs
-  // the string-sniff misses); falls back to the heuristic when no gaps[].
+  // Zero-result queries via trace × gap join on query_id: a recorded gap whose
+  // query_id matches a trace means that query's search returned no hits. This
+  // catches KnownGapResponse outputs, not just searches whose output is "[]".
   const traceIds = new Set(browserTraces.map((t) => t.query_id));
-  const zeroResultCount = gaps
-    ? new Set(
-        gaps
-          .map((g) => g.query_id)
-          .filter((qid): qid is string => qid !== undefined && traceIds.has(qid))
-      ).size
-    : browserTraces.filter(isZeroResultTrace).length;
+  const zeroResultCount = new Set(
+    gaps
+      .map((g) => g.query_id)
+      .filter((qid): qid is string => qid !== undefined && traceIds.has(qid))
+  ).size;
 
   // read_chunk pattern-usage: mirrors the tool's own truthy check (a falsy
   // pattern means the agent didn't engage the filter — the signal we want).

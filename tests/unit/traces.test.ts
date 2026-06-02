@@ -354,7 +354,12 @@ describe("aggregateMetrics", () => {
         // No final_answer (zero-result, no answer).
       }),
     ];
-    const m = aggregateMetrics(traces, []);
+    // q_20260516_002's search returned no hits; the recorded gap carries its
+    // query_id, and the trace × gap join is what counts it as zero-result.
+    const gaps: GapEvent[] = [
+      { source: "browser", gap_id: "gap_002_001", keyword: "absent", scope: null, timestamp: "2026-05-16T10:00:01Z", query_id: "q_20260516_002" },
+    ];
+    const m = aggregateMetrics(traces, [], gaps);
     expect(m.total_queries).toBe(2);
     expect(m.avg_steps_per_query).toBe((2 + 1) / 2);
     expect(m.avg_query_duration_ms).toBe((2000 + 4000) / 2);
@@ -387,7 +392,7 @@ describe("aggregateMetrics", () => {
         timestamp: "2026-05-16T10:00:02Z",
       },
     ];
-    const m = aggregateMetrics([], evs);
+    const m = aggregateMetrics([], evs, []);
     expect(m.total_local_sessions).toBe(1);
     expect(m.avg_commands_per_local_session).toBe(2);
     expect(m.avg_local_session_duration_ms).toBe(2000);
@@ -395,7 +400,7 @@ describe("aggregateMetrics", () => {
   });
 
   it("returns zeroed metrics for empty inputs", () => {
-    const m = aggregateMetrics([], []);
+    const m = aggregateMetrics([], [], []);
     expect(m.total_queries).toBe(0);
     expect(m.avg_steps_per_query).toBe(0);
     expect(m.avg_query_duration_ms).toBe(0);
@@ -411,7 +416,7 @@ describe("aggregateMetrics", () => {
 
   it("does NOT count an error trace as having a final_answer", () => {
     const t = baseTrace({ final_answer: "partial", error: "boom" });
-    expect(aggregateMetrics([t], []).queries_with_final_answer).toBe(0);
+    expect(aggregateMetrics([t], [], []).queries_with_final_answer).toBe(0);
   });
 
   // queries_with_zero_search_result has two modes:
@@ -440,18 +445,6 @@ describe("aggregateMetrics", () => {
     ];
     const m = aggregateMetrics(traces, [], gaps);
     expect(m.queries_with_zero_search_result).toBe(1);
-  });
-
-  it("when gaps[] absent, falls back to string-sniff on output_summary === '[]'", () => {
-    const traces: QueryTrace[] = [
-      baseTrace({
-        query_id: "q_empty_arr",
-        tool_calls: [
-          { ordinal: 1, tool: "search", input: {}, output_summary: "[]", duration_ms: 5, timestamp: "2026-05-16T10:00:01Z" },
-        ],
-      }),
-    ];
-    expect(aggregateMetrics(traces, []).queries_with_zero_search_result).toBe(1);
   });
 
   it("with gaps[]: a trace whose query_id matches no gap is not counted", () => {
@@ -487,7 +480,7 @@ describe("aggregateMetrics", () => {
     });
 
     it("rate is null when no read_chunk calls are present (avoid false 0%)", () => {
-      const m = aggregateMetrics([baseTrace({ tool_calls: [] })], []);
+      const m = aggregateMetrics([baseTrace({ tool_calls: [] })], [], []);
       expect(m.read_chunk_pattern_usage_rate).toBeNull();
       expect(m.avg_read_chunk_output_chars).toEqual({ with_pattern: 0, without_pattern: 0 });
     });
@@ -501,7 +494,7 @@ describe("aggregateMetrics", () => {
           ],
         }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.read_chunk_pattern_usage_rate).toBe(1);
       expect(m.avg_read_chunk_output_chars.with_pattern).toBe(("matched line".length + "another match".length) / 2);
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe(0);
@@ -511,7 +504,7 @@ describe("aggregateMetrics", () => {
       const traces: QueryTrace[] = [
         baseTrace({ tool_calls: [rc({ id: "d/1" }, "full body of chunk")] }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.read_chunk_pattern_usage_rate).toBe(0);
       expect(m.avg_read_chunk_output_chars.with_pattern).toBe(0);
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe("full body of chunk".length);
@@ -527,7 +520,7 @@ describe("aggregateMetrics", () => {
           ],
         }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.read_chunk_pattern_usage_rate).toBe(2 / 3);
       expect(m.avg_read_chunk_output_chars.with_pattern).toBe((5 + 13) / 2);
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe(24);
@@ -550,7 +543,7 @@ describe("aggregateMetrics", () => {
           ],
         }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.avg_read_chunk_output_chars.with_pattern).toBe(11);
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe(5000);
     });
@@ -561,7 +554,7 @@ describe("aggregateMetrics", () => {
       const traces: QueryTrace[] = [
         baseTrace({ tool_calls: [rc({ id: "d/1" }, "legacy body")] }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.avg_read_chunk_output_chars.without_pattern).toBe("legacy body".length);
     });
 
@@ -577,7 +570,7 @@ describe("aggregateMetrics", () => {
           ],
         }),
       ];
-      const m = aggregateMetrics(traces, []);
+      const m = aggregateMetrics(traces, [], []);
       expect(m.read_chunk_pattern_usage_rate).toBe(0.5);
     });
   });
