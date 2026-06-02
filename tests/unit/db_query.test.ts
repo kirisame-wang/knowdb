@@ -9,6 +9,7 @@ import {
   fetchChunk,
   grepChunk,
   reconstructDocument,
+  compareChunkIds,
 } from "../../src/db_query.js";
 import type { SearchIndex } from "../../src/types.js";
 
@@ -415,5 +416,22 @@ describe("fetchChunk", () => {
   it("throws when fetch returns non-ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     await expect(fetchChunk("aaa00001/99")).rejects.toThrow("404");
+  });
+});
+
+describe("compareChunkIds", () => {
+  it("sorts _index first, then lexical (== hierarchical, zero-padded ids)", () => {
+    const ids = ["aaa/02", "aaa/00", "aaa/_index", "aaa/01-01", "aaa/01"];
+    expect([...ids].sort(compareChunkIds)).toEqual([
+      "aaa/_index",
+      "aaa/00",
+      "aaa/01",
+      "aaa/01-01",
+      "aaa/02",
+    ]);
+  });
+
+  it("returns 0 for equal ids", () => {
+    expect(compareChunkIds("aaa/01", "aaa/01")).toBe(0);
   });
 });

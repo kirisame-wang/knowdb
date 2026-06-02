@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS } from "./agent/tools.js";
 import { runAgentTurn } from "./agent/loop.js";
-import { search, expand, siblings, parent } from "./db_query.js";
+import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db_query.js";
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./ui/audit-trail-viz.js";
@@ -76,7 +76,7 @@ function renderDocTree() {
     const info = manifest[docId]!;
     const chunks = Object.keys(searchIndex)
       .filter((k) => k.startsWith(`${docId}/`))
-      .sort();
+      .sort(compareChunkIds);
 
     const item = document.createElement("div");
     item.className = "doc-item";
@@ -88,12 +88,10 @@ function renderDocTree() {
     const chunkList = document.createElement("div");
     chunkList.className = "chunk-list";
 
-    // _index.md first — gives a TOC overview of the document
-    chunkList.appendChild(createChunkItem(`${docId}/_index`, "_index"));
-
+    // Single source of truth: render exactly the index keys, _index sorted first.
     for (const chunkId of chunks) {
-      const chunkItem = createChunkItem(chunkId, chunkId.split("/")[1]!);
-      chunkList.appendChild(chunkItem);
+      const [, label] = splitId(chunkId); // "aaa/_index" → "_index", "aaa/01" → "01"
+      chunkList.appendChild(createChunkItem(chunkId, label));
     }
 
     label.addEventListener("click", () => {
