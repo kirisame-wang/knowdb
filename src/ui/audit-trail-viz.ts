@@ -118,6 +118,9 @@ interface SubscribableCollector {
   subscribe(cb: (e: TraceCollectorEvent) => void): () => void;
 }
 
+/** token ⓘ 的 hover 文字（U6）。renderFootprint 與 api_round 的 title-only 更新共用。 */
+const tokenTitle = (s: VizState): string => `tokens — in ${s.tokens.input} / out ${s.tokens.output}`;
+
 /** 在既有 heading tree / search 節點上 toggle 當前節點 class（既有節點為 <div>
  *  標 data-id，見 src/ui.ts:createChunkItem）。 */
 function renderHighlight(state: VizState): void {
@@ -141,7 +144,7 @@ function renderFootprint(
   const info = document.createElement("span");
   info.className = "knowdb-token-info";
   info.textContent = "ⓘ";
-  info.title = `tokens — in ${state.tokens.input} / out ${state.tokens.output}`;
+  info.title = tokenTitle(state);
   head.appendChild(info);
 
   const ol = document.createElement("ol");
@@ -170,6 +173,12 @@ function renderFootprint(
   root.append(head, ol);
 }
 
+/** api_round 的 title-only 更新（§2：footprint 不變，僅更新 ⓘ 的 title）。 */
+function updateTokenTitle(state: VizState, footprintRoot: HTMLElement): void {
+  const info = footprintRoot.querySelector<HTMLElement>(".knowdb-token-info");
+  if (info) info.title = tokenTitle(state);
+}
+
 /** 訂閱 collector，把事件流投影為左 panel 的高亮 + footprint。回傳 teardown
  *  fn（每個 subscribe 配對 unsubscribe，U8）。 */
 export function mount(collector: SubscribableCollector, footprintRoot: HTMLElement): () => void {
@@ -178,14 +187,26 @@ export function mount(collector: SubscribableCollector, footprintRoot: HTMLEleme
     state = { ...state, current_node_chunk_id: chunkId }; // read-side only — 不 mutate trace
     renderHighlight(state); // §5: click → 僅重繪高亮
   };
-  const renderAll = (): void => {
+  const renderFull = (): void => {
     renderHighlight(state);
     renderFootprint(state, footprintRoot, onJump);
   };
-  renderAll();
+  renderFull();
+  // 按事件種類分派渲染粒度（§2）：query_start / tool_call_added 重繪足跡，
+  // api_round_added 僅更新 token title，query_end noop。
   const unsubscribe = collector.subscribe((e) => {
     state = reduce(state, e);
-    renderAll();
+    switch (e.kind) {
+      case "query_start":
+      case "tool_call_added":
+        renderFull();
+        break;
+      case "api_round_added":
+        updateTokenTitle(state, footprintRoot);
+        break;
+      case "query_end":
+        break;
+    }
   });
   return () => unsubscribe();
 }

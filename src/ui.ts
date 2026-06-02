@@ -29,12 +29,11 @@ function el<T extends HTMLElement>(id: string): T {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
-let teardownAuditTrailViz: (() => void) | null = null;
-
 // 軌跡可視化（spec-audit-trail-ui）：訂閱同一個 traceCollector，投影到左 panel
-// 的 footprint root；保留 teardown 供日後 route 切換時 unmount（U8）。
+// 的 footprint root。mount() 回傳 teardown（U8 的 subscribe/unsubscribe 配對在
+// lib 層備妥）；demo 無 route 切換，viz 與 collector 同為 page lifetime，故捨棄。
 function setupAuditTrailViz() {
-  teardownAuditTrailViz = mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"));
+  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"));
 }
 
 async function init() {
