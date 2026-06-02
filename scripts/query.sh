@@ -55,8 +55,9 @@ now_ms() {
 }
 
 # Append a LocalCommandEvent line, schema-identical to the browser
-# TraceCollector (src/traces.ts). Best-effort: any IO error is swallowed
-# so the subcommand's contract (stdout + exit code) is never affected.
+# TraceCollector (src/traces.ts) — except command_id, intentionally a dated
+# daily-sequence here vs an opaque id in the browser. Best-effort: any IO error
+# is swallowed so the subcommand's contract (stdout + exit code) is never affected.
 record_command_trace() {
   local cmd="$1" exit_code="$2" t0="$3"
   shift 3
@@ -88,7 +89,8 @@ record_command_trace() {
 }
 
 # Append a GapEvent line, schema-identical to the browser sink
-# (src/gaps.ts BrowserGapSink). The script owns recording.
+# (src/gaps.ts BrowserGapSink) — except gap_id (dated daily-sequence here,
+# opaque in browser). The script owns recording.
 record_gap() {
   local kw="$1" scope_in="$2"
   mkdir -p "$GAPS_DIR"

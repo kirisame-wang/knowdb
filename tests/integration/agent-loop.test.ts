@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import { runAgentTurn, type AgentLoopDeps, type MessagesClient } from "../../src/agent/loop.js";
 import { KNOWDB_TOOLS } from "../../src/agent/tools.js";
+import { SKILL } from "../../src/agent/skill.js";
 import { BrowserGapSink } from "../../src/gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "../../src/traces.js";
 import { SessionContext, parseJsonl } from "../../src/utils.js";
@@ -214,15 +215,69 @@ describe("runAgentTurn — integration", () => {
     ]);
     const deps = makeDeps(client);
     const log: string[] = [];
+    let toolArgs: { name: string; input: unknown; result: string } | null = null;
     deps.hooks = {
       onUserMessage: (t) => log.push(`user:${t}`),
       onThinkingStart: () => log.push("thinking"),
       onToolsStart: () => log.push("tools"),
-      onToolCall: (name) => log.push(`tool:${name}`),
+      onToolCall: (name, input, result) => {
+        log.push(`tool:${name}`);
+        toolArgs = { name, input, result };
+      },
       onAssistantMessage: (t) => log.push(`asst:${t}`),
     };
 
     await runAgentTurn(deps, "Q");
     expect(log).toEqual(["user:Q", "thinking", "tools", "tool:search", "asst:Done."]);
+    // onToolCall delivers the live input and raw result, not just the name.
+    expect(toolArgs).toEqual({ name: "search", input: { keyword: "BM25" }, result: expect.any(String) });
+  });
+
+  it("records raw output_chars (pre-truncation) and clock-stamped timestamps", async () => {
+    // get_instructions returns SKILL (>600 chars), so the raw output_chars and
+    // the truncated output_summary must differ — guards output_chars wiring.
+    const client = scriptedClient([
+      msg([toolUse("tu_1", "get_instructions", {})]),
+      msg([text("ok")]),
+    ]);
+    const deps = makeDeps(client);
+    let t = Date.parse("2026-05-16T10:00:00Z");
+    deps.now = () => {
+      const d = new Date(t);
+      t += 1000;
+      return d;
+    };
+
+    const trace = (await runAgentTurn(deps, "How do I use the tools?"))!;
+
+    const tc = trace.tool_calls[0]!;
+    expect(tc.output_chars).toBe(SKILL.length);
+    expect(tc.output_summary.length).toBeLessThan(tc.output_chars!);
+    expect(tc.duration_ms).toBeGreaterThanOrEqual(0);
+    // Injected clock stamps start → tool → end on successive ticks.
+    expect(trace.started_at).toBe("2026-05-16T10:00:00.000Z");
+    expect(tc.timestamp).toBe("2026-05-16T10:00:01.000Z");
+    expect(trace.ended_at).toBe("2026-05-16T10:00:02.000Z");
+  });
+
+  it("two tool_use blocks in one response: both recorded, ordinals in block order", async () => {
+    const client = scriptedClient([
+      msg([
+        toolUse("tu_1", "search", { keyword: "BM25" }),
+        toolUse("tu_2", "parent", { id: "aaa00001/01" }),
+      ]),
+      msg([text("Done.")]),
+    ]);
+    const deps = makeDeps(client);
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    // One round fans out two tool calls; ordinals follow block order.
+    expect(trace.tool_calls.map((c) => [c.ordinal, c.tool])).toEqual([
+      [1, "search"],
+      [2, "parent"],
+    ]);
+    expect(trace.tool_calls.every((c) => typeof c.output_chars === "number")).toBe(true);
+    expect(trace.api_rounds).toHaveLength(2);
   });
 });
