@@ -88,12 +88,26 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     c.emit(qStart);
     c.emit(tc(1, "read_chunk", { id: "aaa/00" }));
     c.emit(tc(2, "read_chunk", { id: "aaa/01" })); // current → aaa/01
+    selected.length = 0; // ignore navigation auto-previews; isolate the click
 
     fpRoot().querySelector<HTMLElement>('.knowdb-footprint li[data-ordinal="1"]')!.click();
 
     expect(node("aaa/00").classList.contains("knowdb-current-node")).toBe(true);
     expect(node("aaa/01").classList.contains("knowdb-current-node")).toBe(false);
     expect(selected).toEqual(["aaa/00"]); // also navigates / opens preview
+  });
+
+  it("auto-loads the preview for the current node during navigation, no click (#1)", () => {
+    const c = new FakeCollector();
+    const selected: string[] = [];
+    mount(c, fpRoot(), (id) => selected.push(id));
+    c.emit(qStart);
+    c.emit(tc(1, "read_chunk", { id: "aaa/00" }));
+    c.emit(tc(2, "search", { keyword: "x" })); // no chunk_id → current node unchanged → no preview
+    c.emit(tc(3, "read_chunk", { id: "aaa/01" }));
+
+    // preview follows each read-class step; search (no chunk) does not re-trigger
+    expect(selected).toEqual(["aaa/00", "aaa/01"]);
   });
 
   it("after teardown, further events do not change the DOM (U8)", () => {

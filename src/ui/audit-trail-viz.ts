@@ -213,11 +213,18 @@ export function mount(
   // 按事件種類分派渲染粒度（§2）：query_start / tool_call_added 重繪足跡，
   // api_round_added 僅更新 token title，query_end noop。
   const unsubscribe = collector.subscribe((e) => {
+    const prevNode = state.current_node_chunk_id;
     state = reduce(state, e);
     switch (e.kind) {
       case "query_start":
+        renderFull();
+        break;
       case "tool_call_added":
         renderFull();
+        // 導航時自動載入當前節點預覽：agent 讀到哪，左下預覽就顯示哪（無需手動點 footprint）。
+        if (state.current_node_chunk_id && state.current_node_chunk_id !== prevNode) {
+          onSelect?.(state.current_node_chunk_id);
+        }
         break;
       case "api_round_added":
         updateTokenTitle(state, footprintRoot);
