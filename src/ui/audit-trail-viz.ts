@@ -124,8 +124,20 @@ const tokenTitle = (s: VizState): string => `tokens — in ${s.tokens.input} / o
 /** 在既有 heading tree / search 節點上 toggle 當前節點 class（既有節點為 <div>
  *  標 data-id，見 src/ui.ts:createChunkItem）。 */
 function renderHighlight(state: VizState): void {
+  const current = state.current_node_chunk_id;
   document.querySelectorAll<HTMLElement>(".chunk-item, .search-result-item").forEach((node) => {
-    node.classList.toggle("knowdb-current-node", node.dataset.id === state.current_node_chunk_id);
+    const isCurrent = node.dataset.id === current;
+    node.classList.toggle("knowdb-current-node", isCurrent);
+    if (isCurrent) {
+      // chunk-item 預設收在折疊的 .chunk-list 內——展開其所屬 doc，讓高亮可見
+      // （對齊 demo 的 doc-label 展開：.open 同時加在 .chunk-list 與其前面的 .doc-label）。
+      const list = node.closest<HTMLElement>(".chunk-list");
+      if (list) {
+        list.classList.add("open");
+        (list.previousElementSibling as HTMLElement | null)?.classList.add("open");
+      }
+      node.scrollIntoView?.({ block: "nearest" });
+    }
   });
 }
 

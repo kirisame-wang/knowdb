@@ -36,10 +36,16 @@ const fpRoot = (): HTMLElement => document.getElementById("fp-root")!;
 const node = (id: string): HTMLElement => document.querySelector<HTMLElement>(`.chunk-item[data-id="${id}"]`)!;
 
 beforeEach(() => {
+  // Mirror the real doc-tree structure (renderDocTree): collapsed .chunk-list by default.
   document.body.innerHTML = `
     <div id="doc-tree">
-      <div class="chunk-item" data-id="aaa/00">00</div>
-      <div class="chunk-item" data-id="aaa/01">01</div>
+      <div class="doc-item">
+        <div class="doc-label"><span>doc aaa</span></div>
+        <div class="chunk-list">
+          <div class="chunk-item" data-id="aaa/00">00</div>
+          <div class="chunk-item" data-id="aaa/01">01</div>
+        </div>
+      </div>
     </div>
     <div id="fp-root"></div>`;
 });
@@ -58,6 +64,9 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
 
     expect(node("aaa/01").classList.contains("knowdb-current-node")).toBe(true);
     expect(node("aaa/00").classList.contains("knowdb-current-node")).toBe(false);
+    // auto-expands the containing doc so the highlight is visible
+    expect(document.querySelector(".chunk-list")!.classList.contains("open")).toBe(true);
+    expect(document.querySelector(".doc-label")!.classList.contains("open")).toBe(true);
   });
 
   it("token ⓘ title reflects accumulated tokens; no standing token text (U6)", () => {
