@@ -368,6 +368,9 @@ async function sendMessage() {
 
   input.value = "";
   el("btn-send").setAttribute("disabled", "");
+  // 導航期間還原 doc tree 並鎖搜尋：使用者無法重建 #doc-tree，live 高亮全程不失效（C3）。
+  renderDocTree();
+  el("search-input").setAttribute("disabled", "");
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   let thinkingBubble: HTMLElement | null = null;
@@ -412,6 +415,7 @@ async function sendMessage() {
     );
   } finally {
     el("btn-send").removeAttribute("disabled");
+    el("search-input").removeAttribute("disabled");
   }
 }
 
