@@ -118,8 +118,20 @@ interface SubscribableCollector {
   subscribe(cb: (e: TraceCollectorEvent) => void): () => void;
 }
 
-/** token ⓘ 的 hover 文字（U6）。renderFootprint 與 api_round 的 title-only 更新共用。 */
-const tokenTitle = (s: VizState): string => `tokens — in ${s.tokens.input} / out ${s.tokens.output}`;
+export interface Pricing {
+  inputPerMTok: number; // USD per 1M input tokens
+  outputPerMTok: number; // USD per 1M output tokens
+}
+
+/** token ⓘ 的 hover 文字（U6）。明確標範圍為「this query」（= 一次 agent run；
+ *  query_start 歸零，非整個 session）。有 pricing 時附一行費用試算。
+ *  renderFootprint 與 api_round 的 title-only 更新共用。 */
+const tokenTitle = (s: VizState, pricing?: Pricing): string => {
+  const base = `this query — tokens in ${s.tokens.input} / out ${s.tokens.output}`;
+  if (!pricing) return base;
+  const cost = (s.tokens.input * pricing.inputPerMTok + s.tokens.output * pricing.outputPerMTok) / 1_000_000;
+  return `${base}\nest. cost — $${cost.toFixed(4)}`;
+};
 
 /** 在既有 heading tree / search 節點上 toggle 當前節點 class（既有節點為 <div>
  *  標 data-id，見 src/ui.ts:createChunkItem）。 */
@@ -146,7 +158,8 @@ function renderHighlight(state: VizState): void {
 function renderFootprint(
   state: VizState,
   root: HTMLElement,
-  onJump: (chunkId: string) => void
+  onJump: (chunkId: string) => void,
+  pricing?: Pricing
 ): void {
   root.innerHTML = "";
 
@@ -156,7 +169,7 @@ function renderFootprint(
   const info = document.createElement("span");
   info.className = "knowdb-token-info";
   info.textContent = "ⓘ";
-  info.title = tokenTitle(state);
+  info.title = tokenTitle(state, pricing);
   head.appendChild(info);
 
   const ol = document.createElement("ol");
@@ -186,9 +199,9 @@ function renderFootprint(
 }
 
 /** api_round 的 title-only 更新（§2：footprint 不變，僅更新 ⓘ 的 title）。 */
-function updateTokenTitle(state: VizState, footprintRoot: HTMLElement): void {
+function updateTokenTitle(state: VizState, footprintRoot: HTMLElement, pricing?: Pricing): void {
   const info = footprintRoot.querySelector<HTMLElement>(".knowdb-token-info");
-  if (info) info.title = tokenTitle(state);
+  if (info) info.title = tokenTitle(state, pricing);
 }
 
 /** 訂閱 collector，把事件流投影為左 panel 的高亮 + footprint。回傳 teardown
@@ -197,7 +210,8 @@ function updateTokenTitle(state: VizState, footprintRoot: HTMLElement): void {
 export function mount(
   collector: SubscribableCollector,
   footprintRoot: HTMLElement,
-  onSelect?: (chunkId: string) => void
+  onSelect?: (chunkId: string) => void,
+  pricing?: Pricing
 ): () => void {
   let state = initialState();
   const onJump = (chunkId: string): void => {
@@ -207,7 +221,7 @@ export function mount(
   };
   const renderFull = (): void => {
     renderHighlight(state);
-    renderFootprint(state, footprintRoot, onJump);
+    renderFootprint(state, footprintRoot, onJump, pricing);
   };
   renderFull();
   // 按事件種類分派渲染粒度（§2）：query_start / tool_call_added 重繪足跡，
@@ -227,7 +241,7 @@ export function mount(
         }
         break;
       case "api_round_added":
-        updateTokenTitle(state, footprintRoot);
+        updateTokenTitle(state, footprintRoot, pricing);
         break;
       case "query_end":
         break;

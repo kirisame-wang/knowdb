@@ -5,6 +5,7 @@ import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./ui/audit-trail-viz.js";
+import { MODEL } from "./constants.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -34,7 +35,7 @@ function el<T extends HTMLElement>(id: string): T {
 // lib 層備妥）；demo 無 route 切換，viz 與 collector 同為 page lifetime，故捨棄。
 function setupAuditTrailViz() {
   // onSelect = selectChunk：footprint 點擊載入預覽並連動 demo 選取（C4）。
-  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"), selectChunk);
+  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"), selectChunk, MODEL.pricing);
 }
 
 async function init() {
@@ -382,8 +383,8 @@ async function sendMessage() {
         gapSink,
         searchIndex,
         manifest,
-        model: "claude-haiku-4-5-20251001",
-        maxTokens: 2048,
+        model: MODEL.id,
+        maxTokens: MODEL.maxTokens,
         system:
           "You are a helpful assistant with access to a knowledge base via tools. " +
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",

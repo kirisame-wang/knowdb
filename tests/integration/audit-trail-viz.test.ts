@@ -77,8 +77,18 @@ describe("audit-trail-viz DOM smoke (spec §5)", () => {
     c.emit(round(80, 25));
 
     const info = fpRoot().querySelector<HTMLElement>(".knowdb-token-info")!;
-    expect(info.title).toBe("tokens — in 180 / out 55");
+    expect(info.title).toBe("this query — tokens in 180 / out 55"); // scope-labeled, per-run
     expect(info.textContent).toBe("ⓘ"); // 只有圖示，無常駐 token 文字
+  });
+
+  it("with pricing, the ⓘ title adds an estimated cost line (this-query scope)", () => {
+    const c = new FakeCollector();
+    mount(c, fpRoot(), undefined, { inputPerMTok: 1, outputPerMTok: 5 });
+    c.emit(qStart);
+    c.emit(round(1_000_000, 200_000)); // $1.00 in + $1.00 out = $2.0000
+
+    const info = fpRoot().querySelector<HTMLElement>(".knowdb-token-info")!;
+    expect(info.title).toBe("this query — tokens in 1000000 / out 200000\nest. cost — $2.0000");
   });
 
   it("clicking a footprint entry jumps the highlight and opens the preview (C4)", () => {
