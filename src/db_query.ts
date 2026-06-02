@@ -280,6 +280,14 @@ export function splitId(id: string): [string, string] {
   return [id.slice(0, slash), id.slice(slash + 1)];
 }
 
+/** Order chunk ids for display: `_index` first (TOC overview), then lexical —
+ *  segment ids are zero-padded (ingest), so lexical order == hierarchical order. */
+export function compareChunkIds(a: string, b: string): number {
+  const ai = a.endsWith("/_index") ? 0 : 1;
+  const bi = b.endsWith("/_index") ? 0 : 1;
+  return ai - bi || a.localeCompare(b);
+}
+
 function countOccurrences(text: string, keyword: string): number {
   let count = 0;
   let pos = 0;

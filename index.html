@@ -387,6 +387,18 @@
 
       .btn-send:disabled { opacity: 0.55; cursor: not-allowed; }
 
+      /* ── Audit trail trajectory viz ── */
+      .knowdb-current-node { background: #fff3a0; font-weight: bold; }
+      .knowdb-footprint-head { margin-top: 1em; font-size: 0.85em; font-weight: bold; }
+      .knowdb-token-info { margin-left: 0.4em; font-weight: normal; opacity: 0.5; cursor: help; }
+      .knowdb-footprint { margin-top: 0.4em; font-family: monospace; font-size: 0.85em; list-style: none; padding: 0; max-height: 30vh; overflow-y: auto; }
+      .knowdb-footprint li { padding: 2px 4px; cursor: pointer; }
+      .knowdb-footprint li:hover { background: #eee; }
+      .knowdb-footprint .ord { opacity: 0.6; }
+      .knowdb-footprint .tool { font-weight: bold; }
+      /* search is locked while the agent runs — make the disabled state obvious */
+      .search-input:disabled { opacity: 0.45; cursor: not-allowed; }
+
       /* ── Responsive ── */
       @media (max-width: 768px) {
         .layout { flex-direction: column; }
@@ -407,6 +419,7 @@
           <div class="doc-tree" id="doc-tree">
             <div class="status-text">Loading…</div>
           </div>
+          <div class="footprint-root" id="knowdb-footprint-root"></div>
           <div class="preview-area" id="preview-area">
             <div class="status-text">Select a chunk to preview</div>
           </div>

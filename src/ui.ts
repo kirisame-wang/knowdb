@@ -1,9 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS } from "./agent/tools.js";
 import { runAgentTurn } from "./agent/loop.js";
-import { search, expand, siblings, parent } from "./db_query.js";
+import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db_query.js";
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
+import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
+import { MODEL, MAX_OUTPUT_TOKENS } from "./constants.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -28,6 +30,14 @@ function el<T extends HTMLElement>(id: string): T {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+// Mount the trajectory viz against the same trace collector that feeds the
+// sink, rendering into the footprint root below the doc tree. mount() returns a
+// teardown; the demo lives for the page lifetime, so it is discarded.
+function setupAuditTrailViz() {
+  // onSelect = selectChunk: a footprint click (or navigation) opens the preview.
+  mountAuditTrailViz(traceCollector, el("knowdb-footprint-root"), selectChunk, MODEL.pricing);
+}
+
 async function init() {
   try {
     const [idx, man] = await Promise.all([
@@ -48,6 +58,7 @@ async function init() {
   setupChat();
   setupGapExport();
   setupTraceExport();
+  setupAuditTrailViz();
 }
 
 // ── Left Panel: Doc Tree ──────────────────────────────────────────────────────
@@ -66,7 +77,7 @@ function renderDocTree() {
     const info = manifest[docId]!;
     const chunks = Object.keys(searchIndex)
       .filter((k) => k.startsWith(`${docId}/`))
-      .sort();
+      .sort(compareChunkIds);
 
     const item = document.createElement("div");
     item.className = "doc-item";
@@ -78,12 +89,10 @@ function renderDocTree() {
     const chunkList = document.createElement("div");
     chunkList.className = "chunk-list";
 
-    // _index.md first — gives a TOC overview of the document
-    chunkList.appendChild(createChunkItem(`${docId}/_index`, "_index"));
-
+    // Single source of truth: render exactly the index keys, _index sorted first.
     for (const chunkId of chunks) {
-      const chunkItem = createChunkItem(chunkId, chunkId.split("/")[1]!);
-      chunkList.appendChild(chunkItem);
+      const [, label] = splitId(chunkId); // "aaa/_index" → "_index", "aaa/01" → "01"
+      chunkList.appendChild(createChunkItem(chunkId, label));
     }
 
     label.addEventListener("click", () => {
@@ -358,6 +367,10 @@ async function sendMessage() {
 
   input.value = "";
   el("btn-send").setAttribute("disabled", "");
+  // Restore the doc tree and lock search for the turn so the user can't rebuild
+  // it out from under the live highlight (re-enabled in the finally below).
+  renderDocTree();
+  el("search-input").setAttribute("disabled", "");
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   let thinkingBubble: HTMLElement | null = null;
@@ -371,8 +384,8 @@ async function sendMessage() {
         gapSink,
         searchIndex,
         manifest,
-        model: "claude-haiku-4-5-20251001",
-        maxTokens: 2048,
+        model: MODEL.id,
+        maxTokens: MAX_OUTPUT_TOKENS,
         system:
           "You are a helpful assistant with access to a knowledge base via tools. " +
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
@@ -402,6 +415,7 @@ async function sendMessage() {
     );
   } finally {
     el("btn-send").removeAttribute("disabled");
+    el("search-input").removeAttribute("disabled");
   }
 }
 
