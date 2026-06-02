@@ -174,8 +174,7 @@ export class BrowserTraceCollector implements TraceCollector {
       try {
         cb(e);
       } catch {
-        // Intentionally swallow: observability bus has no recourse for a
-        // misbehaving consumer beyond not letting it poison the producer.
+        // Swallow: a buggy consumer must not poison the producer.
       }
     }
   }
