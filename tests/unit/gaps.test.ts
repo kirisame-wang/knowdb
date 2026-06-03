@@ -6,7 +6,6 @@ import {
   aggregate,
   checkKnownGap,
   BrowserGapSink,
-  HIGH,
   MID,
 } from "../../src/gaps.js";
 import { SessionContext } from "../../src/utils.js";
@@ -108,25 +107,29 @@ describe("checkKnownGap", () => {
     expect(r.recommendation).toContain("alternative");
   });
 
-  it("between MID and HIGH stays in the alternative-keyword tier", () => {
-    const r = checkKnownGap(many("sharding", MID + 1), "sharding")!;
-    expect(r.recommendation).toContain("alternative");
-    expect(r.recommendation).not.toContain("coverage");
+  it("above MID keeps the same honest-bounded statement (no severity tier)", () => {
+    const low = checkKnownGap(many("sharding", MID), "sharding")!;
+    const high = checkKnownGap(many("sharding", MID + 20), "sharding")!;
+    // wording does not change with frequency — occurrence_count carries that, not the message
+    expect(low.recommendation).toBe(high.recommendation);
+    expect(high.gap_info.occurrence_count).toBe(MID + 20);
   });
 
-  it("at/above HIGH recommends out-of-coverage", () => {
-    const r = checkKnownGap(many("federation", HIGH), "federation")!;
-    expect(r.gap_info.occurrence_count).toBe(HIGH);
-    expect(r.recommendation).toContain("coverage");
-    const r2 = checkKnownGap(many("federation", HIGH + 5), "federation")!;
-    expect(r2.recommendation).toContain("coverage");
+  it("reports probe facts (uncovered wording), not an over-claimed coverage verdict", () => {
+    const r = checkKnownGap(many("federation", MID + 9), "federation")!;
+    // honest bounded statement: report what was probed; do NOT claim the topic is absent (community feedback 5)
+    expect(r.recommendation).toContain("does not confirm the topic is absent");
+    expect(r.recommendation).toContain("alternative");
+    // regression guard: the old over-claim ("not within ... coverage") must be gone
+    expect(r.recommendation).not.toContain("not within the current knowledge base's coverage");
   });
 
   it("matches via normalized keyword and reports the count + topic", () => {
-    const r = checkKnownGap(many("Advanced  Config", HIGH), "  advanced config ")!;
+    const n = MID + 9;
+    const r = checkKnownGap(many("Advanced  Config", n), "  advanced config ")!;
     expect(r.gap_info.topic).toBe("advanced config");
-    expect(r.gap_info.occurrence_count).toBe(HIGH);
-    expect(r.message).toContain(String(HIGH));
+    expect(r.gap_info.occurrence_count).toBe(n);
+    expect(r.message).toContain(String(n));
   });
 
   it("propagates first_seen into gap_info", () => {
@@ -216,8 +219,7 @@ describe("BrowserGapSink", () => {
 });
 
 describe("threshold constants", () => {
-  it("HIGH > MID > 0", () => {
-    expect(HIGH).toBeGreaterThan(MID);
+  it("MID > 0 (single known_gap threshold; HIGH tier removed)", () => {
     expect(MID).toBeGreaterThan(0);
   });
 });
