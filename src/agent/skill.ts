@@ -29,8 +29,9 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
   object whose \`status === "known_gap"\` (not an array), this keyword has
   repeatedly returned nothing. Read the human-readable \`recommendation\`
   field and follow it; use \`gap_info.occurrence_count\` to gauge how firmly
-  to stop. Either tell the user it is not covered or try a genuinely
-  different term — never re-run the same fruitless keyword.
+  to stop. Never re-run the same fruitless keyword. (The recommendation field
+  already says what to do and that the wording — not the topic — came up
+  empty; phrase it to the user as you judge fit.)
 
 ## Step 4 — Read minimally
 Choose the right read tool:
@@ -58,6 +59,6 @@ Choose the right read tool:
    Use \`reconstruct_document\` only when you genuinely need the whole text.
 7. **Follow \`jump_to_ref\`** after reading a relevant chunk to find connected
    material in other documents — it surfaces implicit cross-document links.
-8. **Respect a \`known_gap\`** — don't loop the same fruitless keyword; either
-   tell the user it's out of coverage or try a genuinely different term.
+8. **Respect a \`known_gap\`** — read its recommendation and follow it;
+   don't loop the same fruitless keyword.
 `.trim();
