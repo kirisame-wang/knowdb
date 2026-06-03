@@ -3,6 +3,7 @@ import { classifyQuery } from "./classify.js";
 import { detectExplicitGap } from "./detect-gap.js";
 import { rollupVariant } from "./rollup.js";
 import type {
+  AxisDelta,
   BenchmarkProblem,
   BenchmarkReport,
   BenchmarkRun,
@@ -10,6 +11,12 @@ import type {
   TurnResult,
   VariantAssignment,
 } from "./types.js";
+
+// Ablation convention: the full-config variant is the baseline every axis-off
+// variant is measured against. grep+cat is an external comparison, not an
+// ablation axis, so it is excluded from per_axis.
+const BASELINE_VARIANT = "full";
+const EXTERNAL_VARIANT = "baseline_grep_cat";
 
 // B7 — pure synthesis from raw trace + side-car + rubric. Same inputs → same
 // output; this is the single official source for published numbers.
@@ -65,21 +72,33 @@ export function computeReport(
     });
 
   const aggregates = run.variants.map((v) => rollupVariant(v, results, traces, assignOf, problemOf));
-  const a = aggregates.find((x) => x.variant === "A");
-  const b = aggregates.find((x) => x.variant === "B");
-  const baseline = aggregates.find((x) => x.variant === "baseline_grep_cat");
+  const full = aggregates.find((x) => x.variant === BASELINE_VARIANT);
+  const external = aggregates.find((x) => x.variant === EXTERNAL_VARIANT);
+
+  // per-axis delta = full − axis-off (the external grep+cat comparison is not an axis)
+  const per_axis: AxisDelta[] = full
+    ? aggregates
+        .filter((x) => x.variant !== BASELINE_VARIANT && x.variant !== EXTERNAL_VARIANT)
+        .map((x) => ({
+          variant: x.variant,
+          success_rate_delta: full.success_rate - x.success_rate,
+          decision_steps_delta: x.avg_decision_steps - full.avg_decision_steps,
+          explicit_gap_rate_delta: full.explicit_gap_rate - x.explicit_gap_rate,
+        }))
+    : [];
 
   return {
     run,
     results,
     aggregates,
     deltas: {
-      b_minus_a_success_rate: b && a ? b.success_rate - a.success_rate : NaN,
-      ...(b && baseline
+      baseline_variant: BASELINE_VARIANT,
+      per_axis,
+      ...(full && external
         ? {
             knowdb_vs_grep_cat_token_ratio: {
-              input: b.avg_tokens.input / baseline.avg_tokens.input,
-              output: b.avg_tokens.output / baseline.avg_tokens.output,
+              input: full.avg_tokens.input / external.avg_tokens.input,
+              output: full.avg_tokens.output / external.avg_tokens.output,
             },
           }
         : {}),

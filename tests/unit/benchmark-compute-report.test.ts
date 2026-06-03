@@ -59,14 +59,15 @@ const run: BenchmarkRun = {
   knowdb_commit_sha: "deadbeef",
   tool_set_version: "v1",
   problem_set_id: "corpus-test",
-  variants: ["A", "B"],
+  variants: ["full", "no_search", "baseline_grep_cat"], // ablation axes + external comparison
   started_at: "2026-06-03T00:00:00Z",
   ended_at: "2026-06-03T01:00:00Z",
   reviewer: "tester",
 };
 
-// Variant A: tokens 100/50; turn1 fails rubric_2 → success_rate 2/3.
-// Variant B: tokens 200/100; all pass → success_rate 1.
+// full: tokens 200/100, all pass → success_rate 1 (the baseline).
+// no_search (search-off axis): tokens 100/50, turn1 fails → success_rate 2/3.
+// baseline_grep_cat (external): tokens 400/200, all pass → drives token ratio.
 function buildVariant(v: string, input: number, output: number, failTurn1: boolean) {
   const traces: QueryTrace[] = turnCalls.map((calls, i) => trace(`q_${v}_${i}`, calls, input, output));
   const assignments: VariantAssignment[] = traces.map((t, i) => ({
@@ -89,33 +90,34 @@ function buildVariant(v: string, input: number, output: number, failTurn1: boole
   return { traces, assignments, grades };
 }
 
-const A = buildVariant("A", 100, 50, true);
-const B = buildVariant("B", 200, 100, false);
+const FULL = buildVariant("full", 200, 100, false);
+const NOSEARCH = buildVariant("no_search", 100, 50, true);
+const GREPCAT = buildVariant("baseline_grep_cat", 400, 200, false);
 
 // A dogfooding trace with NO side-car assignment — must be skipped entirely.
 const dogfooding = trace("q_dogfood", [call("read_chunk", { id: "zzz/01" })], 999, 999);
 
 const report = computeReport(
-  [...A.traces, ...B.traces, dogfooding],
+  [...FULL.traces, ...NOSEARCH.traces, ...GREPCAT.traces, dogfooding],
   [], // gapEvents — reserved cross-check, unused here
-  [...A.assignments, ...B.assignments],
+  [...FULL.assignments, ...NOSEARCH.assignments, ...GREPCAT.assignments],
   [problem],
-  [...A.grades, ...B.grades],
+  [...FULL.grades, ...NOSEARCH.grades, ...GREPCAT.grades],
   run,
 );
 
 describe("computeReport (B7/B11) — end-to-end pipeline", () => {
   it("skips traces absent from the side-car (dogfooding isolation)", () => {
-    expect(report.results).toHaveLength(6);
+    expect(report.results).toHaveLength(9); // 3 variants × 3 turns
     expect(report.results.some((r) => r.query_id === "q_dogfood")).toBe(false);
   });
 
   it("emits one aggregate per declared variant, in declared order", () => {
-    expect(report.aggregates.map((a) => a.variant)).toEqual(["A", "B"]);
+    expect(report.aggregates.map((a) => a.variant)).toEqual(["full", "no_search", "baseline_grep_cat"]);
   });
 
-  it("variant A rollup matches hand-computed values", () => {
-    const a = report.aggregates.find((x) => x.variant === "A")!;
+  it("no_search axis rollup matches hand-computed values", () => {
+    const a = report.aggregates.find((x) => x.variant === "no_search")!;
     expect(a.turn_count).toBe(3);
     expect(a.thread_count).toBe(1);
     expect(a.success_rate).toBeCloseTo(2 / 3);
@@ -130,8 +132,8 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     expect(a.cumulative_passage_coverage).toBeCloseTo(2 / 3); // hit {abc/01,abc/03} of {abc/01,abc/02,abc/03}
   });
 
-  it("variant B rollup differs only where grades/tokens differ", () => {
-    const b = report.aggregates.find((x) => x.variant === "B")!;
+  it("full baseline rollup differs only where grades/tokens differ", () => {
+    const b = report.aggregates.find((x) => x.variant === "full")!;
     expect(b.success_rate).toBe(1);
     expect(b.followup_success_rate).toBe(1);
     expect(b.avg_tokens).toEqual({ input: 200, output: 100 });
@@ -139,13 +141,22 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     expect(b.cumulative_passage_coverage).toBeCloseTo(2 / 3);
   });
 
-  it("deltas: b_minus_a headline + undefined grep_cat ratio when baseline absent", () => {
-    expect(report.deltas.b_minus_a_success_rate).toBeCloseTo(1 / 3);
-    expect(report.deltas.knowdb_vs_grep_cat_token_ratio).toBeUndefined();
+  it("deltas: per-axis full − axis-off, grep+cat excluded from axes", () => {
+    expect(report.deltas.baseline_variant).toBe("full");
+    // only no_search is an ablation axis; baseline_grep_cat is the external comparison
+    expect(report.deltas.per_axis.map((d) => d.variant)).toEqual(["no_search"]);
+    const ns = report.deltas.per_axis[0]!;
+    expect(ns.success_rate_delta).toBeCloseTo(1 / 3); // full 1 − no_search 2/3 (search net contribution)
+    expect(ns.decision_steps_delta).toBe(0); // both avg 2
+    expect(ns.explicit_gap_rate_delta).toBeCloseTo(0); // both 1/3
+  });
+
+  it("deltas: knowdb_vs_grep_cat_token_ratio = full / grep+cat when external ran", () => {
+    expect(report.deltas.knowdb_vs_grep_cat_token_ratio).toEqual({ input: 0.5, output: 0.5 }); // 200/400, 100/200
   });
 
   it("per-turn TurnResult carries classification / gap / followup", () => {
-    const a2 = report.results.find((r) => r.query_id === "q_A_2")!;
+    const a2 = report.results.find((r) => r.query_id === "q_no_search_2")!;
     expect(a2.classification_actual).toBe("within_doc");
     expect(a2.explicit_gap_reported).toBe(true);
     expect(a2.is_followup).toBe(true);

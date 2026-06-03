@@ -95,14 +95,23 @@ export interface VariantAggregate {
   cumulative_passage_coverage: number;     // mean per-thread expected_chunk_ids union hit-rate
 }
 
+// Ablation per-axis contribution: full-config minus the axis-off variant.
+export interface AxisDelta {
+  variant: string;                          // axis-off variant, e.g. "no_structure"
+  success_rate_delta: number;               // full − variant (positive = the axis helps)
+  decision_steps_delta: number;             // variant − full (positive = removal costs steps)
+  explicit_gap_rate_delta: number;          // full − variant
+}
+
 export interface BenchmarkReport {
   run: BenchmarkRun;
   results: TurnResult[];                    // flat list, all variants × all turns
   aggregates: VariantAggregate[];           // per-variant rollup
-  deltas: {                                 // derived comparison metrics
-    b_minus_a_success_rate: number;         // the "search net contribution" headline number
-    knowdb_vs_grep_cat_token_ratio?: {      // external baseline; undefined if baseline not run
-      input: number;                        // KnowDB / grep+cat
+  deltas: {                                 // ablation: each axis delta = full − axis-off
+    baseline_variant: string;               // baseline axis name (conventionally "full")
+    per_axis: AxisDelta[];                  // one per non-baseline axis; "search net contribution" = the variant==="no_search" entry
+    knowdb_vs_grep_cat_token_ratio?: {      // optional external comparison; undefined unless baseline_grep_cat ran
+      input: number;                        // full / grep+cat
       output: number;
     };
   };
