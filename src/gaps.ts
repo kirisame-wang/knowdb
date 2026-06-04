@@ -166,7 +166,7 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
   };
 }
 
-// ── Index-only discovery miss (a hint, not a gap) ─────────────────────────
+// ── Index-only discovery miss ──────────────────────────────────────────
 
 /**
  * Hint for an index_only search that matched no heading tree. Not a gap and
