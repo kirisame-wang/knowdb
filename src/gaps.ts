@@ -154,12 +154,8 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
   );
   const count = top.occurrence_count;
 
-  // Honest, indicative retry-scaffold: report that the probed *wording* is
-  // uncovered — not that the topic is absent (a vocabulary-aligned miss, not a
-  // coverage verdict; the latter would be a confident hallucinated gap) — and
-  // nudge the agent to bridge the wording itself rather than reach for a vector
-  // index. occurrence_count is audit frequency, not severity.
-  // See ROADMAP "Abstention 校準邊界" / community.md feedback 5.
+  // The probed *wording* came up empty, not the topic — so this is an honest
+  // miss, not a coverage verdict (which would be a confident false gap).
   return {
     status: "known_gap",
     message: `Known gap: "${top.topic}" returned no results ${count} times in the current knowledge base.`,
