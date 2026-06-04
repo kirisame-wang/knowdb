@@ -432,7 +432,7 @@ describe("aggregateMetrics", () => {
             ordinal: 1,
             tool: "search",
             input: {},
-            output_summary: '{"status":"known_gap","message":"…","gap_info":{},"recommendation":"…"}',
+            output_summary: '{"status":"known_gap","message":"…","gaps":[],"recommendation":"…"}',
             duration_ms: 5,
             timestamp: "2026-05-16T10:00:01Z",
           },

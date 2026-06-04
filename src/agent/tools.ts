@@ -19,7 +19,7 @@ import {
   type GapSink,
 } from "../gaps.js";
 import { nextDailySeq } from "../utils.js";
-import type { SearchIndex, SearchResult, Manifest, GapEvent } from "../types.js";
+import type { SearchIndex, SearchResult, Manifest, GapEvent, ResultsResponse } from "../types.js";
 
 /** Attach the human-readable doc_title (from _manifest) to each result. */
 function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
@@ -56,7 +56,7 @@ export const KNOWDB_TOOLS: Tool[] = [
   },
   {
     name: "search",
-    description: "Search the knowledge base by keyword (regex supported). Returns [{id, score, excerpt, doc_title, breadcrumb, siblings, parent_summary}] sorted by relevance — each result carries its hierarchy position so you know where it sits without extra calls. Always set scope once you know the target document. Use index_only:true to search heading trees only (fast navigation).",
+    description: "Search the knowledge base by keyword (regex supported). Returns an object with a `status`: \"results\" (hits in `hits`, each [{id, score, excerpt, doc_title, breadcrumb, siblings, parent_summary}] carrying its hierarchy position), \"known_gap\" (nothing matched — see `gaps` and `recommendation`), or \"no_index_match\" (index_only miss — see `recommendation`). Always set scope once you know the target document. Use index_only:true to search heading trees only (fast navigation).",
     input_schema: {
       type: "object",
       properties: {
@@ -213,10 +213,15 @@ export async function processToolCall(
         for (const e of stamped) sink.record(e);
         // Count the just-recorded gaps without a second full parse.
         const known = checkKnownGap([...existing, ...stamped], keyword);
-        return JSON.stringify(known ?? []);
+        if (known) return JSON.stringify(known);
+        // null = empty/whitespace keyword the sink skipped: fall through to empty results.
       }
 
-      return JSON.stringify(withDocTitles(results.slice(0, 20), manifest));
+      const out: ResultsResponse = {
+        status: "results",
+        hits: withDocTitles(results.slice(0, 20), manifest),
+      };
+      return JSON.stringify(out);
     }
 
     case "read_chunk": {
