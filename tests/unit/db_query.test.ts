@@ -413,11 +413,6 @@ describe("fetchChunk", () => {
     expect(mockFetch).toHaveBeenCalledWith("db/aaa00001/01-02.md");
   });
 
-  it("throws when fetch returns non-ok response", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
-    await expect(fetchChunk("aaa00001/99")).rejects.toThrow("404");
-  });
-
   it("does not retry a 4xx and names re-location tools (deterministic miss)", async () => {
     const f = vi.fn().mockResolvedValue({ ok: false, status: 404 });
     vi.stubGlobal("fetch", f);
@@ -455,6 +450,22 @@ describe("fetchChunk", () => {
       fetchChunk("aaa00001/01", { maxAttempts: 2, delayMs: () => 0 })
     ).rejects.toThrow(/try again shortly/i);
     expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it("backs off between transient retries, not after the final attempt", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const backoffAttempts: number[] = [];
+    await expect(
+      fetchChunk("aaa00001/01", {
+        maxAttempts: 3,
+        delayMs: (n) => {
+          backoffAttempts.push(n);
+          return 0;
+        },
+      })
+    ).rejects.toThrow();
+    // 3 attempts → backoff only before retries 2 and 3, none after the last.
+    expect(backoffAttempts).toEqual([1, 2]);
   });
 });
 

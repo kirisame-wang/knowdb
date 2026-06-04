@@ -86,6 +86,7 @@ export interface ToolCallEvent {
   input: Record<string, unknown>;  // raw input, deterministic
   output_summary: string;          // truncated tool output (≤ 600 chars; shared truncate)
   output_chars?: number;           // raw output length pre-truncate; pattern-usage diagnostic needs the uncompressed value
+  is_error?: boolean;              // set when the tool threw; output_summary then holds the error message (omitted on success)
   duration_ms: number;             // wall-clock of processToolCall
   timestamp: string;               // ISO 8601 UTC, at tool-call return
 }

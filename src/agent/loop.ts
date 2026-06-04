@@ -122,6 +122,7 @@ export async function runAgentTurn(
           input,
           output_summary: truncateOutput(result),
           output_chars: result.length,
+          ...(isError && { is_error: true }),
           duration_ms: Date.now() - tcT0,
           timestamp: now().toISOString(),
         });

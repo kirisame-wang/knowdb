@@ -85,7 +85,7 @@ export interface FetchChunkOpts {
  *    then surfaced as a "try again shortly" error.
  */
 export async function fetchChunk(id: string, opts?: FetchChunkOpts): Promise<string> {
-  const maxAttempts = opts?.maxAttempts ?? FETCH_CHUNK_MAX_ATTEMPTS;
+  const maxAttempts = Math.max(1, opts?.maxAttempts ?? FETCH_CHUNK_MAX_ATTEMPTS);
   const backoff = opts?.delayMs ?? ((attempt) => 100 * 2 ** (attempt - 1));
   let transient = "";
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
