@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
 import { runAgentTurn, type AgentLoopDeps, type MessagesClient } from "../../src/agent/loop.js";
 import { KNOWDB_TOOLS } from "../../src/agent/tools.js";
@@ -139,6 +139,41 @@ describe("runAgentTurn — integration", () => {
     expect(gaps[0]!.query_id).toBe(trace.query_id);
     expect(gaps[0]!.session_id).toBe("sess-int-1");
     expect(trace.session_id).toBe("sess-int-1");
+  });
+
+  // A tool throwing (e.g. read_chunk hitting a 404) must NOT kill the turn:
+  // the loop converts it into an is_error tool_result so the agent can react.
+  it("tool exception becomes an is_error tool_result and the turn survives", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    try {
+      const client = scriptedClient([
+        msg([toolUse("tu_1", "read_chunk", { id: "aaa00001/99" })]),
+        msg([text("That section is missing; trying another route.")]),
+      ]);
+      const deps = makeDeps(client);
+
+      const trace = (await runAgentTurn(deps, "read a missing chunk"))!;
+
+      // Turn survived the tool throw: a final answer was produced, no fatal error.
+      expect(trace.error).toBeUndefined();
+      expect(trace.final_answer).toContain("another route");
+      expect(trace.tool_calls).toHaveLength(1);
+
+      // The failure reached the agent as an is_error tool_result, not a dead turn.
+      const toolResultTurn = deps.chatHistory.find(
+        (m) =>
+          m.role === "user" &&
+          Array.isArray(m.content) &&
+          m.content.some((b) => (b as { type: string }).type === "tool_result")
+      )!;
+      const block = (toolResultTurn.content as Anthropic.Messages.ToolResultBlockParam[]).find(
+        (b) => b.type === "tool_result"
+      )!;
+      expect(block.is_error).toBe(true);
+      expect(String(block.content)).toMatch(/read_index|re-locate|stale/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("mid-flow client error: trace records error, omits final_answer, still flushes", async () => {

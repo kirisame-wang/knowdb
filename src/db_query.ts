@@ -66,10 +66,48 @@ export function search(
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
 
-export async function fetchChunk(id: string): Promise<string> {
-  const res = await fetch(`db/${id}.md`);
-  if (!res.ok) throw new Error(`fetchChunk failed: ${res.status}`);
-  return res.text();
+const FETCH_CHUNK_MAX_ATTEMPTS = 3;
+const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+export interface FetchChunkOpts {
+  /** Total attempts for transient failures. Default 3. */
+  maxAttempts?: number;
+  /** Backoff before each retry; injectable so tests don't wait. */
+  delayMs?: (attempt: number) => number;
+}
+
+/**
+ * Fetch a chunk's markdown. Failures split by nature: a 4xx is deterministic
+ * (wrong/stale id) and not retried; a 5xx / network reject is transient and
+ * retried with backoff. The thrown messages tell the agent what to do next.
+ */
+export async function fetchChunk(id: string, opts?: FetchChunkOpts): Promise<string> {
+  const maxAttempts = Math.max(1, opts?.maxAttempts ?? FETCH_CHUNK_MAX_ATTEMPTS);
+  const backoff = opts?.delayMs ?? ((attempt) => 100 * 2 ** (attempt - 1));
+  let transient = "";
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`db/${id}.md`);
+    } catch (e) {
+      transient = e instanceof Error ? e.message : String(e); // network-level reject
+      if (attempt < maxAttempts) await delay(backoff(attempt));
+      continue;
+    }
+    if (res.ok) return res.text();
+    if (res.status >= 400 && res.status < 500) {
+      throw new Error(
+        `Chunk "${id}" is unavailable (status ${res.status}) — the id is likely wrong or stale. ` +
+          `Re-locate it with read_index, parent, or search; do not retry this id.`
+      );
+    }
+    transient = `status ${res.status}`; // 5xx
+    if (attempt < maxAttempts) await delay(backoff(attempt));
+  }
+  throw new Error(
+    `Temporary failure fetching chunk "${id}" after ${maxAttempts} attempts (${transient}). ` +
+      `The store may be briefly unavailable — try again shortly.`
+  );
 }
 
 // ── Grep within a chunk ───────────────────────────────────────────────────────

@@ -98,24 +98,40 @@ export async function runAgentTurn(
       for (const block of toolUseBlocks) {
         const tcT0 = Date.now();
         const input = block.input as Record<string, unknown>;
-        const result = await processToolCall(
-          block.name,
-          input,
-          deps.searchIndex,
-          deps.manifest,
-          deps.gapSink,
-          query_id
-        );
+        // A tool throwing must not kill the turn — surface it as an is_error
+        // tool_result so the agent can react. Only messages.create stays fatal.
+        let result: string;
+        let isError = false;
+        try {
+          result = await processToolCall(
+            block.name,
+            input,
+            deps.searchIndex,
+            deps.manifest,
+            deps.gapSink,
+            query_id
+          );
+        } catch (err) {
+          isError = true;
+          result = err instanceof Error ? err.message : String(err);
+          deps.hooks?.onError?.(err);
+        }
         deps.collector.recordToolCall(query_id, {
           tool: block.name,
           input,
           output_summary: truncateOutput(result),
           output_chars: result.length,
+          ...(isError && { is_error: true }),
           duration_ms: Date.now() - tcT0,
           timestamp: now().toISOString(),
         });
         deps.hooks?.onToolCall?.(block.name, input, result);
-        toolResults.push({ type: "tool_result", tool_use_id: block.id, content: result });
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: result,
+          ...(isError && { is_error: true }),
+        });
       }
       deps.chatHistory.push({ role: "user", content: toolResults });
     }
