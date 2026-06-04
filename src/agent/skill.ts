@@ -26,8 +26,8 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
   \`parent_summary\` (parent heading), \`doc_title\`. Read these before
   calling \`parent\` or \`read_index\` — the answer is often already here.
 - **Known-gap response**: detect it structurally — if \`search\` returns an
-  object whose \`status === "known_gap"\` (not an array), this keyword has
-  repeatedly returned nothing. Read the human-readable \`recommendation\`
+  object whose \`status === "known_gap"\` (not an array), this keyword returned
+  nothing. Read the human-readable \`recommendation\`
   field and follow it; use \`gap_info.occurrence_count\` to gauge how firmly
   to stop. Never re-run the same fruitless keyword.
 

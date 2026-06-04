@@ -1,17 +1,6 @@
 import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
 import { utcYmd, toJsonLine, parseJsonl, SessionContext } from "./utils.js";
 
-// ── Known-gap thresholds (tunable) ────────────────────────────────────────
-
-/**
- * ≥ MID occurrences → surface a known_gap. A single threshold: it gates whether
- * a *repeated* miss is worth surfacing as immediate guidance (vs. a one-off `[]`).
- * It does NOT grade severity — occurrence_count carries frequency for audit, and
- * the wording stays an honest probe report at every count (no MID/HIGH tier).
- * Tunable, surfaced.
- */
-export const MID = 3;
-
 // ── Keyword normalization (deterministic, no LLM) ────────────────────────
 
 export function normalizeKeyword(keyword: string): string {
@@ -147,8 +136,8 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
 
 /**
  * Decide whether an empty search hit a known gap. `events` must already
- * include the just-recorded gap. Returns null below MID so the caller
- * keeps the original `[]` behavior (backward compatible).
+ * include the just-recorded gap, so any empty search yields a known_gap;
+ * returns null only when the keyword has no recorded gap at all.
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
   // Decompose simple-OR input into its alternatives so a query like `a|b`
@@ -164,21 +153,13 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
     c.occurrence_count > m.occurrence_count ? c : m
   );
   const count = top.occurrence_count;
-  if (count < MID) return null;
 
-  // Indicative retry-scaffold — not just an honest report. Two jobs:
-  // (1) honest bound: the probed *wording* is uncovered; this is NOT a claim the
-  //     topic is absent (vocabulary-aligned detection, not a coverage verdict),
-  //     which kills the confident hallucinated gap.
-  // (2) direct the retry: nudge the agent to bridge the wording itself —
-  //     synonyms, the corpus's own terms, the term in another language, or
-  //     browsing structure — engaging the LLM's own semantic bridging instead
-  //     of a vector index.
-  // This is the core-hypothesis probe: if the scaffold suffices, KnowDB needs no
-  // vectors; only persistent residual failure justifies escalating to them.
-  // occurrence_count is frequency (gap hotspot for audit), not severity; a single
-  // MID threshold replaces the old MID/HIGH split (HIGH only made the removed
-  // coverage over-claim). See ROADMAP "Abstention 校準邊界" / community.md fb 5.
+  // Honest, indicative retry-scaffold: report that the probed *wording* is
+  // uncovered — not that the topic is absent (a vocabulary-aligned miss, not a
+  // coverage verdict; the latter would be a confident hallucinated gap) — and
+  // nudge the agent to bridge the wording itself rather than reach for a vector
+  // index. occurrence_count is audit frequency, not severity.
+  // See ROADMAP "Abstention 校準邊界" / community.md feedback 5.
   return {
     status: "known_gap",
     message: `Known gap: "${top.topic}" returned no results ${count} times in the current knowledge base.`,

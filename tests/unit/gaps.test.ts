@@ -6,7 +6,6 @@ import {
   aggregate,
   checkKnownGap,
   BrowserGapSink,
-  MID,
 } from "../../src/gaps.js";
 import { SessionContext } from "../../src/utils.js";
 import type { GapEvent } from "../../src/types.js";
@@ -91,32 +90,33 @@ describe("checkKnownGap", () => {
       ev({ keyword: kw, timestamp: new Date(Date.UTC(2026, 4, 1, 0, 0, i)).toISOString() })
     );
 
-  it("returns null below MID (caller falls back to [])", () => {
-    expect(checkKnownGap(many("ksql", MID - 1), "ksql")).toBeNull();
+  it("a single recorded miss already returns known_gap (no threshold)", () => {
+    const r = checkKnownGap(many("ksql", 1), "ksql")!;
+    expect(r).not.toBeNull();
+    expect(r.status).toBe("known_gap");
+    expect(r.gap_info.occurrence_count).toBe(1);
   });
 
   it("returns null when the keyword has never been a gap", () => {
     expect(checkKnownGap(many("other", 20), "never asked")).toBeNull();
   });
 
-  it("at MID returns a known_gap recommending alternative keywords", () => {
-    const r = checkKnownGap(many("sharding", MID), "sharding")!;
-    expect(r).not.toBeNull();
+  it("returns a known_gap recommending alternative wording", () => {
+    const r = checkKnownGap(many("sharding", 4), "sharding")!;
     expect(r.status).toBe("known_gap");
-    expect(r.gap_info.occurrence_count).toBe(MID);
+    expect(r.gap_info.occurrence_count).toBe(4);
     expect(r.recommendation).toContain("alternative");
   });
 
-  it("above MID keeps the same honest-bounded statement (no severity tier)", () => {
-    const low = checkKnownGap(many("sharding", MID), "sharding")!;
-    const high = checkKnownGap(many("sharding", MID + 20), "sharding")!;
-    // wording does not change with frequency — occurrence_count carries that, not the message
+  it("recommendation is count-independent (frequency lives in occurrence_count, not the wording)", () => {
+    const low = checkKnownGap(many("sharding", 1), "sharding")!;
+    const high = checkKnownGap(many("sharding", 25), "sharding")!;
     expect(low.recommendation).toBe(high.recommendation);
-    expect(high.gap_info.occurrence_count).toBe(MID + 20);
+    expect(high.gap_info.occurrence_count).toBe(25);
   });
 
   it("reports probe facts (uncovered wording), not an over-claimed coverage verdict", () => {
-    const r = checkKnownGap(many("federation", MID + 9), "federation")!;
+    const r = checkKnownGap(many("federation", 12), "federation")!;
     // honest bounded statement: report what was probed; do NOT claim the topic is absent (community feedback 5)
     expect(r.recommendation).toContain("does not confirm the topic is absent");
     expect(r.recommendation).toContain("alternative");
@@ -125,7 +125,7 @@ describe("checkKnownGap", () => {
   });
 
   it("matches via normalized keyword and reports the count + topic", () => {
-    const n = MID + 9;
+    const n = 12;
     const r = checkKnownGap(many("Advanced  Config", n), "  advanced config ")!;
     expect(r.gap_info.topic).toBe("advanced config");
     expect(r.gap_info.occurrence_count).toBe(n);
@@ -133,7 +133,7 @@ describe("checkKnownGap", () => {
   });
 
   it("propagates first_seen into gap_info", () => {
-    const evs = many("backup", MID);
+    const evs = many("backup", 2);
     const r = checkKnownGap(evs, "backup")!;
     expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
   });
@@ -218,12 +218,6 @@ describe("BrowserGapSink", () => {
   });
 });
 
-describe("threshold constants", () => {
-  it("MID > 0 (single known_gap threshold; HIGH tier removed)", () => {
-    expect(MID).toBeGreaterThan(0);
-  });
-});
-
 describe("gap key canonicalization (|-alternation)", () => {
   it("aggregates |-alternation regardless of order/case/spacing into one topic", () => {
     const agg = aggregate([
@@ -239,7 +233,7 @@ describe("gap key canonicalization (|-alternation)", () => {
     // Real flow: record-time emits one event per simple-OR alternative;
     // aggregate then has single-term topics. A simple-OR query should find
     // whichever alternative has accumulated misses.
-    const evs = Array.from({ length: MID }, (_, i) =>
+    const evs = Array.from({ length: 2 }, (_, i) =>
       ev({
         keyword: "alpha",
         timestamp: new Date(Date.UTC(2026, 4, 20, 0, 0, i)).toISOString(),
@@ -248,7 +242,7 @@ describe("gap key canonicalization (|-alternation)", () => {
     const r = checkKnownGap(evs, "alpha|beta");
     expect(r).not.toBeNull();
     expect(r!.gap_info.topic).toBe("alpha");
-    expect(r!.gap_info.occurrence_count).toBe(MID);
+    expect(r!.gap_info.occurrence_count).toBe(2);
   });
 
   it("keeps a phrase distinct from an OR (whitespace is literal)", () => {

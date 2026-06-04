@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { KNOWDB_TOOLS, processToolCall } from "../../src/agent/tools.js";
-import { MID, type GapSink } from "../../src/gaps.js";
+import { type GapSink } from "../../src/gaps.js";
 import type { SearchIndex, GapEvent } from "../../src/types.js";
 
 class MemSink implements GapSink {
@@ -153,7 +153,7 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events).toHaveLength(0);
   });
 
-  it("records one well-formed gap and returns [] below MID", async () => {
+  it("records one well-formed gap and returns a known_gap on the first empty search", async () => {
     const sink = new MemSink();
     const raw = await processToolCall(
       "search",
@@ -162,7 +162,9 @@ describe("processToolCall — gap recording on empty search", () => {
       MANIFEST,
       sink
     );
-    expect(JSON.parse(raw)).toEqual([]);
+    const out = JSON.parse(raw);
+    expect(out.status).toBe("known_gap");
+    expect(out.gap_info.occurrence_count).toBe(1);
     expect(sink.events).toHaveLength(1);
     const e = sink.events[0]!;
     expect(e.source).toBe("browser");
@@ -178,16 +180,16 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events[0]!.scope).toBeNull();
   });
 
-  it("returns a known_gap response once occurrences reach MID", async () => {
+  it("occurrence_count accumulates across repeated empty searches", async () => {
     const sink = new MemSink();
     let raw = "";
-    for (let i = 0; i < MID; i++) {
+    for (let i = 0; i < 3; i++) {
       raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
     }
     const out = JSON.parse(raw);
     expect(out.status).toBe("known_gap");
-    expect(out.gap_info.occurrence_count).toBe(MID);
-    expect(sink.events).toHaveLength(MID);
+    expect(out.gap_info.occurrence_count).toBe(3);
+    expect(sink.events).toHaveLength(3);
   });
 
   it("does not record for index_only empty searches", async () => {
