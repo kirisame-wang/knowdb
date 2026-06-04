@@ -71,7 +71,7 @@ export interface KnownGapResponse {
 // than a content miss (the content may live outside headings), so it is not
 // recorded or counted — the hint only keeps the agent from a silent empty.
 export interface NoIndexMatchResponse {
-  status: "no_index_match";      // discriminant; SearchResult[] has no `status`
+  status: "no_index_match";      // discriminant (like KnownGapResponse; arrays have none)
   message: string;
   recommendation: string;
 }

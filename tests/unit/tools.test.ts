@@ -208,6 +208,19 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events).toHaveLength(0);
   });
 
+  // A heading miss must not inflate the gap hotspot: even when the keyword is
+  // already a recorded content gap, an index_only miss adds nothing.
+  it("index_only miss never records, even for a keyword with prior content-miss gaps", async () => {
+    const sink = new MemSink();
+    await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
+    expect(sink.events).toHaveLength(1);
+    const out = JSON.parse(
+      await processToolCall("search", { keyword: ABSENT, index_only: true }, INDEX, MANIFEST, sink)
+    );
+    expect(out.status).toBe("no_index_match");
+    expect(sink.events).toHaveLength(1); // unchanged — no hotspot pollution
+  });
+
   it("does not record for jump_to_ref (only search records)", async () => {
     const sink = new MemSink();
     await processToolCall("jump_to_ref", { id: "aaa00001/00" }, INDEX, MANIFEST, sink);
