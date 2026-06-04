@@ -169,11 +169,9 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
 // ── Index-only discovery miss (a hint, not a gap) ─────────────────────────
 
 /**
- * Hint for an index_only search that matched no heading tree. NOT a gap and
- * never recorded: a heading miss is weaker evidence than a content miss (the
- * content may not appear in any heading), so counting it would pollute the gap
- * hotspot. The hint replaces a silent empty result so the agent escalates to a
- * content search instead of assuming the topic is absent.
+ * Hint for an index_only search that matched no heading tree. Not a gap and
+ * never recorded — a heading miss is weaker evidence than a content miss, so
+ * counting it would pollute the gap hotspot; the hint just averts a silent [].
  */
 export function noIndexMatch(keyword: string): NoIndexMatchResponse {
   return {

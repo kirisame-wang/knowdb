@@ -189,8 +189,7 @@ export async function processToolCall(
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
 
-      // index_only miss: hint, don't record — a heading miss isn't a content
-      // gap (rationale in noIndexMatch).
+      // index_only miss: return a hint, don't record it (see noIndexMatch).
       if (results.length === 0 && indexOnly) {
         return JSON.stringify(noIndexMatch(keyword));
       }

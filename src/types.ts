@@ -66,10 +66,8 @@ export interface KnownGapResponse {
   recommendation: string;
 }
 
-// An index_only (heading-tree) search that matched nothing. Distinct from
-// KnownGapResponse and carries no gap_info: a heading miss is weaker evidence
-// than a content miss (the content may live outside headings), so it is not
-// recorded or counted — the hint only keeps the agent from a silent empty.
+// An index_only search that matched no heading tree — not a gap (no gap_info).
+// See noIndexMatch for why it isn't recorded.
 export interface NoIndexMatchResponse {
   status: "no_index_match";      // discriminant (like KnownGapResponse; arrays have none)
   message: string;
