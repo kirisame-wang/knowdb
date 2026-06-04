@@ -70,19 +70,16 @@ const FETCH_CHUNK_MAX_ATTEMPTS = 3;
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface FetchChunkOpts {
-  /** Total attempts for transient (5xx / network) failures. Default 3. */
+  /** Total attempts for transient failures. Default 3. */
   maxAttempts?: number;
-  /** Backoff before the next transient retry; injectable so tests don't wait. */
+  /** Backoff before each retry; injectable so tests don't wait. */
   delayMs?: (attempt: number) => number;
 }
 
 /**
- * Fetch a chunk's markdown, splitting failures by nature so the agent loop can
- * react instead of dying on a bare throw:
- *  - 4xx (e.g. 404): the id is wrong or stale — deterministic, so NOT retried;
- *    the message names the tools to re-locate it.
- *  - 5xx / network reject: transient — retried up to maxAttempts with backoff,
- *    then surfaced as a "try again shortly" error.
+ * Fetch a chunk's markdown. Failures split by nature: a 4xx is deterministic
+ * (wrong/stale id) and not retried; a 5xx / network reject is transient and
+ * retried with backoff. The thrown messages tell the agent what to do next.
  */
 export async function fetchChunk(id: string, opts?: FetchChunkOpts): Promise<string> {
   const maxAttempts = Math.max(1, opts?.maxAttempts ?? FETCH_CHUNK_MAX_ATTEMPTS);
@@ -104,7 +101,7 @@ export async function fetchChunk(id: string, opts?: FetchChunkOpts): Promise<str
           `Re-locate it with read_index, parent, or search; do not retry this id.`
       );
     }
-    transient = `status ${res.status}`; // 5xx — server-side, retryable
+    transient = `status ${res.status}`; // 5xx
     if (attempt < maxAttempts) await delay(backoff(attempt));
   }
   throw new Error(

@@ -98,9 +98,8 @@ export async function runAgentTurn(
       for (const block of toolUseBlocks) {
         const tcT0 = Date.now();
         const input = block.input as Record<string, unknown>;
-        // A tool throwing must not kill the turn: convert it into an is_error
-        // tool_result so the agent can react (re-locate, retry) instead of the
-        // whole query aborting. Only messages.create failures stay fatal below.
+        // A tool throwing must not kill the turn — surface it as an is_error
+        // tool_result so the agent can react. Only messages.create stays fatal.
         let result: string;
         let isError = false;
         try {
