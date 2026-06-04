@@ -66,6 +66,14 @@ export interface KnownGapResponse {
   recommendation: string;
 }
 
+// An index_only search that matched no heading tree — not a gap (no gap_info).
+// See noIndexMatch for why it isn't recorded.
+export interface NoIndexMatchResponse {
+  status: "no_index_match";      // discriminant (like KnownGapResponse; arrays have none)
+  message: string;
+  recommendation: string;
+}
+
 // ── Query Audit Trail ──────────────────────────────────────────
 // Browser: per-query bounded transaction (QueryTrace). Local: per-command
 // event stream (LocalCommandEvent) — query.sh sees only one subcommand at

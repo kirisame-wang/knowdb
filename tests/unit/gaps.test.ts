@@ -5,6 +5,7 @@ import {
   makeGapId,
   aggregate,
   checkKnownGap,
+  noIndexMatch,
   BrowserGapSink,
 } from "../../src/gaps.js";
 import { SessionContext } from "../../src/utils.js";
@@ -115,6 +116,24 @@ describe("checkKnownGap", () => {
     const evs = many("backup", 2);
     const r = checkKnownGap(evs, "backup")!;
     expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
+  });
+});
+
+describe("noIndexMatch", () => {
+  it("returns a no_index_match hint that echoes the probed keyword", () => {
+    const r = noIndexMatch("sharding");
+    expect(r.status).toBe("no_index_match");
+    expect(r.message).toContain("sharding");
+    expect(typeof r.recommendation).toBe("string");
+    expect(r.recommendation.length).toBeGreaterThan(0);
+  });
+
+  // A heading-tree miss is not a recorded gap (weaker signal than a content
+  // miss), so the response is structurally distinct from a known_gap.
+  it("is not a known_gap and carries no gap_info", () => {
+    const r = noIndexMatch("anything");
+    expect(r.status).not.toBe("known_gap");
+    expect("gap_info" in r).toBe(false);
   });
 });
 
