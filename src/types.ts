@@ -61,8 +61,6 @@ export interface GapAggregate {
 
 // Every `search` response is a tagged object keyed on `status`, so consumers
 // switch on the field instead of inferring meaning from shape (array vs object).
-export type SearchResponse = ResultsResponse | KnownGapResponse | NoIndexMatchResponse;
-
 export interface ResultsResponse {
   status: "results";
   hits: SearchResult[];          // `hits`, not `results`, to avoid echoing the discriminant value

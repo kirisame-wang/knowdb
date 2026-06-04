@@ -156,9 +156,11 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
 
   // The probed *wording* came up empty, not the topic — so this is an honest
   // miss, not a coverage verdict (which would be a confident false gap).
+  // Counts live per-topic in gaps[] (audit signal, not an agent cue); the
+  // message is just a human-readable summary, so keep it count-free and uniform.
   const message =
     gaps.length === 1
-      ? `Known gap: the keyword "${gaps[0]!.topic}" returned no results ${gaps[0]!.occurrence_count} times.`
+      ? `Known gap: the keyword "${gaps[0]!.topic}" returned no results.`
       : `Known gap: none of ${gaps.map((g) => `"${g.topic}"`).join(", ")} returned results.`;
   return {
     status: "known_gap",

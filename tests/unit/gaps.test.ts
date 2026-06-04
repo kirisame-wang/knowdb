@@ -105,12 +105,12 @@ describe("checkKnownGap", () => {
     expect(checkKnownGap(many("other", 20), "never asked")).toBeNull();
   });
 
-  it("matches via normalized keyword and reports the count + topic", () => {
+  it("matches via normalized keyword and reports the topic + per-gap count", () => {
     const n = 12;
     const r = checkKnownGap(many("Advanced  Config", n), "  advanced config ")!;
     expect(r.gaps[0]!.topic).toBe("advanced config");
     expect(r.gaps[0]!.occurrence_count).toBe(n);
-    expect(r.message).toContain(String(n));
+    expect(r.message).toContain("advanced config");
   });
 
   it("propagates first_seen into the gap entry", () => {
@@ -155,10 +155,10 @@ describe("noIndexMatch", () => {
 
   // A heading-tree miss is not a recorded gap (weaker signal than a content
   // miss), so the response is structurally distinct from a known_gap.
-  it("is not a known_gap and carries no gap_info", () => {
+  it("is not a known_gap and carries no gaps", () => {
     const r = noIndexMatch("anything");
     expect(r.status).not.toBe("known_gap");
-    expect("gap_info" in r).toBe(false);
+    expect("gaps" in r).toBe(false);
   });
 });
 

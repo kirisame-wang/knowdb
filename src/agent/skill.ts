@@ -22,13 +22,13 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
 - Case-insensitive by default.
 
 \`search\` returns an object with a \`status\` field — branch on it:
-- \`"results"\`: hits are in \`hits\`. Each hit has an \`excerpt\` (read it before
-  fetching the full chunk) and its position — \`breadcrumb\` (root→self path with
-  titles), \`siblings\` (same-level ids), \`parent_summary\` (parent heading),
-  \`doc_title\` — so the answer is often already here before any \`parent\` /
-  \`read_index\` call.
-- \`"known_gap"\`: nothing matched. \`gaps\` lists each missed term with its miss
-  count; read \`recommendation\` and follow it. Never re-run the same fruitless keyword.
+- \`"results"\`: hits are in \`hits\`. Each hit usually carries an \`excerpt\` (read
+  it before fetching the full chunk) and, when available, its position —
+  \`breadcrumb\` (root→self path with titles), \`siblings\` (same-level ids),
+  \`parent_summary\` (parent heading), \`doc_title\` — so the answer is often
+  already here before any \`parent\` / \`read_index\` call.
+- \`"known_gap"\`: nothing matched. \`gaps\` lists each missed term; read
+  \`recommendation\` and follow it. Never re-run the same fruitless keyword.
 - \`"no_index_match"\` (index_only only): no heading tree matched — read
   \`recommendation\` and follow it. An empty heading match is not proof the
   content is absent; escalate to a full-content search.
