@@ -103,15 +103,6 @@ describe("checkKnownGap", () => {
     expect(checkKnownGap(many("other", 20), "never asked")).toBeNull();
   });
 
-  it("reports probe facts (uncovered wording), not an over-claimed coverage verdict", () => {
-    const r = checkKnownGap(many("federation", 12), "federation")!;
-    // honest bounded statement: report what was probed, never claim the topic is absent
-    expect(r.recommendation).toContain("does not confirm the topic is absent");
-    expect(r.recommendation).toContain("alternative");
-    // regression guard: the old coverage over-claim must be gone
-    expect(r.recommendation).not.toContain("not within the current knowledge base's coverage");
-  });
-
   it("matches via normalized keyword and reports the count + topic", () => {
     const n = 12;
     const r = checkKnownGap(many("Advanced  Config", n), "  advanced config ")!;

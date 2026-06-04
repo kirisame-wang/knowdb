@@ -182,15 +182,15 @@ describe("processToolCall — gap recording on empty search", () => {
 
   it("occurrence_count accumulates across repeated empty searches", async () => {
     const sink = new MemSink();
+    const n = 3; // arbitrary > 1, reused so the loop and assertions can't drift apart
     let raw = "";
-    // 3 is arbitrary (no threshold) — any n > 1 demonstrates accumulation
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < n; i++) {
       raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
     }
     const out = JSON.parse(raw);
     expect(out.status).toBe("known_gap");
-    expect(out.gap_info.occurrence_count).toBe(3);
-    expect(sink.events).toHaveLength(3);
+    expect(out.gap_info.occurrence_count).toBe(n);
+    expect(sink.events).toHaveLength(n);
   });
 
   it("does not record for index_only empty searches", async () => {
