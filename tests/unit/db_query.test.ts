@@ -417,6 +417,45 @@ describe("fetchChunk", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     await expect(fetchChunk("aaa00001/99")).rejects.toThrow("404");
   });
+
+  it("does not retry a 4xx and names re-location tools (deterministic miss)", async () => {
+    const f = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", f);
+    await expect(
+      fetchChunk("aaa00001/99", { maxAttempts: 3, delayMs: () => 0 })
+    ).rejects.toThrow(/read_index/);
+    expect(f).toHaveBeenCalledTimes(1); // 4xx is deterministic — no retry
+  });
+
+  it("retries a 5xx transient failure and then succeeds", async () => {
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({ ok: true, text: async () => "recovered" });
+    vi.stubGlobal("fetch", f);
+    const out = await fetchChunk("aaa00001/01", { maxAttempts: 3, delayMs: () => 0 });
+    expect(out).toBe("recovered");
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("surfaces a transient error after exhausting retries on persistent 5xx", async () => {
+    const f = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal("fetch", f);
+    await expect(
+      fetchChunk("aaa00001/01", { maxAttempts: 3, delayMs: () => 0 })
+    ).rejects.toThrow(/after 3 attempts/i);
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries network rejections and then surfaces a transient error", async () => {
+    const f = vi.fn().mockRejectedValue(new Error("network down"));
+    vi.stubGlobal("fetch", f);
+    await expect(
+      fetchChunk("aaa00001/01", { maxAttempts: 2, delayMs: () => 0 })
+    ).rejects.toThrow(/try again shortly/i);
+    expect(f).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("compareChunkIds", () => {
