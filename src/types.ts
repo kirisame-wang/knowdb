@@ -59,11 +59,13 @@ export interface GapAggregate {
   scopes: (string | null)[];     // de-duplicated scopes seen for this topic
 }
 
-// Every `search` response is a tagged object keyed on `status`, so consumers
-// switch on the field instead of inferring meaning from shape (array vs object).
+// ── Search responses ──────────────────────────────────────────
+// Each is a tagged object keyed on `status`; consumers switch on it rather
+// than infer meaning from shape (array vs object).
+
 export interface ResultsResponse {
   status: "results";
-  hits: SearchResult[];          // `hits`, not `results`, to avoid echoing the discriminant value
+  hits: SearchResult[];
 }
 
 export interface GapInfo {
@@ -75,14 +77,10 @@ export interface GapInfo {
 export interface KnownGapResponse {
   status: "known_gap";
   message: string;
-  // One entry per missed alternative (an empty OR-search means every alternative
-  // missed). Single-term queries carry one. Counts stay per-topic.
   gaps: GapInfo[];
-  recommendation: string;        // topic-agnostic — one copy for the whole response, not per gap
+  recommendation: string;
 }
 
-// An index_only search that matched no heading tree — not a gap (no gaps).
-// See noIndexMatch for why it isn't recorded.
 export interface NoIndexMatchResponse {
   status: "no_index_match";
   message: string;

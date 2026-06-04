@@ -214,8 +214,7 @@ export async function processToolCall(
         // Count the just-recorded gaps without a second full parse.
         const known = checkKnownGap([...existing, ...stamped], keyword);
         if (known) return JSON.stringify(known);
-        // null only for an empty/whitespace keyword the sink skipped — no gap,
-        // no hits: fall through to an empty results envelope.
+        // null = empty/whitespace keyword the sink skipped: fall through to empty results.
       }
 
       const out: ResultsResponse = {

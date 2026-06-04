@@ -135,17 +135,15 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
 // ── Known-gap check (pure; caller records the current gap first) ──────────
 
 /**
- * Decide whether an empty search hit a known gap. `events` must already
- * include the just-recorded gap, so a non-empty keyword always yields a
- * known_gap; returns null only when the keyword has no recorded gap — e.g. an
- * empty / whitespace-only keyword the sink skips, which the caller renders as
- * an empty results envelope. A simple-OR query reports every alternative that
- * missed (an empty OR-search means all of them did), one entry per topic.
+ * Decide whether an empty search hit a known gap, reporting every missed
+ * alternative (an empty OR-search means all of them missed), one entry per
+ * topic. `events` must already include the just-recorded gap; returns null
+ * only when the keyword has no recorded gap (e.g. an empty/whitespace keyword
+ * the sink skips, which the caller renders as an empty results envelope).
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
-  // Decompose simple-OR input into its alternatives so a query like `a|b`
-  // reports each alternative that has accumulated misses via record-time
-  // fan-out. Single-term and out-of-contract regex stay as one lookup.
+  // Expand simple-OR into its alternatives so `a|b` reports each one with
+  // accumulated misses (record-time fan-out stored them per alternative).
   const aggs = aggregate(events);
   const topics = [...new Set(expandKeywordToTopics(keyword).map((alt) => gapTopicKey(alt)))];
   const gaps: GapInfo[] = topics
@@ -154,10 +152,9 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
     .map((a) => ({ topic: a.topic, occurrence_count: a.occurrence_count, first_seen: a.first_seen }));
   if (gaps.length === 0) return null;
 
-  // The probed *wording* came up empty, not the topic — so this is an honest
-  // miss, not a coverage verdict (which would be a confident false gap).
-  // Counts live per-topic in gaps[] (audit signal, not an agent cue); the
-  // message is just a human-readable summary, so keep it count-free and uniform.
+  // An honest miss of the probed *wording*, not a coverage verdict. Counts live
+  // per-topic in gaps[] (audit signal, not an agent cue), so the message stays a
+  // count-free summary.
   const message =
     gaps.length === 1
       ? `Known gap: the keyword "${gaps[0]!.topic}" returned no results.`
