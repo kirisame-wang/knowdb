@@ -183,6 +183,7 @@ describe("processToolCall — gap recording on empty search", () => {
   it("occurrence_count accumulates across repeated empty searches", async () => {
     const sink = new MemSink();
     let raw = "";
+    // 3 is arbitrary (no threshold) — any n > 1 demonstrates accumulation
     for (let i = 0; i < 3; i++) {
       raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST, sink);
     }

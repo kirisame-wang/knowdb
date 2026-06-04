@@ -136,8 +136,9 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
 
 /**
  * Decide whether an empty search hit a known gap. `events` must already
- * include the just-recorded gap, so any empty search yields a known_gap;
- * returns null only when the keyword has no recorded gap at all.
+ * include the just-recorded gap, so a non-empty keyword always yields a
+ * known_gap; returns null only when the keyword has no recorded gap — e.g. an
+ * empty / whitespace-only keyword the sink skips, which the caller renders `[]`.
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
   // Decompose simple-OR input into its alternatives so a query like `a|b`
@@ -158,7 +159,7 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
   // miss, not a coverage verdict (which would be a confident false gap).
   return {
     status: "known_gap",
-    message: `Known gap: "${top.topic}" returned no results ${count} times in the current knowledge base.`,
+    message: `Known gap: the keyword "${top.topic}" returned no results ${count} times.`,
     gap_info: { topic: top.topic, occurrence_count: count, first_seen: top.first_seen },
     recommendation:
       "The probed wording is uncovered in the current knowledge base; this does not confirm the topic is absent — the corpus may use different wording. Retry with alternative or related terms (synonyms, the corpus's own terminology, or the term in another language), or browse the structure (read_index / parent) to locate it.",

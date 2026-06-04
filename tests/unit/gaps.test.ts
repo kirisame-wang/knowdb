@@ -221,6 +221,7 @@ describe("gap key canonicalization (|-alternation)", () => {
     // Real flow: record-time emits one event per simple-OR alternative;
     // aggregate then has single-term topics. A simple-OR query should find
     // whichever alternative has accumulated misses.
+    // count is incidental here; the point is matching via a per-alternative aggregate
     const evs = Array.from({ length: 2 }, (_, i) =>
       ev({
         keyword: "alpha",
