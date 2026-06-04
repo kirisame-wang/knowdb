@@ -11,9 +11,6 @@ Use this to identify which chunk IDs are relevant before searching.
 
 If unsure which document to use, call \`search\` with \`index_only: true\`
 to match keywords against heading trees only — fast and low-noise.
-If nothing matches you get an object with \`status: "no_index_match"\` and a
-\`recommendation\` — follow it. An empty heading match is not proof the content
-is absent; escalate to a full-content search rather than giving up.
 
 ## Step 3 — Targeted search
 Call \`search(keyword, scope, ...)\` once you know the target document.
@@ -23,15 +20,18 @@ Call \`search(keyword, scope, ...)\` once you know the target document.
   matches a space, NOT a multi-keyword separator. Other regex
   metacharacters are NOT supported (behavior undefined).
 - Case-insensitive by default.
-- Each result includes an \`excerpt\` — read it before fetching the full chunk.
-- Each result also carries its position so you rarely need extra calls:
-  \`breadcrumb\` (root→self path with titles), \`siblings\` (same-level ids),
-  \`parent_summary\` (parent heading), \`doc_title\`. Read these before
-  calling \`parent\` or \`read_index\` — the answer is often already here.
-- **Known-gap response**: detect it structurally — if \`search\` returns an
-  object whose \`status === "known_gap"\` (not an array), this keyword returned
-  nothing. Read the human-readable \`recommendation\`
-  field and follow it. Never re-run the same fruitless keyword.
+
+\`search\` returns an object with a \`status\` field — branch on it:
+- \`"results"\`: hits are in \`hits\`. Each hit has an \`excerpt\` (read it before
+  fetching the full chunk) and its position — \`breadcrumb\` (root→self path with
+  titles), \`siblings\` (same-level ids), \`parent_summary\` (parent heading),
+  \`doc_title\` — so the answer is often already here before any \`parent\` /
+  \`read_index\` call.
+- \`"known_gap"\`: nothing matched. \`gaps\` lists each missed term with its miss
+  count; read \`recommendation\` and follow it. Never re-run the same fruitless keyword.
+- \`"no_index_match"\` (index_only only): no heading tree matched — read
+  \`recommendation\` and follow it. An empty heading match is not proof the
+  content is absent; escalate to a full-content search.
 
 ## Step 4 — Read minimally
 Choose the right read tool:

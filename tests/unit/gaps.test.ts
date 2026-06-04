@@ -94,9 +94,10 @@ describe("checkKnownGap", () => {
   it("returns a known_gap from the first miss (no threshold), wording independent of count", () => {
     const first = checkKnownGap(many("sharding", 1), "sharding")!;
     expect(first.status).toBe("known_gap");
-    expect(first.gap_info.occurrence_count).toBe(1);
+    expect(first.gaps).toHaveLength(1);
+    expect(first.gaps[0]!.occurrence_count).toBe(1);
     const more = checkKnownGap(many("sharding", 25), "sharding")!;
-    expect(more.gap_info.occurrence_count).toBe(25);
+    expect(more.gaps[0]!.occurrence_count).toBe(25);
     expect(more.recommendation).toBe(first.recommendation);
   });
 
@@ -107,15 +108,39 @@ describe("checkKnownGap", () => {
   it("matches via normalized keyword and reports the count + topic", () => {
     const n = 12;
     const r = checkKnownGap(many("Advanced  Config", n), "  advanced config ")!;
-    expect(r.gap_info.topic).toBe("advanced config");
-    expect(r.gap_info.occurrence_count).toBe(n);
+    expect(r.gaps[0]!.topic).toBe("advanced config");
+    expect(r.gaps[0]!.occurrence_count).toBe(n);
     expect(r.message).toContain(String(n));
   });
 
-  it("propagates first_seen into gap_info", () => {
+  it("propagates first_seen into the gap entry", () => {
     const evs = many("backup", 2);
     const r = checkKnownGap(evs, "backup")!;
-    expect(r.gap_info.first_seen).toBe(evs[0]!.timestamp);
+    expect(r.gaps[0]!.first_seen).toBe(evs[0]!.timestamp);
+  });
+
+  it("lists every missed alternative of a simple-OR query, with per-topic counts", () => {
+    // An empty OR-search means all alternatives missed — report them all,
+    // each with its own count (no collapse to a single 'top').
+    const evs = [
+      ...many("operating activities", 1),
+      ...many("financing activities", 2),
+      ...many("investing activities", 3),
+    ];
+    const r = checkKnownGap(
+      evs,
+      "operating activities|financing activities|investing activities"
+    )!;
+    expect(r.gaps.map((g) => g.topic).sort()).toEqual([
+      "financing activities",
+      "investing activities",
+      "operating activities",
+    ]);
+    expect(r.gaps.find((g) => g.topic === "investing activities")!.occurrence_count).toBe(3);
+    expect(r.message).toContain("operating activities");
+    expect(r.message).toContain("investing activities");
+    // one recommendation for the whole response, not one per gap
+    expect(typeof r.recommendation).toBe("string");
   });
 });
 
@@ -240,8 +265,10 @@ describe("gap key canonicalization (|-alternation)", () => {
     );
     const r = checkKnownGap(evs, "alpha|beta");
     expect(r).not.toBeNull();
-    expect(r!.gap_info.topic).toBe("alpha");
-    expect(r!.gap_info.occurrence_count).toBe(2);
+    // only alpha has recorded misses; beta isn't fabricated into gaps
+    expect(r!.gaps).toHaveLength(1);
+    expect(r!.gaps[0]!.topic).toBe("alpha");
+    expect(r!.gaps[0]!.occurrence_count).toBe(2);
   });
 
   it("keeps a phrase distinct from an OR (whitespace is literal)", () => {

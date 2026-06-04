@@ -1,4 +1,4 @@
-import type { GapEvent, GapAggregate, KnownGapResponse, NoIndexMatchResponse } from "./types.js";
+import type { GapEvent, GapAggregate, GapInfo, KnownGapResponse, NoIndexMatchResponse } from "./types.js";
 import { utcYmd, toJsonLine, parseJsonl, SessionContext } from "./utils.js";
 
 // ── Keyword normalization (deterministic, no LLM) ────────────────────────
@@ -138,29 +138,32 @@ export function aggregate(events: GapEvent[]): GapAggregate[] {
  * Decide whether an empty search hit a known gap. `events` must already
  * include the just-recorded gap, so a non-empty keyword always yields a
  * known_gap; returns null only when the keyword has no recorded gap — e.g. an
- * empty / whitespace-only keyword the sink skips, which the caller renders `[]`.
+ * empty / whitespace-only keyword the sink skips, which the caller renders as
+ * an empty results envelope. A simple-OR query reports every alternative that
+ * missed (an empty OR-search means all of them did), one entry per topic.
  */
 export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResponse | null {
   // Decompose simple-OR input into its alternatives so a query like `a|b`
-  // matches any alternative that has accumulated misses via record-time
+  // reports each alternative that has accumulated misses via record-time
   // fan-out. Single-term and out-of-contract regex stay as one lookup.
   const aggs = aggregate(events);
-  const topics = expandKeywordToTopics(keyword).map((alt) => gapTopicKey(alt));
-  const matches = topics
+  const topics = [...new Set(expandKeywordToTopics(keyword).map((alt) => gapTopicKey(alt)))];
+  const gaps: GapInfo[] = topics
     .map((t) => aggs.find((a) => a.topic === t))
-    .filter((a): a is GapAggregate => !!a);
-  if (matches.length === 0) return null;
-  const top = matches.reduce((m, c) =>
-    c.occurrence_count > m.occurrence_count ? c : m
-  );
-  const count = top.occurrence_count;
+    .filter((a): a is GapAggregate => !!a)
+    .map((a) => ({ topic: a.topic, occurrence_count: a.occurrence_count, first_seen: a.first_seen }));
+  if (gaps.length === 0) return null;
 
   // The probed *wording* came up empty, not the topic — so this is an honest
   // miss, not a coverage verdict (which would be a confident false gap).
+  const message =
+    gaps.length === 1
+      ? `Known gap: the keyword "${gaps[0]!.topic}" returned no results ${gaps[0]!.occurrence_count} times.`
+      : `Known gap: none of ${gaps.map((g) => `"${g.topic}"`).join(", ")} returned results.`;
   return {
     status: "known_gap",
-    message: `Known gap: the keyword "${top.topic}" returned no results ${count} times.`,
-    gap_info: { topic: top.topic, occurrence_count: count, first_seen: top.first_seen },
+    message,
+    gaps,
     recommendation:
       "The probed wording is uncovered in the current knowledge base; this does not confirm the topic is absent — the corpus may use different wording. Retry with alternative or related terms (synonyms, the corpus's own terminology, or the term in another language), or browse the structure (read_index / parent) to locate it.",
   };

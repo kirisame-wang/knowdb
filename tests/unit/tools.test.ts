@@ -88,8 +88,9 @@ describe("KNOWDB_TOOLS interface contract", () => {
 describe("processToolCall — doc_title enrichment", () => {
   it("search results carry doc_title from the manifest", async () => {
     const out = JSON.parse(await processToolCall("search", { keyword: "BM25" }, INDEX, MANIFEST));
-    expect(out.length).toBeGreaterThan(0);
-    for (const r of out) {
+    expect(out.status).toBe("results");
+    expect(out.hits.length).toBeGreaterThan(0);
+    for (const r of out.hits) {
       const docId = r.id.split("/")[0];
       expect(r.doc_title).toBe(MANIFEST[docId as keyof typeof MANIFEST].title);
     }
@@ -99,7 +100,7 @@ describe("processToolCall — doc_title enrichment", () => {
     const out = JSON.parse(
       await processToolCall("search", { keyword: "details", scope: "aaa00001" }, INDEX, MANIFEST)
     );
-    const r = out.find((x: { id: string }) => x.id === "aaa00001/01-01");
+    const r = out.hits.find((x: { id: string }) => x.id === "aaa00001/01-01");
     expect(r.breadcrumb).toEqual([
       { id: "aaa00001/01", title: "BM25" },
       { id: "aaa00001/01-01", title: "BM25 details" },
@@ -142,14 +143,14 @@ describe("processToolCall — reconstruct_document", () => {
 describe("processToolCall — gap recording on empty search", () => {
   const ABSENT = "nonexistent_zzz";
 
-  it("does not record when search has results, and contract is unchanged", async () => {
+  it("returns a results envelope and records nothing when search has hits", async () => {
     const sink = new MemSink();
     const out = JSON.parse(
       await processToolCall("search", { keyword: "BM25" }, INDEX, MANIFEST, sink)
     );
-    expect(Array.isArray(out)).toBe(true);
-    expect(out.length).toBeGreaterThan(0);
-    expect(out[0].doc_title).toBeTruthy();
+    expect(out.status).toBe("results");
+    expect(out.hits.length).toBeGreaterThan(0);
+    expect(out.hits[0].doc_title).toBeTruthy();
     expect(sink.events).toHaveLength(0);
   });
 
@@ -164,7 +165,8 @@ describe("processToolCall — gap recording on empty search", () => {
     );
     const out = JSON.parse(raw);
     expect(out.status).toBe("known_gap");
-    expect(out.gap_info.occurrence_count).toBe(1);
+    expect(out.gaps).toHaveLength(1);
+    expect(out.gaps[0].occurrence_count).toBe(1);
     expect(sink.events).toHaveLength(1);
     const e = sink.events[0]!;
     expect(e.source).toBe("browser");
@@ -189,7 +191,7 @@ describe("processToolCall — gap recording on empty search", () => {
     }
     const out = JSON.parse(raw);
     expect(out.status).toBe("known_gap");
-    expect(out.gap_info.occurrence_count).toBe(n);
+    expect(out.gaps[0].occurrence_count).toBe(n);
     expect(sink.events).toHaveLength(n);
   });
 
@@ -227,9 +229,9 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events).toHaveLength(0);
   });
 
-  it("is backward compatible: no sink → no recording, still returns []", async () => {
+  it("no sink → no recording; empty search returns an empty results envelope", async () => {
     const raw = await processToolCall("search", { keyword: ABSENT }, INDEX, MANIFEST);
-    expect(JSON.parse(raw)).toEqual([]);
+    expect(JSON.parse(raw)).toEqual({ status: "results", hits: [] });
   });
 
   // Simple-OR contract: `a|b` records two single-term gaps (record-time fan-out).

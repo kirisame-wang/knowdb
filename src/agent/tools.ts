@@ -213,10 +213,15 @@ export async function processToolCall(
         for (const e of stamped) sink.record(e);
         // Count the just-recorded gaps without a second full parse.
         const known = checkKnownGap([...existing, ...stamped], keyword);
-        return JSON.stringify(known ?? []);
+        if (known) return JSON.stringify(known);
+        // null only for an empty/whitespace keyword the sink skipped — no gap,
+        // no hits: fall through to an empty results envelope.
       }
 
-      return JSON.stringify(withDocTitles(results.slice(0, 20), manifest));
+      return JSON.stringify({
+        status: "results",
+        hits: withDocTitles(results.slice(0, 20), manifest),
+      });
     }
 
     case "read_chunk": {
