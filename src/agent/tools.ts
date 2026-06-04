@@ -189,10 +189,8 @@ export async function processToolCall(
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
 
-      // index_only discovery miss: no heading tree matched. Not a gap (a
-      // heading miss is weaker evidence than a content miss), so record
-      // nothing — but return a structured hint instead of a silent [] so the
-      // agent escalates to a content search rather than assuming absence.
+      // index_only miss: hint, don't record — a heading miss isn't a content
+      // gap (rationale in noIndexMatch).
       if (results.length === 0 && indexOnly) {
         return JSON.stringify(noIndexMatch(keyword));
       }
