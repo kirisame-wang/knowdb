@@ -90,37 +90,25 @@ describe("checkKnownGap", () => {
       ev({ keyword: kw, timestamp: new Date(Date.UTC(2026, 4, 1, 0, 0, i)).toISOString() })
     );
 
-  it("a single recorded miss already returns known_gap (no threshold)", () => {
-    const r = checkKnownGap(many("ksql", 1), "ksql")!;
-    expect(r).not.toBeNull();
-    expect(r.status).toBe("known_gap");
-    expect(r.gap_info.occurrence_count).toBe(1);
+  it("returns a known_gap from the first miss (no threshold), wording independent of count", () => {
+    const first = checkKnownGap(many("sharding", 1), "sharding")!;
+    expect(first.status).toBe("known_gap");
+    expect(first.gap_info.occurrence_count).toBe(1);
+    const more = checkKnownGap(many("sharding", 25), "sharding")!;
+    expect(more.gap_info.occurrence_count).toBe(25);
+    expect(more.recommendation).toBe(first.recommendation);
   });
 
   it("returns null when the keyword has never been a gap", () => {
     expect(checkKnownGap(many("other", 20), "never asked")).toBeNull();
   });
 
-  it("returns a known_gap recommending alternative wording", () => {
-    const r = checkKnownGap(many("sharding", 4), "sharding")!;
-    expect(r.status).toBe("known_gap");
-    expect(r.gap_info.occurrence_count).toBe(4);
-    expect(r.recommendation).toContain("alternative");
-  });
-
-  it("recommendation is count-independent (frequency lives in occurrence_count, not the wording)", () => {
-    const low = checkKnownGap(many("sharding", 1), "sharding")!;
-    const high = checkKnownGap(many("sharding", 25), "sharding")!;
-    expect(low.recommendation).toBe(high.recommendation);
-    expect(high.gap_info.occurrence_count).toBe(25);
-  });
-
   it("reports probe facts (uncovered wording), not an over-claimed coverage verdict", () => {
     const r = checkKnownGap(many("federation", 12), "federation")!;
-    // honest bounded statement: report what was probed; do NOT claim the topic is absent (community feedback 5)
+    // honest bounded statement: report what was probed, never claim the topic is absent
     expect(r.recommendation).toContain("does not confirm the topic is absent");
     expect(r.recommendation).toContain("alternative");
-    // regression guard: the old over-claim ("not within ... coverage") must be gone
+    // regression guard: the old coverage over-claim must be gone
     expect(r.recommendation).not.toContain("not within the current knowledge base's coverage");
   });
 
