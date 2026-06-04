@@ -59,6 +59,5 @@ Choose the right read tool:
    Use \`reconstruct_document\` only when you genuinely need the whole text.
 7. **Follow \`jump_to_ref\`** after reading a relevant chunk to find connected
    material in other documents — it surfaces implicit cross-document links.
-8. **Respect a \`known_gap\`** — read its recommendation and follow it;
-   don't loop the same fruitless keyword.
+8. **Respect a \`known_gap\`** — never loop the same fruitless keyword; act on it as Step 3 describes.
 `.trim();
