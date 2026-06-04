@@ -11,6 +11,9 @@ Use this to identify which chunk IDs are relevant before searching.
 
 If unsure which document to use, call \`search\` with \`index_only: true\`
 to match keywords against heading trees only — fast and low-noise.
+If nothing matches you get an object with \`status: "no_index_match"\` and a
+\`recommendation\` — follow it. An empty heading match is not proof the content
+is absent; escalate to a full-content search rather than giving up.
 
 ## Step 3 — Targeted search
 Call \`search(keyword, scope, ...)\` once you know the target document.

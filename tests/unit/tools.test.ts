@@ -193,15 +193,18 @@ describe("processToolCall — gap recording on empty search", () => {
     expect(sink.events).toHaveLength(n);
   });
 
-  it("does not record for index_only empty searches", async () => {
+  it("returns a no_index_match hint and records nothing for index_only empty searches", async () => {
     const sink = new MemSink();
-    await processToolCall(
-      "search",
-      { keyword: ABSENT, index_only: true },
-      INDEX,
-      MANIFEST,
-      sink
+    const out = JSON.parse(
+      await processToolCall(
+        "search",
+        { keyword: ABSENT, index_only: true },
+        INDEX,
+        MANIFEST,
+        sink
+      )
     );
+    expect(out.status).toBe("no_index_match");
     expect(sink.events).toHaveLength(0);
   });
 

@@ -14,6 +14,7 @@ import { SKILL } from "./skill.js";
 import {
   makeGapId,
   checkKnownGap,
+  noIndexMatch,
   expandKeywordToTopics,
   type GapSink,
 } from "../gaps.js";
@@ -188,8 +189,15 @@ export async function processToolCall(
       const opts = { caseInsensitive: !caseSensitive, ...(indexOnly !== undefined && { indexOnly }) };
       const results = search(index, keyword, scope, opts);
 
-      // An empty keyword search is a recordable gap;
-      // index_only discovery misses are not gaps.
+      // index_only discovery miss: no heading tree matched. Not a gap (a
+      // heading miss is weaker evidence than a content miss), so record
+      // nothing — but return a structured hint instead of a silent [] so the
+      // agent escalates to a content search rather than assuming absence.
+      if (results.length === 0 && indexOnly) {
+        return JSON.stringify(noIndexMatch(keyword));
+      }
+
+      // A content search miss with a sink is a recordable gap.
       if (results.length === 0 && !indexOnly && sink) {
         const now = new Date();
         const existing = sink.readAll(); // single parse; reused below

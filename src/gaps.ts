@@ -1,4 +1,4 @@
-import type { GapEvent, GapAggregate, KnownGapResponse } from "./types.js";
+import type { GapEvent, GapAggregate, KnownGapResponse, NoIndexMatchResponse } from "./types.js";
 import { utcYmd, toJsonLine, parseJsonl, SessionContext } from "./utils.js";
 
 // ── Keyword normalization (deterministic, no LLM) ────────────────────────
@@ -163,5 +163,23 @@ export function checkKnownGap(events: GapEvent[], keyword: string): KnownGapResp
     gap_info: { topic: top.topic, occurrence_count: count, first_seen: top.first_seen },
     recommendation:
       "The probed wording is uncovered in the current knowledge base; this does not confirm the topic is absent — the corpus may use different wording. Retry with alternative or related terms (synonyms, the corpus's own terminology, or the term in another language), or browse the structure (read_index / parent) to locate it.",
+  };
+}
+
+// ── Index-only discovery miss (a hint, not a gap) ─────────────────────────
+
+/**
+ * Hint for an index_only search that matched no heading tree. NOT a gap and
+ * never recorded: a heading miss is weaker evidence than a content miss (the
+ * content may not appear in any heading), so counting it would pollute the gap
+ * hotspot. The hint replaces a silent empty result so the agent escalates to a
+ * content search instead of assuming the topic is absent.
+ */
+export function noIndexMatch(keyword: string): NoIndexMatchResponse {
+  return {
+    status: "no_index_match",
+    message: `No document's heading tree matched "${keyword}".`,
+    recommendation:
+      "No heading matched the probed wording — this does not mean the content is absent (it may not appear in a heading). Broaden or rephrase the term, run a full-content search (index_only: false), call list_docs to see what exists, or browse a likely document's structure (read_index / parent).",
   };
 }

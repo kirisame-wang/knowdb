@@ -66,6 +66,16 @@ export interface KnownGapResponse {
   recommendation: string;
 }
 
+// An index_only (heading-tree) search that matched nothing. Distinct from
+// KnownGapResponse and carries no gap_info: a heading miss is weaker evidence
+// than a content miss (the content may live outside headings), so it is not
+// recorded or counted — the hint only keeps the agent from a silent empty.
+export interface NoIndexMatchResponse {
+  status: "no_index_match";      // discriminant; SearchResult[] has no `status`
+  message: string;
+  recommendation: string;
+}
+
 // ── Query Audit Trail ──────────────────────────────────────────
 // Browser: per-query bounded transaction (QueryTrace). Local: per-command
 // event stream (LocalCommandEvent) — query.sh sees only one subcommand at
