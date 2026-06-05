@@ -172,13 +172,23 @@ async function selectChunk(id: string) {
     idEl.className = "preview-id";
     idEl.textContent = id;
 
-    const pre = document.createElement("pre");
-    pre.className = "preview-content";
-    pre.textContent = text;
-
     previewArea.innerHTML = "";
     previewArea.appendChild(idEl);
-    previewArea.appendChild(pre);
+
+    // A container heading resolves to an empty stub: say so instead of a blank
+    // pane, and leave the nav bar up so the reader can step to its subsections.
+    if (text.trim()) {
+      const pre = document.createElement("pre");
+      pre.className = "preview-content";
+      pre.textContent = text;
+      previewArea.appendChild(pre);
+    } else {
+      const note = document.createElement("div");
+      note.className = "status-text";
+      note.textContent =
+        "This section has no direct content of its own. Use the buttons below to view its subsections or parent.";
+      previewArea.appendChild(note);
+    }
 
     el("nav-bar").style.display = "flex";
   } catch (err) {

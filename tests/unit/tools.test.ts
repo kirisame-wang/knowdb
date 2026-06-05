@@ -140,6 +140,51 @@ describe("processToolCall — reconstruct_document", () => {
   });
 });
 
+describe("processToolCall — read_chunk on a content-less chunk", () => {
+  // A container heading resolves to an empty stub file: instead of handing the
+  // agent a blank string, read_chunk names the outcome and points at the tools
+  // that reach the real content.
+  it("returns a navigation hint (not blank) for a heading with no body", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+    try {
+      const out = await processToolCall("read_chunk", { id: "aaa00001/01-03" }, INDEX, MANIFEST);
+      expect(out.trim()).not.toBe("");
+      expect(out).toMatch(/no direct content/i);
+      expect(out).toMatch(/read_index|read_chunks|parent/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("still returns real content when the chunk has a body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, text: async () => "BM25 is a retrieval function" })
+    );
+    try {
+      const out = await processToolCall("read_chunk", { id: "aaa00001/01" }, INDEX, MANIFEST);
+      expect(out).toBe("BM25 is a retrieval function");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("hint wins over pattern: an empty container + pattern yields the hint, not '(no matches)'", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
+    try {
+      const out = await processToolCall(
+        "read_chunk",
+        { id: "aaa00001/01-03", pattern: "BM25" },
+        INDEX,
+        MANIFEST
+      );
+      expect(out).toMatch(/no direct content/i);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("processToolCall — gap recording on empty search", () => {
   const ABSENT = "nonexistent_zzz";
 

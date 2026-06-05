@@ -21,6 +21,15 @@ import {
 import { nextDailySeq } from "../utils.js";
 import type { SearchIndex, SearchResult, Manifest, GapEvent, ResultsResponse } from "../types.js";
 
+// read_chunk on a container heading (an empty stub, no body of its own) returns
+// this instead of a blank string. A content-less node is a real outcome, so it's
+// named in prose the agent reads — kept as a plain string (read_chunk's contract
+// is markdown text, not a tagged JSON envelope) that points at the tools which
+// reach the actual content.
+const CONTENTLESS_CHUNK_HINT =
+  "This chunk is a section heading with no direct content of its own — its text lives in subsections. " +
+  "Use read_index to see the heading tree, read_chunks to list its subsections, or parent to step up.";
+
 /** Attach the human-readable doc_title (from _manifest) to each result. */
 function withDocTitles(results: SearchResult[], manifest?: Manifest): SearchResult[] {
   if (!manifest) return results;
@@ -229,6 +238,9 @@ export async function processToolCall(
       const pattern = toolInput["pattern"] as string | undefined;
       const context = (toolInput["context"] as number | undefined) ?? 2;
       const content = await fetchChunk(id);
+      // Container heading (empty stub) → hint, before pattern: a hint beats
+      // grepChunk's "(no matches)" when there's no body to match against.
+      if (!content.trim()) return CONTENTLESS_CHUNK_HINT;
       return pattern ? grepChunk(content, pattern, context) : content;
     }
 
