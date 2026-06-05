@@ -105,6 +105,13 @@ describe("search", () => {
       expect(r.excerpt).toBeTruthy();
     }
   });
+
+  // Content-less container headings are now indexed with an empty value; a real
+  // keyword has nothing to match in them, so they must never surface as hits.
+  it("never surfaces a content-less (empty-value) entry as a spurious hit", () => {
+    const idx: SearchIndex = { "aaa00001/01": "", "aaa00001/01-01": "real BM25 body" };
+    expect(search(idx, "BM25").map((r) => r.id)).toEqual(["aaa00001/01-01"]);
+  });
 });
 
 describe("search hierarchy enrichment", () => {
@@ -260,6 +267,19 @@ describe("expandWithContent", () => {
     for (const item of result) {
       expect(item.content).toBe(INDEX[item.id] ?? "");
     }
+  });
+
+  // A content-less parent expands to an empty-content row (read_chunks turns it
+  // into a blank preview) rather than being dropped — it stays navigable.
+  it("yields an empty-content row for a content-less chunk", () => {
+    const idx: SearchIndex = {
+      "aaa00001/_index": "# aaa00001 Index\n- 01: parent\n- 01-01: child",
+      "aaa00001/01": "",
+      "aaa00001/01-01": "child body",
+    };
+    const parentRow = expandWithContent(idx, "aaa00001/01-01", 2).find((r) => r.id === "aaa00001/01");
+    expect(parentRow).toBeDefined();
+    expect(parentRow!.content).toBe("");
   });
 });
 
