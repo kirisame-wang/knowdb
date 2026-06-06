@@ -393,22 +393,23 @@ describe("runAgentTurn — integration", () => {
     ).toBe(true);
   });
 
-  it("abort takes precedence: a non-abort error while the signal is aborted is recorded as cancel", async () => {
-    // Contract: once the user has clicked Stop (signal aborted), the turn is a
-    // cancellation regardless of what error races in — classification keys on
-    // signal state, not error identity. The racing error message is dropped.
+  it("classify by signal state, not error identity: a non-abort error while aborted is still a cancel", async () => {
+    // Guards the loop catch's deliberate choice — it keys on signal.aborted, NOT
+    // on err.name === "APIUserAbortError". The in-flight test throws a real abort
+    // error, so it would survive a refactor to error-identity classification;
+    // only THIS test (a generic error thrown while aborted) catches that regression.
     const controller = new AbortController();
-    // A real error (not an abort error) races the abort.
-    const deps = makeDeps(abortingClient(controller, new Error("network down")));
+    const nonAbortError = new Error("network down"); // name "Error" — deliberately not abort-typed
+    const deps = makeDeps(abortingClient(controller, nonAbortError));
     deps.signal = controller.signal;
     const { events, hooks } = recordHookEvents();
     deps.hooks = hooks;
 
     const trace = (await runAgentTurn(deps, "Q"))!;
 
-    expect(trace.aborted).toBe(true);
-    expect(trace.error).toBeUndefined(); // racing "network down" dropped — cancel wins
-    expect(events).toEqual(["abort"]);
+    expect(trace.aborted).toBe(true); // recorded as a cancel...
+    expect(trace.error).toBeUndefined(); // ...and the "network down" message is dropped, not stored as an error
+    expect(events).toEqual(["abort"]); // routed to onAbort, not onError — error-identity classification would do the reverse
   });
 
   it("abort during a round whose tool errors: turn recorded as aborted, tool error isolated", async () => {
