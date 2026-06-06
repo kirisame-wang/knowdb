@@ -90,6 +90,7 @@ export interface VariantAggregate {
   avg_decision_steps: number;
   avg_tokens: { input: number; output: number };
   read_chunk_pattern_usage_rate: number | null;  // from T15
+  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };  // T15 diagnostic pair: filtered-window vs full-dump char cost (empty group → 0)
   // B11 multi-turn metrics (three)
   followup_success_rate: number;           // success rate of is_followup turns (co-ref)
   turn_degradation_slope: number;          // mean per-thread per-turn decision_steps slope

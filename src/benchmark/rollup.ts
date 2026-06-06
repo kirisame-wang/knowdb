@@ -1,4 +1,4 @@
-import type { QueryTrace } from "../types.js";
+import type { QueryTrace, ToolCallEvent } from "../types.js";
 import type {
   BenchmarkProblem,
   TurnResult,
@@ -54,6 +54,19 @@ function patternUsageRate(traces: QueryTrace[]): number | null {
   if (readChunks.length === 0) return null;
   const withPattern = readChunks.filter((c) => Boolean(c.input["pattern"]));
   return withPattern.length / readChunks.length;
+}
+
+// Mirrors src/traces.ts: mean read_chunk output length split by pattern use —
+// the char-cost gap between a filtered window and a full-body dump. Prefers the
+// raw pre-truncate length; falls back to summary length for legacy traces.
+// Empty group → 0 (mean of []).
+function readChunkOutputChars(traces: QueryTrace[]): { with_pattern: number; without_pattern: number } {
+  const readChunks = traces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
+  const rawChars = (c: ToolCallEvent) => c.output_chars ?? c.output_summary.length;
+  return {
+    with_pattern: mean(readChunks.filter((c) => Boolean(c.input["pattern"])).map(rawChars)),
+    without_pattern: mean(readChunks.filter((c) => !c.input["pattern"]).map(rawChars)),
+  };
 }
 
 function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
@@ -131,6 +144,7 @@ export function rollupVariant(
       output: mean(rs.map((r) => r.tokens.output)),
     },
     read_chunk_pattern_usage_rate: patternUsageRate(ts),
+    avg_read_chunk_output_chars: readChunkOutputChars(ts),
     followup_success_rate: rate(followups.filter((r) => r.success).length, followups.length),
     turn_degradation_slope: mean(slopes),
     cumulative_passage_coverage: mean(coverages),

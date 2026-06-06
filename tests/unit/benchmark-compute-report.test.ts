@@ -129,6 +129,7 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     expect(a.avg_decision_steps).toBe(2); // (1+2+3)/3
     expect(a.avg_tokens).toEqual({ input: 100, output: 50 });
     expect(a.read_chunk_pattern_usage_rate).toBe(0); // 3 read_chunk, none with pattern
+    expect(a.avg_read_chunk_output_chars).toEqual({ with_pattern: 0, without_pattern: 0 }); // empty output_summary, no output_chars
     expect(a.abstention_precision).toBe(1); // only reported gap is turn2 (answerable=false)
     expect(a.followup_success_rate).toBeCloseTo(0.5); // turn1 fail, turn2 pass
     expect(a.turn_degradation_slope).toBeCloseTo(1); // steps [1,2,3]
@@ -235,5 +236,61 @@ describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
       tr({ explicit_gap_reported: false, answerable: true }),
       tr({ explicit_gap_reported: false, answerable: false }),
     ])).toBeNull();
+  });
+});
+
+// avg_read_chunk_output_chars mirrors src/traces.ts: the per-variant char gap
+// between pattern-filtered reads and full-body dumps, the diagnostic pair to
+// read_chunk_pattern_usage_rate. Reads output_chars (raw pre-truncate length),
+// falling back to output_summary length for legacy traces. Driven by traces, so
+// unit-test it on hand-built traces joined via the side-car.
+describe("rollupVariant avg_read_chunk_output_chars (read-discipline diagnostic)", () => {
+  function rc(pattern: boolean, chars: number | undefined): ToolCallEvent {
+    const input: Record<string, unknown> = { id: "abc/01" };
+    if (pattern) input["pattern"] = "x";
+    const e: ToolCallEvent = { ordinal: 1, tool: "read_chunk", input, output_summary: "", duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
+    if (chars !== undefined) e.output_chars = chars;
+    return e;
+  }
+  function traceWith(query_id: string, calls: ToolCallEvent[]): QueryTrace {
+    return { source: "browser", query_id, user_question: "Q", started_at: "2026-06-03T00:00:00Z", ended_at: "2026-06-03T00:00:01Z", tool_calls: calls, api_rounds: [], final_answer: "a" };
+  }
+  function charsOf(ts: QueryTrace[]) {
+    const assignOf = new Map(
+      ts.map((t) => [t.query_id, { query_id: t.query_id, variant: "V", problem_id: "p", turn_index: 0, assigned_at: "x" }]),
+    );
+    return rollupVariant("V", [], ts, assignOf, new Map()).avg_read_chunk_output_chars;
+  }
+
+  it("splits mean output length by pattern engagement", () => {
+    expect(charsOf([traceWith("q1", [rc(true, 100), rc(true, 200), rc(false, 400)])]))
+      .toEqual({ with_pattern: 150, without_pattern: 400 });
+  });
+
+  it("an empty group → 0, not NaN", () => {
+    expect(charsOf([traceWith("q1", [rc(false, 300)])])) // no pattern reads
+      .toEqual({ with_pattern: 0, without_pattern: 300 });
+  });
+
+  it("no read_chunk calls → {0, 0}", () => {
+    expect(charsOf([traceWith("q1", [])])).toEqual({ with_pattern: 0, without_pattern: 0 });
+  });
+
+  it("falls back to output_summary length when output_chars absent", () => {
+    const c = rc(false, undefined);
+    c.output_summary = "12345"; // 5 chars
+    expect(charsOf([traceWith("q1", [c])])).toEqual({ with_pattern: 0, without_pattern: 5 });
+  });
+
+  it("counts a genuine 0-char read as 0 (?? not ||, summary length ignored)", () => {
+    const c = rc(false, 0);
+    c.output_summary = "12345"; // present but must not be used when output_chars === 0
+    expect(charsOf([traceWith("q1", [c])])).toEqual({ with_pattern: 0, without_pattern: 0 });
+  });
+
+  it("excludes read_chunks (plural) — parity with src/traces.ts", () => {
+    const plural: ToolCallEvent = { ordinal: 1, tool: "read_chunks", input: { ids: ["a", "b"] }, output_summary: "", output_chars: 999, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
+    expect(charsOf([traceWith("q1", [rc(false, 100), plural])]))
+      .toEqual({ with_pattern: 0, without_pattern: 100 }); // plural's 999 must not leak in
   });
 });
