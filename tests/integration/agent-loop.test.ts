@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { runAgentTurn, type AgentLoopDeps, type MessagesClient } from "../../src/agent/loop.js";
+import {
+  runAgentTurn,
+  type AgentLoopDeps,
+  type AgentLoopHooks,
+  type MessagesClient,
+} from "../../src/agent/loop.js";
 import { KNOWDB_TOOLS } from "../../src/agent/tools.js";
 import { SKILL } from "../../src/agent/skill.js";
 import { BrowserGapSink } from "../../src/gaps.js";
@@ -38,6 +43,28 @@ function scriptedClient(responses: Anthropic.Messages.Message[]): MessagesClient
         return responses[i++]!;
       },
     },
+  };
+}
+
+// A client that aborts the controller mid-request, then throws — models the
+// Anthropic SDK rejecting an aborted request. `err` is what create() throws.
+function abortingClient(controller: AbortController, err: unknown): MessagesClient {
+  return {
+    messages: {
+      create: async () => {
+        controller.abort();
+        throw err;
+      },
+    },
+  };
+}
+
+// Fresh hook-event recorder: each hook pushes its name on fire; assert on `events`.
+function recordHookEvents(): { events: string[]; hooks: AgentLoopHooks } {
+  const events: string[] = [];
+  return {
+    events,
+    hooks: { onAbort: () => events.push("abort"), onError: () => events.push("error") },
   };
 }
 
@@ -297,30 +324,17 @@ describe("runAgentTurn — integration", () => {
 
   // ── User-side cancel (Stop button) ──────────────────────────────────────
   // The UI passes an AbortSignal; clicking Stop fires it. A cancelled turn is
-  // recorded as the QueryTrace "interrupted" state — no final_answer, no error
-  // — so metrics never count a user stop as a failed query.
+  // recorded with aborted=true and no final_answer/error, so metrics never
+  // count a user stop as a failed query.
 
   it("abort in-flight (SDK throws after signal fires): recorded as cancel, not error", async () => {
     const controller = new AbortController();
-    // Models the Anthropic SDK: an aborted request rejects with APIUserAbortError.
-    const client: MessagesClient = {
-      messages: {
-        create: async (_params, options) => {
-          controller.abort();
-          const err = new Error("Request was aborted.");
-          err.name = "APIUserAbortError";
-          void options;
-          throw err;
-        },
-      },
-    };
-    const deps = makeDeps(client);
+    const abortErr = new Error("Request was aborted.");
+    abortErr.name = "APIUserAbortError"; // models the Anthropic SDK's abort rejection
+    const deps = makeDeps(abortingClient(controller, abortErr));
     deps.signal = controller.signal;
-    const events: string[] = [];
-    deps.hooks = {
-      onAbort: () => events.push("abort"),
-      onError: () => events.push("error"),
-    };
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
 
     const trace = (await runAgentTurn(deps, "stop me"))!;
 
@@ -357,15 +371,15 @@ describe("runAgentTurn — integration", () => {
     })();
     const deps = makeDeps(client);
     deps.signal = controller.signal;
-    let aborts = 0;
-    deps.hooks = { onAbort: () => aborts++ };
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
 
     const trace = (await runAgentTurn(deps, "Q"))!;
 
     expect(trace.final_answer).toBeUndefined();
     expect(trace.error).toBeUndefined();
     expect(trace.aborted).toBe(true);
-    expect(aborts).toBe(1);
+    expect(events).toEqual(["abort"]);
     // Only round 1 ran; the loop broke before issuing round 2.
     expect(trace.api_rounds).toHaveLength(1);
     expect(trace.tool_calls.map((c) => c.tool)).toEqual(["search"]);
@@ -384,18 +398,11 @@ describe("runAgentTurn — integration", () => {
     // cancellation regardless of what error races in — classification keys on
     // signal state, not error identity. The racing error message is dropped.
     const controller = new AbortController();
-    const client: MessagesClient = {
-      messages: {
-        create: async () => {
-          controller.abort();
-          throw new Error("network down"); // a real error, NOT an abort error
-        },
-      },
-    };
-    const deps = makeDeps(client);
+    // A real error (not an abort error) races the abort.
+    const deps = makeDeps(abortingClient(controller, new Error("network down")));
     deps.signal = controller.signal;
-    const events: string[] = [];
-    deps.hooks = { onAbort: () => events.push("abort"), onError: () => events.push("error") };
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
 
     const trace = (await runAgentTurn(deps, "Q"))!;
 
