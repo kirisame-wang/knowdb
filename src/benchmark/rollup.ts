@@ -81,6 +81,7 @@ export function rollupVariant(
   const within = rs.filter((r) => r.classification_actual === "within_doc");
   const cross = rs.filter((r) => r.classification_actual === "cross_doc");
   const followups = rs.filter((r) => r.is_followup);
+  const reportedGaps = rs.filter((r) => r.explicit_gap_reported);
 
   // ── B11 per-thread metrics ──
   const byThread = groupBy(rs, (r) => r.problem_id);
@@ -118,7 +119,12 @@ export function rollupVariant(
     success_rate: rate(rs.filter((r) => r.success).length, rs.length),
     within_doc_success_rate: rate(within.filter((r) => r.success).length, within.length),
     cross_doc_success_rate: rate(cross.filter((r) => r.success).length, cross.length),
-    explicit_gap_rate: rate(rs.filter((r) => r.explicit_gap_reported).length, rs.length),
+    explicit_gap_rate: rate(reportedGaps.length, rs.length),
+    // null when no gaps reported; 0 already means "every reported gap was false".
+    abstention_precision:
+      reportedGaps.length === 0
+        ? null
+        : reportedGaps.filter((r) => !r.answerable).length / reportedGaps.length,
     avg_decision_steps: mean(rs.map((r) => r.decision_steps)),
     avg_tokens: {
       input: mean(rs.map((r) => r.tokens.input)),

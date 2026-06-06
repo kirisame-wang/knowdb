@@ -86,6 +86,7 @@ export interface VariantAggregate {
   within_doc_success_rate: number;
   cross_doc_success_rate: number;
   explicit_gap_rate: number;
+  abstention_precision: number | null;     // of reported-gap turns, share truly unanswerable; null when none reported
   avg_decision_steps: number;
   avg_tokens: { input: number; output: number };
   read_chunk_pattern_usage_rate: number | null;  // from T15

@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { computeReport } from "../../src/benchmark/compute-report.js";
+import { rollupVariant } from "../../src/benchmark/rollup.js";
 import type {
   BenchmarkProblem,
   BenchmarkRun,
   HumanGrade,
+  TurnResult,
   VariantAssignment,
 } from "../../src/benchmark/types.js";
 import type { QueryTrace, ToolCallEvent } from "../../src/types.js";
@@ -127,6 +129,7 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     expect(a.avg_decision_steps).toBe(2); // (1+2+3)/3
     expect(a.avg_tokens).toEqual({ input: 100, output: 50 });
     expect(a.read_chunk_pattern_usage_rate).toBe(0); // 3 read_chunk, none with pattern
+    expect(a.abstention_precision).toBe(1); // only reported gap is turn2 (answerable=false)
     expect(a.followup_success_rate).toBeCloseTo(0.5); // turn1 fail, turn2 pass
     expect(a.turn_degradation_slope).toBeCloseTo(1); // steps [1,2,3]
     expect(a.cumulative_passage_coverage).toBeCloseTo(2 / 3); // hit {abc/01,abc/03} of {abc/01,abc/02,abc/03}
@@ -190,5 +193,47 @@ describe("computeReport — contract guards", () => {
         run,
       ),
     ).toThrow(/grade/i);
+  });
+});
+
+// abstention_precision pairs with explicit_gap_rate to defend the gap axis: a
+// variant can game a high gap rate by abstaining indiscriminately, but those are
+// false gaps (answerable=true), and precision = share of reported gaps that were
+// genuinely unanswerable catches it. Derived from TurnResult alone, so unit-test
+// it directly on hand-built results.
+describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
+  function tr(over: Partial<TurnResult>): TurnResult {
+    return {
+      problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
+      is_followup: false, turn_type: "symmetric", answerable: true,
+      success: true, classification_actual: "within_doc",
+      explicit_gap_reported: false, decision_steps: 1,
+      tokens: { input: 0, output: 0 },
+      ...over,
+    };
+  }
+  const precisionOf = (rs: TurnResult[]) =>
+    rollupVariant("V", rs, [], new Map(), new Map()).abstention_precision;
+
+  it("every reported gap is truly unanswerable → 1", () => {
+    expect(precisionOf([
+      tr({ explicit_gap_reported: true, answerable: false }),
+      tr({ explicit_gap_reported: true, answerable: false }),
+      tr({ explicit_gap_reported: false, answerable: true }), // not a reported gap, ignored
+    ])).toBe(1);
+  });
+
+  it("a false gap (reported on an answerable turn) drags it below 1", () => {
+    expect(precisionOf([
+      tr({ explicit_gap_reported: true, answerable: false }),
+      tr({ explicit_gap_reported: true, answerable: true }), // false gap
+    ])).toBeCloseTo(0.5);
+  });
+
+  it("no reported gap → null (no signal, distinct from 0)", () => {
+    expect(precisionOf([
+      tr({ explicit_gap_reported: false, answerable: true }),
+      tr({ explicit_gap_reported: false, answerable: false }),
+    ])).toBeNull();
   });
 });
