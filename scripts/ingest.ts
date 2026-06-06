@@ -56,8 +56,9 @@ function parseSections(text: string): Section[] {
     }
 
     const parent = stack[stack.length - 1]!;
-    const siblingCount = parent.children.filter((c) => c.depth === depth).length;
-    const idSegment = String(siblingCount + 1).padStart(2, "0");
+    // Number by position among all children, not per heading depth: a level
+    // skip (## → #### → ###) makes an H4 and an H3 tree-siblings under one parent.
+    const idSegment = String(parent.children.length + 1).padStart(2, "0");
     const id = parent.id === "root" ? idSegment : `${parent.id}-${idSegment}`;
 
     const section: Section = { id, title, depth, content: "", children: [] };
@@ -104,10 +105,9 @@ function buildIndexMd(sections: Section[], source: string, id: string): string {
 }
 
 function buildTree(flat: Section[]): Section[] {
-  // Return only top-level sections (depth === 1) preserving children
-  const top = flat.filter((s) => !s.id.includes("-"));
-  // Recursively attach children already in flat list
-  return top;
+  // Root's direct children (id has no "-"); each already carries its subtree in
+  // `children` (built by parseSections) for renderChildren to recurse.
+  return flat.filter((s) => !s.id.includes("-"));
 }
 
 async function ingestFile(filePath: string): Promise<void> {

@@ -146,4 +146,72 @@ describe("ingest", () => {
       expect(await readFile(join(DB, docId, "_index.md"), "utf-8")).toContain("- 01: H1 Title");
     });
   });
+
+  // Heading-level skips (a page break drops the intervening heading) must not
+  // collide chunk ids. Two shapes: a jump under a sub-parent, and a jump at the
+  // root (leading H2 then a later H1 — the corpus's duplicate `01`).
+  describe("heading-level jumps: monotonic sibling numbering (no id collision / data loss)", () => {
+    const DB = dbDir("db-test-jump");
+    let tmp: string;
+    let jumpId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-jump-"));
+      // Shape 1: jump under sub-parent P — ## P → #### X → #### Y → ### Z → #### Z-child
+      await fsWriteFile(
+        join(tmp, "jump-doc.md"),
+        ["# Top", "", "## Section P", "", "#### Orphan X", "x-body", "", "#### Orphan Y", "y-body", "", "### Major Z", "z-body", "", "#### Z child", "zchild-body", ""].join("\n"),
+        "utf-8"
+      );
+      // Shape 2: jump at root — leading ## then a later # both land under root.
+      await fsWriteFile(
+        join(tmp, "root-doc.md"),
+        ["## Lead H2", "lead-body", "", "# Real H1", "h1-body", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB); // directory mode: one spawn ingests both
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      const idOf = (f: string) => Object.keys(manifest).find((k) => manifest[k]!.originalFilename === f)!;
+      jumpId = idOf("jump-doc.md");
+      rootId = idOf("root-doc.md");
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    // Reading distinct ids back with the right bodies is the data-loss pin:
+    // per-depth numbering collided X(H4)/Z(H3), so Z would overwrite X at 01-01-01.
+    it("numbers X(H4)/Y(H4)/Z(H3) as distinct siblings under P — no collision, no overwrite", async () => {
+      expect(await readFile(join(DB, jumpId, "01-01-01.md"), "utf-8")).toContain("x-body");
+      expect(await readFile(join(DB, jumpId, "01-01-02.md"), "utf-8")).toContain("y-body");
+      expect(await readFile(join(DB, jumpId, "01-01-03.md"), "utf-8")).toContain("z-body");
+    });
+
+    it("nests a deeper heading under the preceding shallower one (Z child under Z)", async () => {
+      expect(await readFile(join(DB, jumpId, "01-01-03-01.md"), "utf-8")).toContain("zchild-body");
+    });
+
+    it("lists the jumped headings as siblings in _index.md", async () => {
+      const idxMd = await readFile(join(DB, jumpId, "_index.md"), "utf-8");
+      expect(idxMd).toContain("01-01-01: Orphan X");
+      expect(idxMd).toContain("01-01-02: Orphan Y");
+      expect(idxMd).toContain("01-01-03: Major Z");
+      expect(idxMd).toContain("01-01-03-01: Z child");
+    });
+
+    // Root-level collision: a leading H2 and a later H1 are both root children.
+    // Per-depth numbering gave both `01` (the H1 overwrote the H2's chunk).
+    it("numbers a leading H2 and a later H1 as distinct top-level chunks", async () => {
+      expect(await readFile(join(DB, rootId, "01.md"), "utf-8")).toContain("lead-body");
+      expect(await readFile(join(DB, rootId, "02.md"), "utf-8")).toContain("h1-body");
+    });
+  });
 });
