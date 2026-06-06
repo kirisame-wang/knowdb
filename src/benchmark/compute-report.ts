@@ -1,6 +1,6 @@
 import type { GapEvent, QueryTrace } from "../types.js";
 import { classifyQuery } from "./classify.js";
-import { detectExplicitGap } from "./detect-gap.js";
+import { detectExplicitGap, encounteredKnownGap } from "./detect-gap.js";
 import { rollupVariant } from "./rollup.js";
 import type {
   AxisDelta,
@@ -63,6 +63,7 @@ export function computeReport(
         success: grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid,
         classification_actual: classifyQuery(t),
         explicit_gap_reported: detectExplicitGap(t),
+        encountered_gap_signal: encounteredKnownGap(t),
         decision_steps: t.tool_calls.length,
         tokens: {
           input: t.api_rounds.reduce((s, r) => s + r.input_tokens, 0),

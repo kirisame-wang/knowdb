@@ -21,8 +21,15 @@ function isKnownGap(output_summary: string): boolean {
   }
 }
 
+// The strong signal on its own: did any `search` in this turn return a
+// known_gap? This is "the turn hit a coverage-gap signal" — independent of how
+// the turn ended. The recovery metric (rollup.ts) uses it as a denominator;
+// detectExplicitGap folds it into the OR below.
+export function encounteredKnownGap(trace: QueryTrace): boolean {
+  return trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
+}
+
 export function detectExplicitGap(trace: QueryTrace): boolean {
-  const strongSignal = trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
   const weakSignal = trace.final_answer ? GAP_REGEX.test(trace.final_answer) : false;
-  return strongSignal || weakSignal;
+  return encounteredKnownGap(trace) || weakSignal;
 }

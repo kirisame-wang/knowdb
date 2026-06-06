@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectExplicitGap } from "../../src/benchmark/detect-gap.js";
+import { detectExplicitGap, encounteredKnownGap } from "../../src/benchmark/detect-gap.js";
 import type { QueryTrace, ToolCallEvent } from "../../src/types.js";
 
 function searchCall(output_summary: string): ToolCallEvent {
@@ -62,5 +62,27 @@ describe("detectExplicitGap — signal robustness", () => {
 
   it("regex is case-insensitive", () => {
     expect(detectExplicitGap(trace({ final_answer: "NOT COVERED in the docs" }))).toBe(true);
+  });
+});
+
+// The strong-signal half, exposed on its own: "did this turn ever hit a
+// known_gap?" — the recovery-metric denominator. Distinct from detectExplicitGap
+// in that final_answer phrasing is irrelevant (a turn can hit a gap then recover).
+describe("encounteredKnownGap (recovery-denominator helper)", () => {
+  it("true when a search returned known_gap, regardless of a substantive final answer", () => {
+    expect(encounteredKnownGap(trace({ calls: [searchCall(KNOWN_GAP)], final_answer: "Here is the answer." }))).toBe(true);
+  });
+
+  it("false when no search returned known_gap, even if final_answer phrases a gap", () => {
+    expect(encounteredKnownGap(trace({ calls: [searchCall(NORMAL_HITS)], final_answer: "not covered" }))).toBe(false);
+  });
+
+  it("true when one of several searches returned known_gap (.some short-circuit)", () => {
+    expect(encounteredKnownGap(trace({ calls: [searchCall(NORMAL_HITS), searchCall(KNOWN_GAP)] }))).toBe(true);
+  });
+
+  it("known_gap shape on a non-search tool is ignored", () => {
+    const call: ToolCallEvent = { ordinal: 1, tool: "read_chunk", input: {}, output_summary: KNOWN_GAP, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
+    expect(encounteredKnownGap(trace({ calls: [call] }))).toBe(false);
   });
 });

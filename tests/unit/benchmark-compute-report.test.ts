@@ -131,6 +131,8 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     expect(a.read_chunk_pattern_usage_rate).toBe(0); // 3 read_chunk, none with pattern
     expect(a.avg_read_chunk_output_chars).toEqual({ with_pattern: 0, without_pattern: 0 }); // empty output_summary, no output_chars
     expect(a.abstention_precision).toBe(1); // only reported gap is turn2 (answerable=false)
+    expect(a.recovery_rate).toBeNull(); // turn2 hit known_gap but is unanswerable → not a recovery candidate
+    expect(a.recovery_avg_decision_steps).toBeNull();
     expect(a.followup_success_rate).toBeCloseTo(0.5); // turn1 fail, turn2 pass
     expect(a.turn_degradation_slope).toBeCloseTo(1); // steps [1,2,3]
     expect(a.cumulative_passage_coverage).toBeCloseTo(2 / 3); // hit {abc/01,abc/03} of {abc/01,abc/02,abc/03}
@@ -163,6 +165,7 @@ describe("computeReport (B7/B11) — end-to-end pipeline", () => {
     const a2 = report.results.find((r) => r.query_id === "q_no_search_2")!;
     expect(a2.classification_actual).toBe("within_doc");
     expect(a2.explicit_gap_reported).toBe(true);
+    expect(a2.encountered_gap_signal).toBe(true); // turn2's search returned known_gap
     expect(a2.is_followup).toBe(true);
     expect(a2.answerable).toBe(false);
     expect(a2.decision_steps).toBe(3);
@@ -197,6 +200,28 @@ describe("computeReport — contract guards", () => {
   });
 });
 
+describe("computeReport — recovery_rate end-to-end (non-null path through real detection)", () => {
+  it("an answerable turn whose search false-alarmed a gap, then recovered, yields recovery_rate 1", () => {
+    const recProblem: BenchmarkProblem = {
+      id: "trec", domain: "mcp", thread_type: "lexical_gap",
+      turns: [{ turn_index: 0, question: "q", is_followup: false, turn_type: "lexical_gap", answerable: true, expected_doc_ids: ["abc"], expected_answer_keypoints: ["k"], expected_classification: "within_doc" }],
+    };
+    // search known_gap (false alarm on answerable content) → read_chunk → answered.
+    const recTrace = trace("q_rec", [call("search", { keyword: "cashflow" }, KNOWN_GAP), call("read_chunk", { id: "abc/01" })], 50, 25);
+    const rep = computeReport(
+      [recTrace], [],
+      [{ query_id: "q_rec", variant: "full", problem_id: "trec", turn_index: 0, assigned_at: "x" }],
+      [recProblem],
+      [{ problem_id: "trec", turn_index: 0, query_id: "q_rec", variant: "full", rubric_1_covers_keypoints: true, rubric_2_citations_valid: true, reviewer: "t", graded_at: "x" }],
+      { ...run, variants: ["full"] },
+    );
+    const agg = rep.aggregates[0]!;
+    expect(rep.results[0]!.encountered_gap_signal).toBe(true); // derived via real encounteredKnownGap
+    expect(agg.recovery_rate).toBe(1); // answerable ∧ hit gap ∧ success
+    expect(agg.recovery_avg_decision_steps).toBe(2); // 2 tool calls
+  });
+});
+
 // abstention_precision pairs with explicit_gap_rate to defend the gap axis: a
 // variant can game a high gap rate by abstaining indiscriminately, but those are
 // false gaps (answerable=true), and precision = share of reported gaps that were
@@ -208,7 +233,7 @@ describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
       success: true, classification_actual: "within_doc",
-      explicit_gap_reported: false, decision_steps: 1,
+      explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
     };
@@ -292,5 +317,48 @@ describe("rollupVariant avg_read_chunk_output_chars (read-discipline diagnostic)
     const plural: ToolCallEvent = { ordinal: 1, tool: "read_chunks", input: { ids: ["a", "b"] }, output_summary: "", output_chars: 999, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
     expect(charsOf([traceWith("q1", [rc(false, 100), plural])]))
       .toEqual({ with_pattern: 0, without_pattern: 100 }); // plural's 999 must not leak in
+  });
+});
+
+// recovery_rate (retry-scaffold axis): of answerable turns where KnowDB's keyword
+// layer false-alarmed a gap (encountered_gap_signal), the share the agent still
+// answered correctly — the LLM-self-bridging recovery the indicative scaffold
+// buys. Paired with recovery_avg_decision_steps so high recovery via flailing
+// (many steps) is distinguishable from informed retry (few). Pure over TurnResult.
+describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)", () => {
+  function tr(over: Partial<TurnResult>): TurnResult {
+    return {
+      problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
+      is_followup: false, turn_type: "symmetric", answerable: true,
+      success: true, classification_actual: "within_doc",
+      explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
+      tokens: { input: 0, output: 0 },
+      ...over,
+    };
+  }
+  function recoveryOf(rs: TurnResult[]) {
+    const a = rollupVariant("V", rs, [], new Map(), new Map());
+    return { rate: a.recovery_rate, steps: a.recovery_avg_decision_steps };
+  }
+
+  it("answerable turns that hit a gap signal and still succeeded → 1, with paired avg steps", () => {
+    expect(recoveryOf([
+      tr({ answerable: true, encountered_gap_signal: true, success: true, decision_steps: 2 }),
+      tr({ answerable: true, encountered_gap_signal: true, success: true, decision_steps: 4 }),
+    ])).toEqual({ rate: 1, steps: 3 });
+  });
+
+  it("a candidate that failed to recover drags the rate below 1", () => {
+    expect(recoveryOf([
+      tr({ answerable: true, encountered_gap_signal: true, success: true }),
+      tr({ answerable: true, encountered_gap_signal: true, success: false }),
+    ]).rate).toBeCloseTo(0.5);
+  });
+
+  it("denominator excludes unanswerable gap-encounters and gap-free turns → null when none qualify", () => {
+    expect(recoveryOf([
+      tr({ answerable: false, encountered_gap_signal: true }), // real gap, not a false-alarm to recover from
+      tr({ answerable: true, encountered_gap_signal: false }), // never hit a gap signal
+    ])).toEqual({ rate: null, steps: null });
   });
 });

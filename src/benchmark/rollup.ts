@@ -95,6 +95,10 @@ export function rollupVariant(
   const cross = rs.filter((r) => r.classification_actual === "cross_doc");
   const followups = rs.filter((r) => r.is_followup);
   const reportedGaps = rs.filter((r) => r.explicit_gap_reported);
+  // Recovery candidates: answerable turns where the keyword layer false-alarmed a
+  // gap. Content IS there, so a correct answer means the agent bridged past the
+  // gap signal (the retry-scaffold's intended win).
+  const recoveryCandidates = rs.filter((r) => r.answerable && r.encountered_gap_signal);
 
   // ── B11 per-thread metrics ──
   const byThread = groupBy(rs, (r) => r.problem_id);
@@ -138,6 +142,15 @@ export function rollupVariant(
       reportedGaps.length === 0
         ? null
         : reportedGaps.filter((r) => !r.answerable).length / reportedGaps.length,
+    // Both null when there are no candidates — they're a read-together pair, so
+    // the steps guard shares recovery_rate's no-signal state rather than mean()'s
+    // usual 0-on-empty (a 0 here would misread as "recovered in 0 steps").
+    recovery_rate:
+      recoveryCandidates.length === 0
+        ? null
+        : recoveryCandidates.filter((r) => r.success).length / recoveryCandidates.length,
+    recovery_avg_decision_steps:
+      recoveryCandidates.length === 0 ? null : mean(recoveryCandidates.map((r) => r.decision_steps)),
     avg_decision_steps: mean(rs.map((r) => r.decision_steps)),
     avg_tokens: {
       input: mean(rs.map((r) => r.tokens.input)),

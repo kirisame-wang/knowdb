@@ -74,6 +74,7 @@ export interface TurnResult {
   success: boolean;                        // B1 rubric: both items PASS
   classification_actual: "within_doc" | "cross_doc";  // B3
   explicit_gap_reported: boolean;          // B2
+  encountered_gap_signal: boolean;         // a search returned known_gap mid-turn (recovery denominator; ≠ terminal report)
   decision_steps: number;                  // from QueryTrace.tool_calls.length
   tokens: { input: number; output: number };
 }
@@ -87,6 +88,8 @@ export interface VariantAggregate {
   cross_doc_success_rate: number;
   explicit_gap_rate: number;
   abstention_precision: number | null;     // of reported-gap turns, share truly unanswerable; null when none reported
+  recovery_rate: number | null;            // of answerable turns that hit a gap signal, share still succeeded (false-gap recovery); null when none qualify
+  recovery_avg_decision_steps: number | null;  // paired guard: avg TOTAL decision steps over candidates — coarse retry-effort proxy (isolating post-gap-signal steps is deferred to the axis); high recovery + high steps leans flailing
   avg_decision_steps: number;
   avg_tokens: { input: number; output: number };
   read_chunk_pattern_usage_rate: number | null;  // from T15
