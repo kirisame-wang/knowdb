@@ -56,8 +56,14 @@ function parseSections(text: string): Section[] {
     }
 
     const parent = stack[stack.length - 1]!;
-    const siblingCount = parent.children.filter((c) => c.depth === depth).length;
-    const idSegment = String(siblingCount + 1).padStart(2, "0");
+    // Number by tree position among ALL existing children of this parent, not
+    // per-depth. The stack already attaches a heading to its nearest shallower
+    // ancestor, so on a level skip (## → #### → ###) the H4 and the later H3
+    // become tree-siblings under the H2; per-depth counting would restart each
+    // depth's ordinal at 01 and collide them onto one id (later overwrites
+    // earlier — silent data loss). The id's segment count is the tree level, so
+    // reconstruct renders normalized heading depths rather than the source's.
+    const idSegment = String(parent.children.length + 1).padStart(2, "0");
     const id = parent.id === "root" ? idSegment : `${parent.id}-${idSegment}`;
 
     const section: Section = { id, title, depth, content: "", children: [] };

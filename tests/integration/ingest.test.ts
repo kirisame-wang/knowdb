@@ -146,4 +146,79 @@ describe("ingest", () => {
       expect(await readFile(join(DB, docId, "_index.md"), "utf-8")).toContain("- 01: H1 Title");
     });
   });
+
+  // Real annual-report sources skip heading levels (a "（承前頁）" page break drops
+  // the intervening heading): H2 → H4 → H3. Tree-siblings must be numbered by tree
+  // position, not per-depth, or two real sections collide on one id and the later
+  // one overwrites the earlier's content.
+  describe("heading-level jumps: monotonic sibling numbering (no id collision / data loss)", () => {
+    const DB = dbDir("db-test-jump");
+    let tmp: string;
+    let docId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-jump-"));
+      const src = [
+        "# Top",
+        "",
+        "## Section P",
+        "",
+        "#### Orphan X", // H4 directly under H2 (jump) — its H3 parent was on the prior page
+        "x-body",
+        "",
+        "#### Orphan Y", // another H4 sibling
+        "y-body",
+        "",
+        "### Major Z", // H3 closes the open H4s → sibling of X/Y under P, NOT a child of Y
+        "z-body",
+        "",
+        "#### Z child", // H4 deeper than Z → nests under Z
+        "zchild-body",
+        "",
+      ].join("\n");
+      const path = join(tmp, "jump-doc.md");
+      await fsWriteFile(path, src, "utf-8");
+      const r = runIngest([path], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      docId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "jump-doc.md")!;
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("numbers X(H4)/Y(H4)/Z(H3) as distinct siblings under P (no collision)", async () => {
+      expect(await readFile(join(DB, docId, "01-01-01.md"), "utf-8")).toContain("x-body");
+      expect(await readFile(join(DB, docId, "01-01-02.md"), "utf-8")).toContain("y-body");
+      expect(await readFile(join(DB, docId, "01-01-03.md"), "utf-8")).toContain("z-body");
+    });
+
+    it("does not lose content to collision overwrite (both the orphan H4 and the major H3 survive)", async () => {
+      // Per-depth numbering gave X(H4) and Z(H3) the same id → Z overwrote X.
+      const idx = JSON.parse(await readFile(join(DB, "_search_index.json"), "utf-8")) as Record<string, string>;
+      const bodies = Object.entries(idx)
+        .filter(([k]) => k.startsWith(`${docId}/`))
+        .map(([, v]) => v);
+      expect(bodies.some((b) => b.includes("x-body"))).toBe(true);
+      expect(bodies.some((b) => b.includes("z-body"))).toBe(true);
+    });
+
+    it("nests a deeper heading under the preceding shallower one (Z child under Z)", async () => {
+      expect(await readFile(join(DB, docId, "01-01-03-01.md"), "utf-8")).toContain("zchild-body");
+    });
+
+    it("lists the jumped headings as siblings in _index.md", async () => {
+      const idxMd = await readFile(join(DB, docId, "_index.md"), "utf-8");
+      expect(idxMd).toContain("01-01-01: Orphan X");
+      expect(idxMd).toContain("01-01-02: Orphan Y");
+      expect(idxMd).toContain("01-01-03: Major Z");
+      expect(idxMd).toContain("01-01-03-01: Z child");
+    });
+  });
 });
