@@ -140,12 +140,7 @@ async function ingestFile(filePath: string): Promise<void> {
     await writeFile(join(outDir, "00.md"), preamble.trim() + "\n", "utf-8");
   }
 
-  // write chunk files — every section gets one, including content-less container
-  // headings (written as an empty stub). This restores the tree↔disk invariant
-  // for freshly-ingested docs: every node in _index.md gets a chunk file, so
-  // navigating to it (parent / footprint click) resolves instead of 404ing.
-  // (Already-committed db/ keeps the old behaviour until re-ingested.) The empty
-  // body is surfaced as an explicit "no direct content" hint at read time.
+  // Every section gets a file, content-less containers as an empty stub, so every _index node resolves.
   for (const section of sections) {
     const body = section.content.trim() ? section.content + "\n" : "";
     await writeFile(join(outDir, `${section.id}.md`), body, "utf-8");

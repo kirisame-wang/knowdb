@@ -175,8 +175,7 @@ async function selectChunk(id: string) {
     previewArea.innerHTML = "";
     previewArea.appendChild(idEl);
 
-    // A container heading resolves to an empty stub: say so instead of a blank
-    // pane, and leave the nav bar up so the reader can step to its subsections.
+    // No body: show a "no content" note (not a blank pane); nav bar stays up.
     if (text.trim()) {
       const pre = document.createElement("pre");
       pre.className = "preview-content";

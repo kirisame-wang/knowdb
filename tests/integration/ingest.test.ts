@@ -80,8 +80,7 @@ describe("ingest", () => {
     });
 
     it("produces an empty chunk file for a content-less section (01-03.md) — tree↔disk invariant", async () => {
-      // A container heading with no body of its own still gets a chunk file, so
-      // navigating to it (parent / footprint click) resolves instead of 404ing.
+      // Content-less container → empty stub file (so it stays navigable).
       const path = join(DB_DIR, docId, "01-03.md");
       expect(existsSync(path)).toBe(true);
       expect((await readFile(path, "utf-8")).trim()).toBe("");

@@ -141,9 +141,7 @@ describe("processToolCall — reconstruct_document", () => {
 });
 
 describe("processToolCall — read_chunk on a content-less chunk", () => {
-  // A container heading resolves to an empty stub file: instead of handing the
-  // agent a blank string, read_chunk names the outcome and points at the tools
-  // that reach the real content.
+  // Empty stub (content-less container) → hint, not a blank string.
   it("returns a navigation hint (not blank) for a heading with no body", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, text: async () => "" }));
     try {
