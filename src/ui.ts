@@ -393,8 +393,7 @@ async function sendMessage() {
   input.value = "";
   const ac = new AbortController();
   setActiveAbort(ac);
-  // Restore the doc tree so the user can't rebuild it out from under the live
-  // highlight (search is locked by setActiveAbort; both lift in the finally).
+  // Restore the doc tree so the user can't rebuild it out from under the live highlight.
   renderDocTree();
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
