@@ -295,6 +295,108 @@ describe("runAgentTurn — integration", () => {
     expect(trace.ended_at).toBe("2026-05-16T10:00:02.000Z");
   });
 
+  // ── User-side cancel (Stop button) ──────────────────────────────────────
+  // The UI passes an AbortSignal; clicking Stop fires it. A cancelled turn is
+  // recorded as the QueryTrace "interrupted" state — no final_answer, no error
+  // — so metrics never count a user stop as a failed query.
+
+  it("abort in-flight (SDK throws after signal fires): recorded as cancel, not error", async () => {
+    const controller = new AbortController();
+    // Models the Anthropic SDK: an aborted request rejects with APIUserAbortError.
+    const client: MessagesClient = {
+      messages: {
+        create: async (_params, options) => {
+          controller.abort();
+          const err = new Error("Request was aborted.");
+          err.name = "APIUserAbortError";
+          void options;
+          throw err;
+        },
+      },
+    };
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+    const events: string[] = [];
+    deps.hooks = {
+      onAbort: () => events.push("abort"),
+      onError: () => events.push("error"),
+    };
+
+    const trace = (await runAgentTurn(deps, "stop me"))!;
+
+    expect(trace.final_answer).toBeUndefined();
+    expect(trace.error).toBeUndefined();
+    expect(trace.aborted).toBe(true); // distinct outcome, not inferred from absence
+    expect(events).toEqual(["abort"]); // onAbort fired, onError did NOT
+    // The partial trace still flushes — the steps taken so far are real data.
+    const persisted = parseJsonl<QueryTrace>(deps.traceKV.getItem("knowdb-traces") ?? "");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.aborted).toBe(true);
+    expect(persisted[0]!.error).toBeUndefined();
+  });
+
+  it("abort between rounds: stops at the round boundary, chatHistory stays well-formed", async () => {
+    const controller = new AbortController();
+    // Round 1 returns a tool_use and trips the abort (models the user clicking
+    // Stop while the local tool runs). Round 2 must never be issued.
+    const client: MessagesClient = (() => {
+      let i = 0;
+      const responses = [
+        msg([toolUse("tu_1", "search", { keyword: "BM25" })]),
+        msg([text("should never be reached")]),
+      ];
+      return {
+        messages: {
+          create: async () => {
+            const r = responses[i++]!;
+            if (i === 1) controller.abort(); // abort during/after round 1
+            return r;
+          },
+        },
+      };
+    })();
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+    let aborts = 0;
+    deps.hooks = { onAbort: () => aborts++ };
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    expect(trace.final_answer).toBeUndefined();
+    expect(trace.error).toBeUndefined();
+    expect(trace.aborted).toBe(true);
+    expect(aborts).toBe(1);
+    // Only round 1 ran; the loop broke before issuing round 2.
+    expect(trace.api_rounds).toHaveLength(1);
+    expect(trace.tool_calls.map((c) => c.tool)).toEqual(["search"]);
+    // chatHistory ends on a complete tool_result turn — a following turn's
+    // messages.create would not 400 on a dangling tool_use.
+    const last = deps.chatHistory[deps.chatHistory.length - 1]!;
+    expect(last.role).toBe("user");
+    expect(Array.isArray(last.content)).toBe(true);
+    expect(
+      (last.content as Anthropic.Messages.ToolResultBlockParam[]).every((b) => b.type === "tool_result")
+    ).toBe(true);
+  });
+
+  it("passes the abort signal through to messages.create", async () => {
+    const controller = new AbortController();
+    let seenSignal: AbortSignal | undefined;
+    const client: MessagesClient = {
+      messages: {
+        create: async (_params, options) => {
+          seenSignal = options?.signal;
+          return msg([text("done")]);
+        },
+      },
+    };
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+
+    await runAgentTurn(deps, "Q");
+    expect(seenSignal).toBe(controller.signal);
+  });
+
   it("two tool_use blocks in one response: both recorded, ordinals in block order", async () => {
     const client = scriptedClient([
       msg([

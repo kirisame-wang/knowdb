@@ -42,6 +42,8 @@ export interface TraceCollector {
   recordToolCall(query_id: string, ev: Omit<ToolCallEvent, "ordinal">): void;
   recordApiRound(query_id: string, round: Omit<ApiRoundUsage, "ordinal">): void;
   endQuery(query_id: string, final_answer?: string, error?: string, now?: Date): QueryTrace;
+  /** Finalize a turn the user cancelled (Stop): no answer, no error, aborted=true. */
+  abortQuery(query_id: string, now?: Date): QueryTrace;
   subscribe(cb: (e: TraceCollectorEvent) => void): () => void;
 }
 
@@ -140,6 +142,28 @@ export class BrowserTraceCollector implements TraceCollector {
   }
 
   endQuery(query_id: string, final_answer?: string, error?: string, now: Date = new Date()): QueryTrace {
+    return this.finalize(
+      query_id,
+      {
+        ...(final_answer !== undefined ? { final_answer } : {}),
+        ...(error !== undefined ? { error } : {}),
+      },
+      now
+    );
+  }
+
+  abortQuery(query_id: string, now: Date = new Date()): QueryTrace {
+    return this.finalize(query_id, { aborted: true }, now);
+  }
+
+  /** Assemble the final QueryTrace, drop the partial, emit query_end. `outcome`
+   *  carries the terminal fields (final_answer / error / aborted) — exactly one
+   *  shape per call site, so the three lifecycle ends share one assembler. */
+  private finalize(
+    query_id: string,
+    outcome: Pick<Partial<QueryTrace>, "final_answer" | "error" | "aborted">,
+    now: Date
+  ): QueryTrace {
     const p = this.partials.get(query_id);
     if (!p) throw new Error(`endQuery: unknown query_id ${query_id}`);
     const trace: QueryTrace = {
@@ -151,8 +175,7 @@ export class BrowserTraceCollector implements TraceCollector {
       ended_at: nowIso(now),
       tool_calls: p.tool_calls,
       api_rounds: p.api_rounds,
-      ...(final_answer !== undefined ? { final_answer } : {}),
-      ...(error !== undefined ? { error } : {}),
+      ...outcome,
     };
     this.partials.delete(query_id);
     this.emit({ kind: "query_end", trace });

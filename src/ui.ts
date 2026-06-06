@@ -14,6 +14,8 @@ import type { SearchIndex, Manifest } from "./types.js";
 let searchIndex: SearchIndex = {};
 let manifest: Manifest = {};
 let selectedId: string | null = null;
+// Non-null while a turn runs; the Send button doubles as Stop and aborts it.
+let activeTurn: AbortController | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
 // One session for the page load: both sinks share it so trace x gap join
 // on session_id holds within a conversation.
@@ -315,11 +317,14 @@ const setupTraceExport = () =>
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
 function setupChat() {
-  el("btn-send").addEventListener("click", sendMessage);
+  el("btn-send").addEventListener("click", () => {
+    if (activeTurn) activeTurn.abort();
+    else void sendMessage();
+  });
   el<HTMLTextAreaElement>("chat-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!el("btn-send").hasAttribute("disabled")) sendMessage();
+      if (!activeTurn) void sendMessage();
     }
   });
 }
@@ -375,7 +380,11 @@ async function sendMessage() {
   }
 
   input.value = "";
-  el("btn-send").setAttribute("disabled", "");
+  const ac = new AbortController();
+  activeTurn = ac;
+  const sendBtn = el("btn-send");
+  sendBtn.textContent = "Stop";
+  sendBtn.classList.add("btn-stop");
   // Restore the doc tree and lock search for the turn so the user can't rebuild
   // it out from under the live highlight (re-enabled in the finally below).
   renderDocTree();
@@ -400,6 +409,7 @@ async function sendMessage() {
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         chatHistory,
+        signal: ac.signal,
         hooks: {
           onUserMessage: (t) => appendBubble("user", t),
           onThinkingStart: () => {
@@ -418,12 +428,21 @@ async function sendMessage() {
             if (thinkingBubble) thinkingBubble.textContent = msg;
             else appendStatus(msg);
           },
+          onAbort: () => {
+            if (thinkingBubble) {
+              thinkingBubble.remove();
+              thinkingBubble = null;
+            }
+            appendStatus("Stopped.");
+          },
         },
       },
       text
     );
   } finally {
-    el("btn-send").removeAttribute("disabled");
+    activeTurn = null;
+    sendBtn.textContent = "Send";
+    sendBtn.classList.remove("btn-stop");
     el("search-input").removeAttribute("disabled");
   }
 }

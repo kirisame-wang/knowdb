@@ -10,7 +10,8 @@ import type { Manifest, QueryTrace, SearchIndex } from "../types.js";
 export interface MessagesClient {
   messages: {
     create(
-      params: Anthropic.Messages.MessageCreateParamsNonStreaming
+      params: Anthropic.Messages.MessageCreateParamsNonStreaming,
+      options?: { signal?: AbortSignal | undefined }
     ): Promise<Anthropic.Messages.Message>;
   };
 }
@@ -31,6 +32,9 @@ export interface AgentLoopDeps {
   hooks?: AgentLoopHooks;
   /** Injectable clock for deterministic tests. Defaults to Date.now/new Date. */
   now?: () => Date;
+  /** Fires when the user cancels the turn (Stop button). Aborts the in-flight
+   *  API request and stops the loop at the next round boundary. */
+  signal?: AbortSignal;
 }
 
 export interface AgentLoopHooks {
@@ -40,6 +44,7 @@ export interface AgentLoopHooks {
   onToolCall?(toolName: string, input: unknown, result: string): void;
   onAssistantMessage?(text: string): void;
   onError?(err: unknown): void;
+  onAbort?(): void;
 }
 
 /** Drive one user→final-answer turn: stamp the trace, run the tool-use loop,
@@ -62,14 +67,25 @@ export async function runAgentTurn(
     // Tool-use agentic loop.
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      // Round boundary is the only safe abort point: chatHistory ends on a
+      // complete turn here, so stopping leaves no dangling tool_use for the
+      // next turn to choke on. Catches a Stop clicked while local tools run.
+      if (deps.signal?.aborted) {
+        deps.hooks?.onAbort?.();
+        trace = deps.collector.abortQuery(query_id, now());
+        break;
+      }
       const apiT0 = Date.now();
-      const response = await deps.client.messages.create({
-        model: deps.model,
-        max_tokens: deps.maxTokens,
-        system: deps.system,
-        tools: deps.tools,
-        messages: deps.chatHistory,
-      });
+      const response = await deps.client.messages.create(
+        {
+          model: deps.model,
+          max_tokens: deps.maxTokens,
+          system: deps.system,
+          tools: deps.tools,
+          messages: deps.chatHistory,
+        },
+        { signal: deps.signal }
+      );
       deps.collector.recordApiRound(query_id, {
         input_tokens: response.usage.input_tokens,
         output_tokens: response.usage.output_tokens,
@@ -136,10 +152,16 @@ export async function runAgentTurn(
       deps.chatHistory.push({ role: "user", content: toolResults });
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    deps.hooks?.onError?.(err);
+    // A user abort surfaces here as the SDK's APIUserAbortError — a
+    // cancellation, not a failure. Record it via abortQuery (aborted=true, no
+    // error) so metrics never count a Stop as a failed query.
+    const aborted = deps.signal?.aborted ?? false;
+    if (aborted) deps.hooks?.onAbort?.();
+    else deps.hooks?.onError?.(err);
     try {
-      trace = deps.collector.endQuery(query_id, undefined, msg, now());
+      trace = aborted
+        ? deps.collector.abortQuery(query_id, now())
+        : deps.collector.endQuery(query_id, undefined, err instanceof Error ? err.message : String(err), now());
     } catch {
       // Collector itself failed; trace is unrecoverable. Original err is
       // already reported via onError above.

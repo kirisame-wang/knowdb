@@ -122,6 +122,7 @@ export interface QueryTrace {
   api_rounds: ApiRoundUsage[];
   final_answer?: string;           // omitted if interrupted/errored
   error?: string;                  // error message if the loop threw
+  aborted?: boolean;               // true when the user cancelled the turn (Stop); a distinct outcome from error (environmental) and from a completed answer — manual interrupt carries intent. Fidelity only; metric consumption (abort rate) is a follow-up.
 }
 
 export interface LocalCommandEvent {
