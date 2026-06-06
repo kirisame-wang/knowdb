@@ -140,11 +140,10 @@ async function ingestFile(filePath: string): Promise<void> {
     await writeFile(join(outDir, "00.md"), preamble.trim() + "\n", "utf-8");
   }
 
-  // write chunk files
+  // Every section gets a file, content-less containers as an empty stub, so every _index node resolves.
   for (const section of sections) {
-    if (section.content.trim()) {
-      await writeFile(join(outDir, `${section.id}.md`), section.content + "\n", "utf-8");
-    }
+    const body = section.content.trim() ? section.content + "\n" : "";
+    await writeFile(join(outDir, `${section.id}.md`), body, "utf-8");
   }
 
   // write _index.md

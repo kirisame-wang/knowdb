@@ -79,8 +79,17 @@ describe("ingest", () => {
       expect(content).toContain("Body of a deeply nested H3");
     });
 
-    it("does NOT produce a chunk file for empty section (01-03.md)", () => {
-      expect(existsSync(join(DB_DIR, docId, "01-03.md"))).toBe(false);
+    it("produces an empty chunk file for a content-less section (01-03.md) — tree↔disk invariant", async () => {
+      // Content-less container → empty stub file (so it stays navigable).
+      const path = join(DB_DIR, docId, "01-03.md");
+      expect(existsSync(path)).toBe(true);
+      expect((await readFile(path, "utf-8")).trim()).toBe("");
+    });
+
+    it("indexes the content-less section with an empty value (navigable, never 404s)", async () => {
+      const index = JSON.parse(await readFile(join(DB_DIR, "_search_index.json"), "utf-8"));
+      expect(index).toHaveProperty(`${docId}/01-03`);
+      expect(index[`${docId}/01-03`]).toBe("");
     });
 
     it("still records empty section in _index.md", async () => {
