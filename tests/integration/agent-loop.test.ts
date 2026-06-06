@@ -46,8 +46,7 @@ function scriptedClient(responses: Anthropic.Messages.Message[]): MessagesClient
   };
 }
 
-// A client that aborts the controller mid-request, then throws — models the
-// Anthropic SDK rejecting an aborted request. `err` is what create() throws.
+// Client whose create() aborts the controller, then throws `err` (models an SDK abort).
 function abortingClient(controller: AbortController, err: unknown): MessagesClient {
   return {
     messages: {
@@ -323,9 +322,7 @@ describe("runAgentTurn — integration", () => {
   });
 
   // ── User-side cancel (Stop button) ──────────────────────────────────────
-  // The UI passes an AbortSignal; clicking Stop fires it. A cancelled turn is
-  // recorded with aborted=true and no final_answer/error, so metrics never
-  // count a user stop as a failed query.
+  // A cancelled turn is recorded with aborted=true and no final_answer/error.
 
   it("abort in-flight (SDK throws after signal fires): recorded as cancel, not error", async () => {
     const controller = new AbortController();
@@ -351,8 +348,7 @@ describe("runAgentTurn — integration", () => {
 
   it("abort between rounds: stops at the round boundary, chatHistory stays well-formed", async () => {
     const controller = new AbortController();
-    // Round 1 returns a tool_use and trips the abort (models the user clicking
-    // Stop while the local tool runs). Round 2 must never be issued.
+    // Round 1 trips the abort (Stop clicked while the local tool runs); round 2 must not be issued.
     const client: MessagesClient = (() => {
       let i = 0;
       const responses = [
@@ -383,8 +379,7 @@ describe("runAgentTurn — integration", () => {
     // Only round 1 ran; the loop broke before issuing round 2.
     expect(trace.api_rounds).toHaveLength(1);
     expect(trace.tool_calls.map((c) => c.tool)).toEqual(["search"]);
-    // chatHistory ends on a complete tool_result turn — a following turn's
-    // messages.create would not 400 on a dangling tool_use.
+    // chatHistory must end on a complete tool_result turn — no dangling tool_use to 400 the next turn.
     const last = deps.chatHistory[deps.chatHistory.length - 1]!;
     expect(last.role).toBe("user");
     expect(Array.isArray(last.content)).toBe(true);
@@ -394,12 +389,10 @@ describe("runAgentTurn — integration", () => {
   });
 
   it("classify by signal state, not error identity: a non-abort error while aborted is still a cancel", async () => {
-    // Guards the loop catch's deliberate choice — it keys on signal.aborted, NOT
-    // on err.name === "APIUserAbortError". The in-flight test throws a real abort
-    // error, so it would survive a refactor to error-identity classification;
-    // only THIS test (a generic error thrown while aborted) catches that regression.
+    // Catch keys on signal.aborted, not err.name — only this test (a non-abort
+    // error thrown while aborted) catches a regression to error-identity classification.
     const controller = new AbortController();
-    const nonAbortError = new Error("network down"); // name "Error" — deliberately not abort-typed
+    const nonAbortError = new Error("network down"); // deliberately not abort-typed
     const deps = makeDeps(abortingClient(controller, nonAbortError));
     deps.signal = controller.signal;
     const { events, hooks } = recordHookEvents();
@@ -407,16 +400,14 @@ describe("runAgentTurn — integration", () => {
 
     const trace = (await runAgentTurn(deps, "Q"))!;
 
-    expect(trace.aborted).toBe(true); // recorded as a cancel...
-    expect(trace.error).toBeUndefined(); // ...and the "network down" message is dropped, not stored as an error
-    expect(events).toEqual(["abort"]); // routed to onAbort, not onError — error-identity classification would do the reverse
+    expect(trace.aborted).toBe(true);
+    expect(trace.error).toBeUndefined(); // "network down" dropped, not stored
+    expect(events).toEqual(["abort"]); // onAbort, not onError
   });
 
   it("abort during a round whose tool errors: turn recorded as aborted, tool error isolated", async () => {
-    // The realistic coexistence: the user clicks Stop while a tool runs, and
-    // that tool also fails. The tool error is caught inline (is_error tool_result,
-    // never fatal); the round-boundary guard then ends the turn as a cancel, so
-    // the tool failure does not become the turn's outcome.
+    // Stop clicked while a tool runs and that tool also fails: the tool error is
+    // caught inline (is_error), and the round-boundary guard ends the turn as a cancel.
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     try {
       const controller = new AbortController();
