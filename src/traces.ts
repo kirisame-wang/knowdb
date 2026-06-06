@@ -165,7 +165,8 @@ export class BrowserTraceCollector implements TraceCollector {
     now: Date
   ): QueryTrace {
     const p = this.partials.get(query_id);
-    if (!p) throw new Error(`endQuery: unknown query_id ${query_id}`);
+    // Shared by endQuery + abortQuery — keep the message method-neutral.
+    if (!p) throw new Error(`finalize: unknown query_id ${query_id}`);
     const trace: QueryTrace = {
       source: "browser",
       query_id,

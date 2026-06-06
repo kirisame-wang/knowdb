@@ -154,7 +154,10 @@ export async function runAgentTurn(
   } catch (err) {
     // A user abort surfaces here as the SDK's APIUserAbortError — a
     // cancellation, not a failure. Record it via abortQuery (aborted=true, no
-    // error) so metrics never count a Stop as a failed query.
+    // error) so metrics never count a Stop as a failed query. Classification
+    // keys on signal state, not error identity: once the user has clicked
+    // Stop, the turn is a cancellation regardless of what error races in — a
+    // co-occurring network error is moot because the turn is ending anyway.
     const aborted = deps.signal?.aborted ?? false;
     if (aborted) deps.hooks?.onAbort?.();
     else deps.hooks?.onError?.(err);

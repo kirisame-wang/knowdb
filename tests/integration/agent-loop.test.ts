@@ -379,6 +379,31 @@ describe("runAgentTurn — integration", () => {
     ).toBe(true);
   });
 
+  it("abort takes precedence: a non-abort error while the signal is aborted is recorded as cancel", async () => {
+    // Contract: once the user has clicked Stop (signal aborted), the turn is a
+    // cancellation regardless of what error races in — classification keys on
+    // signal state, not error identity. The racing error message is dropped.
+    const controller = new AbortController();
+    const client: MessagesClient = {
+      messages: {
+        create: async () => {
+          controller.abort();
+          throw new Error("network down"); // a real error, NOT an abort error
+        },
+      },
+    };
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+    const events: string[] = [];
+    deps.hooks = { onAbort: () => events.push("abort"), onError: () => events.push("error") };
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    expect(trace.aborted).toBe(true);
+    expect(trace.error).toBeUndefined(); // racing "network down" dropped — cancel wins
+    expect(events).toEqual(["abort"]);
+  });
+
   it("passes the abort signal through to messages.create", async () => {
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;

@@ -316,6 +316,18 @@ const setupTraceExport = () =>
 
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
+// Single owner of the turn-active state: the AbortController, the Send/Stop
+// button label + style, and the search lock move together, so no exit path can
+// leave them out of sync.
+function setActiveTurn(ac: AbortController | null) {
+  activeTurn = ac;
+  const btn = el("btn-send");
+  btn.textContent = ac ? "Stop" : "Send";
+  btn.classList.toggle("btn-stop", ac !== null);
+  if (ac) el("search-input").setAttribute("disabled", "");
+  else el("search-input").removeAttribute("disabled");
+}
+
 function setupChat() {
   el("btn-send").addEventListener("click", () => {
     if (activeTurn) activeTurn.abort();
@@ -381,14 +393,10 @@ async function sendMessage() {
 
   input.value = "";
   const ac = new AbortController();
-  activeTurn = ac;
-  const sendBtn = el("btn-send");
-  sendBtn.textContent = "Stop";
-  sendBtn.classList.add("btn-stop");
-  // Restore the doc tree and lock search for the turn so the user can't rebuild
-  // it out from under the live highlight (re-enabled in the finally below).
+  setActiveTurn(ac);
+  // Restore the doc tree so the user can't rebuild it out from under the live
+  // highlight (search is locked by setActiveTurn; both lift in the finally).
   renderDocTree();
-  el("search-input").setAttribute("disabled", "");
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
   let thinkingBubble: HTMLElement | null = null;
@@ -440,10 +448,7 @@ async function sendMessage() {
       text
     );
   } finally {
-    activeTurn = null;
-    sendBtn.textContent = "Send";
-    sendBtn.classList.remove("btn-stop");
-    el("search-input").removeAttribute("disabled");
+    setActiveTurn(null);
   }
 }
 
