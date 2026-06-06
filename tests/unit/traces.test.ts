@@ -189,6 +189,21 @@ describe("BrowserTraceCollector lifecycle", () => {
     expect(t.error).toBe("boom");
   });
 
+  it("abortQuery records aborted=true, omits final_answer and error", () => {
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
+    const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
+    const t = collector.abortQuery(q, new Date("2026-05-16T10:00:01Z"));
+    expect(t.aborted).toBe(true);
+    expect(t.final_answer).toBeUndefined();
+    expect(t.error).toBeUndefined();
+    expect(t.ended_at).toBe("2026-05-16T10:00:01.000Z");
+  });
+
+  it("abortQuery on unknown query_id throws", () => {
+    const collector = new BrowserTraceCollector(new SessionContext(SID));
+    expect(() => collector.abortQuery("q_nope")).toThrow(/unknown query_id/);
+  });
+
   it("recordToolCall on unknown query_id throws", () => {
     const collector = new BrowserTraceCollector(new SessionContext(SID));
     expect(() =>

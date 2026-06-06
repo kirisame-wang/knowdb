@@ -122,6 +122,7 @@ export interface QueryTrace {
   api_rounds: ApiRoundUsage[];
   final_answer?: string;           // omitted if interrupted/errored
   error?: string;                  // error message if the loop threw
+  aborted?: boolean;               // user cancelled the turn (Stop); distinct from error and from a completed answer
 }
 
 export interface LocalCommandEvent {

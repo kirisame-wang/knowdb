@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
-import { runAgentTurn, type AgentLoopDeps, type MessagesClient } from "../../src/agent/loop.js";
+import {
+  runAgentTurn,
+  type AgentLoopDeps,
+  type AgentLoopHooks,
+  type MessagesClient,
+} from "../../src/agent/loop.js";
 import { KNOWDB_TOOLS } from "../../src/agent/tools.js";
 import { SKILL } from "../../src/agent/skill.js";
 import { BrowserGapSink } from "../../src/gaps.js";
@@ -38,6 +43,27 @@ function scriptedClient(responses: Anthropic.Messages.Message[]): MessagesClient
         return responses[i++]!;
       },
     },
+  };
+}
+
+// Client whose create() aborts the controller, then throws `err` (models an SDK abort).
+function abortingClient(controller: AbortController, err: unknown): MessagesClient {
+  return {
+    messages: {
+      create: async () => {
+        controller.abort();
+        throw err;
+      },
+    },
+  };
+}
+
+// Fresh hook-event recorder: each hook pushes its name on fire; assert on `events`.
+function recordHookEvents(): { events: string[]; hooks: AgentLoopHooks } {
+  const events: string[] = [];
+  return {
+    events,
+    hooks: { onAbort: () => events.push("abort"), onError: () => events.push("error") },
   };
 }
 
@@ -293,6 +319,152 @@ describe("runAgentTurn — integration", () => {
     expect(trace.started_at).toBe("2026-05-16T10:00:00.000Z");
     expect(tc.timestamp).toBe("2026-05-16T10:00:01.000Z");
     expect(trace.ended_at).toBe("2026-05-16T10:00:02.000Z");
+  });
+
+  // ── User-side cancel (Stop button) ──────────────────────────────────────
+  // A cancelled turn is recorded with aborted=true and no final_answer/error.
+
+  it("abort in-flight (SDK throws after signal fires): recorded as cancel, not error", async () => {
+    const controller = new AbortController();
+    const abortErr = new Error("Request was aborted.");
+    abortErr.name = "APIUserAbortError"; // models the Anthropic SDK's abort rejection
+    const deps = makeDeps(abortingClient(controller, abortErr));
+    deps.signal = controller.signal;
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
+
+    const trace = (await runAgentTurn(deps, "stop me"))!;
+
+    expect(trace.final_answer).toBeUndefined();
+    expect(trace.error).toBeUndefined();
+    expect(trace.aborted).toBe(true); // distinct outcome, not inferred from absence
+    expect(events).toEqual(["abort"]); // onAbort fired, onError did NOT
+    // The partial trace still flushes — the steps taken so far are real data.
+    const persisted = parseJsonl<QueryTrace>(deps.traceKV.getItem("knowdb-traces") ?? "");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.aborted).toBe(true);
+    expect(persisted[0]!.error).toBeUndefined();
+  });
+
+  it("abort between rounds: stops at the round boundary, chatHistory stays well-formed", async () => {
+    const controller = new AbortController();
+    // Round 1 trips the abort (Stop clicked while the local tool runs); round 2 must not be issued.
+    const client: MessagesClient = (() => {
+      let i = 0;
+      const responses = [
+        msg([toolUse("tu_1", "search", { keyword: "BM25" })]),
+        msg([text("should never be reached")]),
+      ];
+      return {
+        messages: {
+          create: async () => {
+            const r = responses[i++]!;
+            if (i === 1) controller.abort(); // abort during/after round 1
+            return r;
+          },
+        },
+      };
+    })();
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    expect(trace.final_answer).toBeUndefined();
+    expect(trace.error).toBeUndefined();
+    expect(trace.aborted).toBe(true);
+    expect(events).toEqual(["abort"]);
+    // Only round 1 ran; the loop broke before issuing round 2.
+    expect(trace.api_rounds).toHaveLength(1);
+    expect(trace.tool_calls.map((c) => c.tool)).toEqual(["search"]);
+    // chatHistory must end on a complete tool_result turn — no dangling tool_use to 400 the next turn.
+    const last = deps.chatHistory[deps.chatHistory.length - 1]!;
+    expect(last.role).toBe("user");
+    expect(Array.isArray(last.content)).toBe(true);
+    expect(
+      (last.content as Anthropic.Messages.ToolResultBlockParam[]).every((b) => b.type === "tool_result")
+    ).toBe(true);
+  });
+
+  it("classify by signal state, not error identity: a non-abort error while aborted is still a cancel", async () => {
+    // Catch keys on signal.aborted, not err.name — only this test (a non-abort
+    // error thrown while aborted) catches a regression to error-identity classification.
+    const controller = new AbortController();
+    const nonAbortError = new Error("network down"); // deliberately not abort-typed
+    const deps = makeDeps(abortingClient(controller, nonAbortError));
+    deps.signal = controller.signal;
+    const { events, hooks } = recordHookEvents();
+    deps.hooks = hooks;
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    expect(trace.aborted).toBe(true);
+    expect(trace.error).toBeUndefined(); // "network down" dropped, not stored
+    expect(events).toEqual(["abort"]); // onAbort, not onError
+  });
+
+  it("abort during a round whose tool errors: turn recorded as aborted, tool error isolated", async () => {
+    // Stop clicked while a tool runs and that tool also fails: the tool error is
+    // caught inline (is_error), and the round-boundary guard ends the turn as a cancel.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    try {
+      const controller = new AbortController();
+      const client: MessagesClient = (() => {
+        let i = 0;
+        const responses = [
+          msg([toolUse("tu_1", "read_chunk", { id: "aaa00001/99" })]), // 404 → tool throws
+          msg([text("should never be reached")]),
+        ];
+        return {
+          messages: {
+            create: async () => {
+              const r = responses[i++]!;
+              if (i === 1) controller.abort(); // Stop clicked while the tool runs
+              return r;
+            },
+          },
+        };
+      })();
+      const deps = makeDeps(client);
+      deps.signal = controller.signal;
+      const { events, hooks } = recordHookEvents();
+      deps.hooks = hooks;
+
+      const trace = (await runAgentTurn(deps, "Q"))!;
+
+      // Turn outcome is the cancel, not the tool error.
+      expect(trace.aborted).toBe(true);
+      expect(trace.error).toBeUndefined();
+      expect(trace.final_answer).toBeUndefined();
+      // The tool ran and errored — recorded as is_error, isolated from the outcome.
+      expect(trace.tool_calls).toHaveLength(1);
+      expect(trace.tool_calls[0]!.is_error).toBe(true);
+      // Only round 1 ran; the inline tool error fired onError, then the guard fired onAbort.
+      expect(trace.api_rounds).toHaveLength(1);
+      expect(events).toEqual(["error", "abort"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("passes the abort signal through to messages.create", async () => {
+    const controller = new AbortController();
+    let seenSignal: AbortSignal | undefined;
+    const client: MessagesClient = {
+      messages: {
+        create: async (_params, options) => {
+          seenSignal = options?.signal;
+          return msg([text("done")]);
+        },
+      },
+    };
+    const deps = makeDeps(client);
+    deps.signal = controller.signal;
+
+    await runAgentTurn(deps, "Q");
+    expect(seenSignal).toBe(controller.signal);
   });
 
   it("two tool_use blocks in one response: both recorded, ordinals in block order", async () => {
