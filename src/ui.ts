@@ -15,7 +15,7 @@ let searchIndex: SearchIndex = {};
 let manifest: Manifest = {};
 let selectedId: string | null = null;
 // Non-null while a turn runs; the Send button doubles as Stop and aborts it.
-let activeTurn: AbortController | null = null;
+let activeAbort: AbortController | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
 // One session for the page load: both sinks share it so trace x gap join
 // on session_id holds within a conversation.
@@ -318,8 +318,8 @@ const setupTraceExport = () =>
 
 // Single owner of turn-active state: controller, Send/Stop button, and search
 // lock move together.
-function setActiveTurn(ac: AbortController | null) {
-  activeTurn = ac;
+function setActiveAbort(ac: AbortController | null) {
+  activeAbort = ac;
   const btn = el("btn-send");
   btn.textContent = ac ? "Stop" : "Send";
   btn.classList.toggle("btn-stop", ac !== null);
@@ -329,13 +329,13 @@ function setActiveTurn(ac: AbortController | null) {
 
 function setupChat() {
   el("btn-send").addEventListener("click", () => {
-    if (activeTurn) activeTurn.abort();
+    if (activeAbort) activeAbort.abort();
     else void sendMessage();
   });
   el<HTMLTextAreaElement>("chat-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      if (!activeTurn) void sendMessage();
+      if (!activeAbort) void sendMessage();
     }
   });
 }
@@ -392,9 +392,9 @@ async function sendMessage() {
 
   input.value = "";
   const ac = new AbortController();
-  setActiveTurn(ac);
+  setActiveAbort(ac);
   // Restore the doc tree so the user can't rebuild it out from under the live
-  // highlight (search is locked by setActiveTurn; both lift in the finally).
+  // highlight (search is locked by setActiveAbort; both lift in the finally).
   renderDocTree();
 
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
@@ -447,7 +447,7 @@ async function sendMessage() {
       text
     );
   } finally {
-    setActiveTurn(null);
+    setActiveAbort(null);
   }
 }
 
