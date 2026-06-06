@@ -32,8 +32,7 @@ export interface AgentLoopDeps {
   hooks?: AgentLoopHooks;
   /** Injectable clock for deterministic tests. Defaults to Date.now/new Date. */
   now?: () => Date;
-  /** Fires when the user cancels the turn (Stop button). Aborts the in-flight
-   *  API request and stops the loop at the next round boundary. */
+  /** User cancel (Stop): aborts the in-flight request, stops at the next round boundary. */
   signal?: AbortSignal;
 }
 
@@ -67,9 +66,8 @@ export async function runAgentTurn(
     // Tool-use agentic loop.
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      // Round boundary is the only safe abort point: chatHistory ends on a
-      // complete turn here, so stopping leaves no dangling tool_use for the
-      // next turn to choke on. Catches a Stop clicked while local tools run.
+      // Safe abort point: chatHistory ends on a complete turn here, so no
+      // dangling tool_use is left behind. Catches a Stop during tool execution.
       if (deps.signal?.aborted) {
         deps.hooks?.onAbort?.();
         trace = deps.collector.abortQuery(query_id, now());
@@ -152,12 +150,8 @@ export async function runAgentTurn(
       deps.chatHistory.push({ role: "user", content: toolResults });
     }
   } catch (err) {
-    // A user abort surfaces here as the SDK's APIUserAbortError — a
-    // cancellation, not a failure. Record it via abortQuery (aborted=true, no
-    // error) so metrics never count a Stop as a failed query. Classification
-    // keys on signal state, not error identity: once the user has clicked
-    // Stop, the turn is a cancellation regardless of what error races in — a
-    // co-occurring network error is moot because the turn is ending anyway.
+    // Classify by signal state, not error identity: an aborted signal means
+    // the user cancelled, so record it as a cancel (abortQuery), not an error.
     const aborted = deps.signal?.aborted ?? false;
     if (aborted) deps.hooks?.onAbort?.();
     else deps.hooks?.onError?.(err);

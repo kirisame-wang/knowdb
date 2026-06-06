@@ -316,9 +316,8 @@ const setupTraceExport = () =>
 
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
-// Single owner of the turn-active state: the AbortController, the Send/Stop
-// button label + style, and the search lock move together, so no exit path can
-// leave them out of sync.
+// Single owner of turn-active state: controller, Send/Stop button, and search
+// lock move together.
 function setActiveTurn(ac: AbortController | null) {
   activeTurn = ac;
   const btn = el("btn-send");

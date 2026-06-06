@@ -157,8 +157,7 @@ export class BrowserTraceCollector implements TraceCollector {
   }
 
   /** Assemble the final QueryTrace, drop the partial, emit query_end. `outcome`
-   *  carries the terminal fields (final_answer / error / aborted) — exactly one
-   *  shape per call site, so the three lifecycle ends share one assembler. */
+   *  carries the terminal fields (final_answer / error / aborted). */
   private finalize(
     query_id: string,
     outcome: Pick<Partial<QueryTrace>, "final_answer" | "error" | "aborted">,
