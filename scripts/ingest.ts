@@ -56,13 +56,8 @@ function parseSections(text: string): Section[] {
     }
 
     const parent = stack[stack.length - 1]!;
-    // Number by tree position among ALL existing children of this parent, not
-    // per-depth. The stack already attaches a heading to its nearest shallower
-    // ancestor, so on a level skip (## → #### → ###) the H4 and the later H3
-    // become tree-siblings under the H2; per-depth counting would restart each
-    // depth's ordinal at 01 and collide them onto one id (later overwrites
-    // earlier — silent data loss). The id's segment count is the tree level, so
-    // reconstruct renders normalized heading depths rather than the source's.
+    // Number by position among all children, not per heading depth: a level
+    // skip (## → #### → ###) makes an H4 and an H3 tree-siblings under one parent.
     const idSegment = String(parent.children.length + 1).padStart(2, "0");
     const id = parent.id === "root" ? idSegment : `${parent.id}-${idSegment}`;
 
@@ -110,10 +105,8 @@ function buildIndexMd(sections: Section[], source: string, id: string): string {
 }
 
 function buildTree(flat: Section[]): Section[] {
-  // Return the root's direct children: ids with no "-" segment (a top-level
-  // node — usually H1, but a leading H2 also lands here). No re-attachment is
-  // needed — each node's nested `children` array, built in parseSections,
-  // already carries the subtree that renderChildren recurses into.
+  // Root's direct children (id has no "-"); each already carries its subtree in
+  // `children` (built by parseSections) for renderChildren to recurse.
   return flat.filter((s) => !s.id.includes("-"));
 }
 

@@ -147,11 +147,9 @@ describe("ingest", () => {
     });
   });
 
-  // Real annual-report sources skip heading levels (a "（承前頁）" page break drops
-  // the intervening heading). Tree-siblings must be numbered by tree position, not
-  // per-depth, or two real sections collide on one id and the later one overwrites
-  // the earlier's content. Two shapes: a jump under a sub-parent, and a jump at the
-  // root (a leading H2 then a later H1 — the corpus's duplicate `01`).
+  // Heading-level skips (a page break drops the intervening heading) must not
+  // collide chunk ids. Two shapes: a jump under a sub-parent, and a jump at the
+  // root (leading H2 then a later H1 — the corpus's duplicate `01`).
   describe("heading-level jumps: monotonic sibling numbering (no id collision / data loss)", () => {
     const DB = dbDir("db-test-jump");
     let tmp: string;
@@ -189,9 +187,8 @@ describe("ingest", () => {
       if (tmp) await rm(tmp, { recursive: true, force: true });
     });
 
-    // Reading distinct ids back with the right bodies is itself the data-loss pin:
-    // per-depth numbering gave X(H4) and Z(H3) the same id, so 01-01-03 would not
-    // exist and 01-01-01 would hold z-body (Z having overwritten X).
+    // Reading distinct ids back with the right bodies is the data-loss pin:
+    // per-depth numbering collided X(H4)/Z(H3), so Z would overwrite X at 01-01-01.
     it("numbers X(H4)/Y(H4)/Z(H3) as distinct siblings under P — no collision, no overwrite", async () => {
       expect(await readFile(join(DB, jumpId, "01-01-01.md"), "utf-8")).toContain("x-body");
       expect(await readFile(join(DB, jumpId, "01-01-02.md"), "utf-8")).toContain("y-body");
