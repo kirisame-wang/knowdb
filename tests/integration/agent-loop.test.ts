@@ -411,6 +411,52 @@ describe("runAgentTurn — integration", () => {
     expect(events).toEqual(["abort"]);
   });
 
+  it("abort during a round whose tool errors: turn recorded as aborted, tool error isolated", async () => {
+    // The realistic coexistence: the user clicks Stop while a tool runs, and
+    // that tool also fails. The tool error is caught inline (is_error tool_result,
+    // never fatal); the round-boundary guard then ends the turn as a cancel, so
+    // the tool failure does not become the turn's outcome.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    try {
+      const controller = new AbortController();
+      const client: MessagesClient = (() => {
+        let i = 0;
+        const responses = [
+          msg([toolUse("tu_1", "read_chunk", { id: "aaa00001/99" })]), // 404 → tool throws
+          msg([text("should never be reached")]),
+        ];
+        return {
+          messages: {
+            create: async () => {
+              const r = responses[i++]!;
+              if (i === 1) controller.abort(); // Stop clicked while the tool runs
+              return r;
+            },
+          },
+        };
+      })();
+      const deps = makeDeps(client);
+      deps.signal = controller.signal;
+      const { events, hooks } = recordHookEvents();
+      deps.hooks = hooks;
+
+      const trace = (await runAgentTurn(deps, "Q"))!;
+
+      // Turn outcome is the cancel, not the tool error.
+      expect(trace.aborted).toBe(true);
+      expect(trace.error).toBeUndefined();
+      expect(trace.final_answer).toBeUndefined();
+      // The tool ran and errored — recorded as is_error, isolated from the outcome.
+      expect(trace.tool_calls).toHaveLength(1);
+      expect(trace.tool_calls[0]!.is_error).toBe(true);
+      // Only round 1 ran; the inline tool error fired onError, then the guard fired onAbort.
+      expect(trace.api_rounds).toHaveLength(1);
+      expect(events).toEqual(["error", "abort"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("passes the abort signal through to messages.create", async () => {
     const controller = new AbortController();
     let seenSignal: AbortSignal | undefined;
