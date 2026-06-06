@@ -110,10 +110,11 @@ function buildIndexMd(sections: Section[], source: string, id: string): string {
 }
 
 function buildTree(flat: Section[]): Section[] {
-  // Return only top-level sections (depth === 1) preserving children
-  const top = flat.filter((s) => !s.id.includes("-"));
-  // Recursively attach children already in flat list
-  return top;
+  // Return the root's direct children: ids with no "-" segment (a top-level
+  // node — usually H1, but a leading H2 also lands here). No re-attachment is
+  // needed — each node's nested `children` array, built in parseSections,
+  // already carries the subtree that renderChildren recurses into.
+  return flat.filter((s) => !s.id.includes("-"));
 }
 
 async function ingestFile(filePath: string): Promise<void> {
