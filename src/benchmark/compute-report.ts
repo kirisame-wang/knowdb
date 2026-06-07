@@ -1,16 +1,40 @@
 import type { GapEvent, QueryTrace } from "../types.js";
 import { classifyQuery } from "./classify.js";
 import { detectExplicitGap, encounteredKnownGap } from "./detect-gap.js";
-import { rollupVariant } from "./rollup.js";
+import { readChunkIds, rollupVariant } from "./rollup.js";
 import type {
   AxisDelta,
   BenchmarkProblem,
   BenchmarkReport,
   BenchmarkRun,
+  BenchmarkTurn,
   HumanGrade,
   TurnResult,
   VariantAssignment,
 } from "./types.js";
+
+// B1 — MVP success oracle, judge-free. An answerable turn succeeds when the agent
+// read the turn's minimal sufficient chunk set (⊇); an unanswerable turn succeeds
+// when it reported the gap rather than fabricating. An answerable turn without
+// chunk-level ground truth can't be confirmed → false (corpus must author
+// expected_chunk_ids for answerable turns).
+export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
+  if (turn.answerable) {
+    const expected = turn.expected_chunk_ids ?? [];
+    if (expected.length === 0) return false;
+    const read = new Set(readChunkIds(trace));
+    return expected.every((id) => read.has(id));
+  }
+  return detectExplicitGap(trace);
+}
+
+// MVP derives success from reachSuccess (judge-free); an optional human grade
+// overrides it for answer-quality / hallucination claims (per-turn, so a graded
+// sample and reach-scored rest coexist).
+export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
+  if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
+  return reachSuccess(turn, trace);
+}
 
 // Ablation convention: the full-config variant is the baseline every axis-off
 // variant is measured against. grep+cat is an external comparison, not an
@@ -50,8 +74,7 @@ export function computeReport(
       if (!problem) throw new Error(`Unknown problem ${a.problem_id}`);
       const turn = problem.turns.find((x) => x.turn_index === a.turn_index);
       if (!turn) throw new Error(`Unknown turn ${a.problem_id}#${a.turn_index}`);
-      const grade = gradeOf.get(t.query_id);
-      if (!grade) throw new Error(`Missing grade for query ${t.query_id}`);
+      const grade = gradeOf.get(t.query_id); // optional: present → answer-quality override; absent → reach oracle
       return {
         problem_id: a.problem_id,
         turn_index: a.turn_index,
@@ -60,7 +83,7 @@ export function computeReport(
         is_followup: turn.is_followup,
         turn_type: turn.turn_type,
         answerable: turn.answerable,
-        success: grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid,
+        success: successOf(turn, t, grade),
         classification_actual: classifyQuery(t),
         explicit_gap_reported: detectExplicitGap(t),
         encountered_gap_signal: encounteredKnownGap(t),

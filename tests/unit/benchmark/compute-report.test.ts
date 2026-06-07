@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { computeReport } from "../../../src/benchmark/compute-report.js";
+import { computeReport, successOf } from "../../../src/benchmark/compute-report.js";
 import { rollupVariant } from "../../../src/benchmark/rollup.js";
 import type {
   BenchmarkProblem,
   BenchmarkRun,
+  BenchmarkTurn,
   HumanGrade,
   TurnResult,
   VariantAssignment,
@@ -186,17 +187,66 @@ describe("computeReport — contract guards", () => {
     ).toThrow(/ghost/);
   });
 
-  it("throws when a benchmark trace has no grade", () => {
-    const t = trace("q_ungraded", turnCalls[0]!, 100, 50);
-    expect(() =>
-      computeReport(
-        [t], [],
-        [{ query_id: "q_ungraded", variant: "A", problem_id: "t001", turn_index: 0, assigned_at: "x" }],
-        [problem],
-        [],
-        run,
-      ),
-    ).toThrow(/grade/i);
+  it("no grade → success derived from reach oracle (B1), not a throw", () => {
+    // problem turn0 is answerable, expected_chunk_ids = [abc/01, abc/02]; reach both → success.
+    const t = trace("q_ungraded", [call("read_chunk", { id: "abc/01" }), call("read_chunk", { id: "abc/02" })], 100, 50);
+    const rep = computeReport(
+      [t], [],
+      [{ query_id: "q_ungraded", variant: "A", problem_id: "t001", turn_index: 0, assigned_at: "x" }],
+      [problem],
+      [], // no grades — MVP reach oracle
+      { ...run, variants: ["A"] },
+    );
+    expect(rep.results[0]!.success).toBe(true);
+  });
+});
+
+// B1 — judge-free reach oracle: success ＝ answerable turn reaches its minimal
+// sufficient chunk set (⊇), unanswerable turn correctly reports the gap. An
+// optional human grade overrides it for answer-quality claims.
+describe("successOf — reach oracle (B1) + optional grade override", () => {
+  function aTurn(over: Partial<BenchmarkTurn>): BenchmarkTurn {
+    return {
+      turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric",
+      answerable: true, expected_doc_ids: ["abc"], expected_chunk_ids: ["abc/01", "abc/02"],
+      expected_answer_keypoints: ["k"], expected_classification: "within_doc", ...over,
+    };
+  }
+  const tr = (calls: ToolCallEvent[]) => trace("q", calls, 0, 0);
+
+  it("answerable: success when all expected_chunk_ids reached (⊇)", () => {
+    expect(successOf(aTurn({}), tr([call("read_chunk", { id: "abc/01" }), call("read_chunk", { id: "abc/02" })]))).toBe(true);
+  });
+
+  it("answerable: fail when an expected chunk is missed", () => {
+    expect(successOf(aTurn({}), tr([call("read_chunk", { id: "abc/01" })]))).toBe(false);
+  });
+
+  it("answerable: read_chunks (plural) ids count toward reach", () => {
+    expect(successOf(aTurn({ expected_chunk_ids: ["a", "b"] }), tr([call("read_chunks", { ids: ["a", "b"] })]))).toBe(true);
+  });
+
+  it("answerable without chunk-level ground truth → false (cannot confirm reach)", () => {
+    expect(successOf(aTurn({ expected_chunk_ids: [] }), tr([call("read_chunk", { id: "x" })]))).toBe(false);
+  });
+
+  it("unanswerable: success when the gap is reported", () => {
+    expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), tr([call("search", { keyword: "z" }, KNOWN_GAP)]))).toBe(true);
+  });
+
+  it("unanswerable: fail when no gap reported (fabricated answer)", () => {
+    expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), tr([call("read_chunk", { id: "x" })]))).toBe(false);
+  });
+
+  it("unanswerable: success via weak signal (final_answer phrases not-found)", () => {
+    const t: QueryTrace = { ...tr([call("read_chunk", { id: "x" })]), final_answer: "Sorry, not covered here." };
+    expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), t)).toBe(true);
+  });
+
+  it("grade overrides reach (answer-quality layer)", () => {
+    const grade: HumanGrade = { problem_id: "p", turn_index: 0, query_id: "q", variant: "V", rubric_1_covers_keypoints: true, rubric_2_citations_valid: true, reviewer: "r", graded_at: "x" };
+    // reach would fail (missed abc/02), but grade says pass → success
+    expect(successOf(aTurn({}), tr([call("read_chunk", { id: "abc/01" })]), grade)).toBe(true);
   });
 });
 

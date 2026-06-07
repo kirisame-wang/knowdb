@@ -69,7 +69,7 @@ export interface TurnResult {
   is_followup: boolean;                    // from BenchmarkTurn; co-ref aggregation
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // ground truth; gap-correctness judgement
-  success: boolean;                        // rubric: both items PASS
+  success: boolean;                        // reach oracle (answerable: read expected chunks; unanswerable: reported gap); a human grade overrides if present
   classification_actual: "within_doc" | "cross_doc";
   explicit_gap_reported: boolean;          // agent terminally reported a coverage gap
   encountered_gap_signal: boolean;         // a search returned known_gap mid-turn (recovery denominator; ≠ terminal report)

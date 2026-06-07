@@ -34,8 +34,8 @@ function linregSlope(xs: number[], ys: number[]): number | null {
 }
 
 // Chunk ids the agent actually read (read_chunk / read_chunks). Discovery and
-// index reads don't count as passage hits.
-function readChunkIds(trace: QueryTrace): string[] {
+// index reads don't count as passage hits. Shared with the reach oracle (compute-report).
+export function readChunkIds(trace: QueryTrace): string[] {
   const ids: string[] = [];
   for (const c of trace.tool_calls) {
     if (c.tool !== "read_chunk" && c.tool !== "read_chunks") continue;
@@ -110,7 +110,11 @@ export function rollupVariant(
 
     const problem = problemOf.get(problemId);
     if (problem) {
-      const expected = new Set(problem.turns.flatMap((t) => t.expected_chunk_ids ?? []));
+      // Only answerable turns have passages to reach; unanswerable turns' stray
+      // expected_chunk_ids (if any) don't count toward coverage.
+      const expected = new Set(
+        problem.turns.filter((t) => t.answerable).flatMap((t) => t.expected_chunk_ids ?? []),
+      );
       if (expected.size > 0) {
         const read = new Set(
           ordered.flatMap((r) => {
