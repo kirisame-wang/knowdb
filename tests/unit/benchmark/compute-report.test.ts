@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { computeReport } from "../../src/benchmark/compute-report.js";
-import { rollupVariant } from "../../src/benchmark/rollup.js";
+import { computeReport } from "../../../src/benchmark/compute-report.js";
+import { rollupVariant } from "../../../src/benchmark/rollup.js";
 import type {
   BenchmarkProblem,
   BenchmarkRun,
   HumanGrade,
   TurnResult,
   VariantAssignment,
-} from "../../src/benchmark/types.js";
-import type { QueryTrace, ToolCallEvent } from "../../src/types.js";
+} from "../../../src/benchmark/types.js";
+import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 
 // ── Fixture: one 3-turn thread (t001), run under variants A and B ────────────
 // turn0 answerable, standalone, within-doc; turn1 answerable, followup;

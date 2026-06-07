@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery } from "../../src/benchmark/classify.js";
-import type { QueryTrace, ToolCallEvent } from "../../src/types.js";
+import { classifyQuery } from "../../../src/benchmark/classify.js";
+import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 
 function call(tool: string, input: Record<string, unknown> = {}): ToolCallEvent {
   return {

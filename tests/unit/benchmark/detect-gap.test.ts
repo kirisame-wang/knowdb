@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { detectExplicitGap, encounteredKnownGap } from "../../src/benchmark/detect-gap.js";
-import type { QueryTrace, ToolCallEvent } from "../../src/types.js";
+import { detectExplicitGap, encounteredKnownGap } from "../../../src/benchmark/detect-gap.js";
+import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 
 function searchCall(output_summary: string): ToolCallEvent {
   return { ordinal: 1, tool: "search", input: { keyword: "x" }, output_summary, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
