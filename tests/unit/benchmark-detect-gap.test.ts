@@ -22,7 +22,7 @@ function trace(opts: { calls?: ToolCallEvent[]; final_answer?: string }): QueryT
   return opts.final_answer === undefined ? base : { ...base, final_answer: opts.final_answer };
 }
 
-describe("detectExplicitGap (B2) — strong × weak signal matrix", () => {
+describe("detectExplicitGap — strong × weak signal matrix", () => {
   // strong = search returned {status:"known_gap"}; weak = final_answer matches GAP_REGEX
   it("strong=no, weak=no → false", () => {
     expect(detectExplicitGap(trace({ calls: [searchCall(NORMAL_HITS)], final_answer: "Here is the answer." }))).toBe(false);

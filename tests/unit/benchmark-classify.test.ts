@@ -25,7 +25,7 @@ function trace(tool_calls: ToolCallEvent[]): QueryTrace {
   };
 }
 
-describe("classifyQuery (B3)", () => {
+describe("classifyQuery", () => {
   it("search-only trace → within_doc (no locator)", () => {
     expect(classifyQuery(trace([call("search", { keyword: "x" })]))).toBe("within_doc");
   });

@@ -47,8 +47,8 @@ function readChunkIds(trace: QueryTrace): string[] {
   return ids;
 }
 
-// T15 — mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls
-// that engaged the `pattern` filter. null when there are no read_chunk calls.
+// Mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls that
+// engaged the `pattern` filter. null when there are no read_chunk calls.
 function patternUsageRate(traces: QueryTrace[]): number | null {
   const readChunks = traces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
   if (readChunks.length === 0) return null;
@@ -56,10 +56,8 @@ function patternUsageRate(traces: QueryTrace[]): number | null {
   return withPattern.length / readChunks.length;
 }
 
-// Mirrors src/traces.ts: mean read_chunk output length split by pattern use —
-// the char-cost gap between a filtered window and a full-body dump. Prefers the
-// raw pre-truncate length; falls back to summary length for legacy traces.
-// Empty group → 0 (mean of []).
+// Mirrors src/traces.ts: mean read_chunk output length split by `pattern` use.
+// output_chars is the pre-truncate length; fall back to summary length if absent.
 function readChunkOutputChars(traces: QueryTrace[]): { with_pattern: number; without_pattern: number } {
   const readChunks = traces.flatMap((t) => t.tool_calls).filter((c) => c.tool === "read_chunk");
   const rawChars = (c: ToolCallEvent) => c.output_chars ?? c.output_summary.length;
@@ -95,12 +93,10 @@ export function rollupVariant(
   const cross = rs.filter((r) => r.classification_actual === "cross_doc");
   const followups = rs.filter((r) => r.is_followup);
   const reportedGaps = rs.filter((r) => r.explicit_gap_reported);
-  // Recovery candidates: answerable turns where the keyword layer false-alarmed a
-  // gap. Content IS there, so a correct answer means the agent bridged past the
-  // gap signal (the retry-scaffold's intended win).
+  // Answerable turns whose search false-alarmed a gap — the recovery denominator.
   const recoveryCandidates = rs.filter((r) => r.answerable && r.encountered_gap_signal);
 
-  // ── B11 per-thread metrics ──
+  // ── per-thread metrics ──
   const byThread = groupBy(rs, (r) => r.problem_id);
   const slopes: number[] = [];
   const coverages: number[] = [];
@@ -142,9 +138,8 @@ export function rollupVariant(
       reportedGaps.length === 0
         ? null
         : reportedGaps.filter((r) => !r.answerable).length / reportedGaps.length,
-    // Both null when there are no candidates — they're a read-together pair, so
-    // the steps guard shares recovery_rate's no-signal state rather than mean()'s
-    // usual 0-on-empty (a 0 here would misread as "recovered in 0 steps").
+    // Both null (not 0) when no candidate — paired, so the steps guard shares
+    // recovery_rate's no-signal state (0 would misread as "recovered in 0 steps").
     recovery_rate:
       recoveryCandidates.length === 0
         ? null

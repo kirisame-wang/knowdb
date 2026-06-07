@@ -1,6 +1,5 @@
-// Benchmark domain types (spec-benchmark-baseline.md Type Contract).
-// Data-layer (`src/types.ts`, frozen v0.1.6) is NOT modified — variant
-// association rides a side-car table (B4), the same opaque-id join pattern
+// Benchmark domain types. The data-layer (`src/types.ts`) is NOT modified —
+// variant association rides a side-car table, the same opaque-id join pattern
 // as `GapEvent.query_id` ↔ `QueryTrace.query_id`.
 
 // Side-car: query_id → (variant, thread, turn). Stored alongside the trace
@@ -8,13 +7,12 @@
 export interface VariantAssignment {
   query_id: string;        // matches QueryTrace.query_id (one turn = one trace)
   variant: string;         // e.g. "A" | "B" | "baseline_grep_cat"
-  problem_id: string;      // = thread id; shared across a thread's turns (B11)
+  problem_id: string;      // = thread id; shared across a thread's turns
   turn_index: number;      // 0-based position of this turn within the thread
   assigned_at: string;     // ISO 8601 UTC; harness inject point
 }
 
-// Multi-turn conversation thread (B11). Schema mirrors spec-benchmark-corpus.md;
-// the type is owned here (harness side).
+// Multi-turn conversation thread. The type is owned here (harness side).
 export interface BenchmarkProblem {
   id: string;                              // e.g. "t001"; = thread id
   domain: "mcp" | "langchain" | "knowdb_self" | "sparse" | `mtrag_${string}`;
@@ -31,18 +29,18 @@ export interface BenchmarkTurn {
   answerable: boolean;                     // false = correct answer is an explicit gap
   expected_doc_ids: string[];              // non-empty when answerable
   expected_chunk_ids?: string[];           // optional, finer-grained
-  expected_answer_keypoints: string[];     // B1 rubric; unanswerable → "should report not-found"
-  expected_classification: "within_doc" | "cross_doc";  // B3 reference
+  expected_answer_keypoints: string[];     // rubric keypoints; unanswerable → "should report not-found"
+  expected_classification: "within_doc" | "cross_doc";  // ground-truth reference
   rouge1_precision_vs_chunk?: number;      // lexical_gap turns; corpus C4 gate wants < 0.1
 }
 
 export interface HumanGrade {
   problem_id: string;                      // = thread id
-  turn_index: number;                      // B11: grade per-turn
+  turn_index: number;                      // grade per-turn
   query_id: string;
   variant: string;
-  rubric_1_covers_keypoints: boolean;      // B1 rubric item 1
-  rubric_2_citations_valid: boolean;       // B1 rubric item 2
+  rubric_1_covers_keypoints: boolean;      // rubric item 1
+  rubric_2_citations_valid: boolean;       // rubric item 2
   notes?: string;
   reviewer: string;
   graded_at: string;
@@ -62,7 +60,7 @@ export interface BenchmarkRun {
   reviewer: string;
 }
 
-// B11: one row per turn (one turn = one trace = one row).
+// One row per turn (one turn = one trace = one row).
 export interface TurnResult {
   problem_id: string;                      // = thread id
   turn_index: number;
@@ -71,9 +69,9 @@ export interface TurnResult {
   is_followup: boolean;                    // from BenchmarkTurn; co-ref aggregation
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // ground truth; gap-correctness judgement
-  success: boolean;                        // B1 rubric: both items PASS
-  classification_actual: "within_doc" | "cross_doc";  // B3
-  explicit_gap_reported: boolean;          // B2
+  success: boolean;                        // rubric: both items PASS
+  classification_actual: "within_doc" | "cross_doc";
+  explicit_gap_reported: boolean;          // agent terminally reported a coverage gap
   encountered_gap_signal: boolean;         // a search returned known_gap mid-turn (recovery denominator; ≠ terminal report)
   decision_steps: number;                  // from QueryTrace.tool_calls.length
   tokens: { input: number; output: number };
@@ -88,13 +86,13 @@ export interface VariantAggregate {
   cross_doc_success_rate: number;
   explicit_gap_rate: number;
   abstention_precision: number | null;     // of reported-gap turns, share truly unanswerable; null when none reported
-  recovery_rate: number | null;            // of answerable turns that hit a gap signal, share still succeeded (false-gap recovery); null when none qualify
-  recovery_avg_decision_steps: number | null;  // paired guard: avg TOTAL decision steps over candidates — coarse retry-effort proxy (isolating post-gap-signal steps is deferred to the axis); high recovery + high steps leans flailing
+  recovery_rate: number | null;            // of answerable turns that hit a gap signal, share that still succeeded; null when none qualify
+  recovery_avg_decision_steps: number | null;  // paired step guard for recovery_rate; avg total steps over the same candidates (coarse retry-effort proxy)
   avg_decision_steps: number;
   avg_tokens: { input: number; output: number };
-  read_chunk_pattern_usage_rate: number | null;  // from T15
-  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };  // T15 diagnostic pair: filtered-window vs full-dump char cost (empty group → 0)
-  // B11 multi-turn metrics (three)
+  read_chunk_pattern_usage_rate: number | null;  // fraction of read_chunk calls using the pattern filter; null if none
+  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };  // mean read_chunk chars by pattern use; empty group → 0
+  // multi-turn metrics (three)
   followup_success_rate: number;           // success rate of is_followup turns (co-ref)
   turn_degradation_slope: number;          // mean per-thread per-turn decision_steps slope
   cumulative_passage_coverage: number;     // mean per-thread expected_chunk_ids union hit-rate

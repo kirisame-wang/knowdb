@@ -108,7 +108,7 @@ const report = computeReport(
   run,
 );
 
-describe("computeReport (B7/B11) — end-to-end pipeline", () => {
+describe("computeReport — end-to-end pipeline", () => {
   it("skips traces absent from the side-car (dogfooding isolation)", () => {
     expect(report.results).toHaveLength(9); // 3 variants × 3 turns
     expect(report.results.some((r) => r.query_id === "q_dogfood")).toBe(false);

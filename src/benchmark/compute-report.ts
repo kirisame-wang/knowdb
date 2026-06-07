@@ -18,12 +18,12 @@ import type {
 const BASELINE_VARIANT = "full";
 const EXTERNAL_VARIANT = "baseline_grep_cat";
 
-// B7 — pure synthesis from raw trace + side-car + rubric. Same inputs → same
-// output; this is the single official source for published numbers.
+// Pure synthesis from raw trace + side-car + rubric. Same inputs → same output;
+// this is the single official source for published numbers.
 //
-// Variant association rides the side-car (B4): a trace absent from the side-car
-// is treated as non-benchmark (e.g. dogfooding) and skipped, so a dogfooding
-// dump accidentally merged in cannot move the numbers.
+// Variant association rides the side-car: a trace absent from the side-car is
+// treated as non-benchmark (e.g. dogfooding) and skipped, so a dogfooding dump
+// accidentally merged in cannot move the numbers.
 //
 // `gapEvents` is reserved for the trace × gap cross-check (parity with
 // data-layer's GapEvent.query_id join); the headline pipeline does not consume

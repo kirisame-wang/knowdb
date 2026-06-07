@@ -1,6 +1,6 @@
 import type { QueryTrace } from "../types.js";
 
-// B3 — pure classification from `tool_calls`. No ground truth needed; this is
+// Pure classification from `tool_calls`. No ground truth needed; this is
 // the *actual* path the agent took. A query is cross_doc if it located chunks
 // in more than one document, or used jump_to_ref (a cross-doc edge by nature).
 //
