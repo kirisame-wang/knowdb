@@ -6,7 +6,7 @@
 // dump, never folded into QueryTrace. One row per turn (one turn = one trace).
 export interface VariantAssignment {
   query_id: string;        // matches QueryTrace.query_id (one turn = one trace)
-  variant: string;         // e.g. "A" | "B" | "baseline_grep_cat"
+  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_grep_cat"
   problem_id: string;      // = thread id; shared across a thread's turns
   turn_index: number;      // 0-based position of this turn within the thread
   assigned_at: string;     // ISO 8601 UTC; harness inject point
@@ -54,7 +54,7 @@ export interface BenchmarkRun {
   knowdb_commit_sha: string;
   tool_set_version: string;                // hash of KNOWDB_TOOLS
   problem_set_id: string;                  // e.g. "corpus-v1"
-  variants: string[];                      // e.g. ["A", "B", "baseline_grep_cat"]
+  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_grep_cat"]
   started_at: string;
   ended_at: string;
   reviewer: string;
