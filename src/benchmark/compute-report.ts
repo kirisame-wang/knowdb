@@ -13,11 +13,8 @@ import type {
   VariantAssignment,
 } from "./types.js";
 
-// B1 — MVP success oracle, judge-free. An answerable turn succeeds when the agent
-// read the turn's minimal sufficient chunk set (⊇); an unanswerable turn succeeds
-// when it reported the gap rather than fabricating. An answerable turn without
-// chunk-level ground truth can't be confirmed → false (corpus must author
-// expected_chunk_ids for answerable turns).
+// Success oracle, judge-free: an answerable turn succeeds when it reads its
+// minimal sufficient chunk set (⊇); an unanswerable turn, when it reports the gap.
 export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
   if (turn.answerable) {
     const expected = turn.expected_chunk_ids ?? [];
@@ -28,9 +25,8 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
   return detectExplicitGap(trace);
 }
 
-// MVP derives success from reachSuccess (judge-free); an optional human grade
-// overrides it for answer-quality / hallucination claims (per-turn, so a graded
-// sample and reach-scored rest coexist).
+// Defaults to the reach oracle; an optional human grade overrides it per-turn,
+// so graded and reach-scored turns coexist.
 export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
   if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
   return reachSuccess(turn, trace);
@@ -42,16 +38,9 @@ export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanG
 const BASELINE_VARIANT = "full";
 const EXTERNAL_VARIANT = "baseline_grep_cat";
 
-// Pure synthesis from raw trace + side-car + rubric. Same inputs → same output;
-// this is the single official source for published numbers.
-//
-// Variant association rides the side-car: a trace absent from the side-car is
-// treated as non-benchmark (e.g. dogfooding) and skipped, so a dogfooding dump
-// accidentally merged in cannot move the numbers.
-//
-// `gapEvents` is reserved for the trace × gap cross-check (parity with
-// data-layer's GapEvent.query_id join); the headline pipeline does not consume
-// it yet.
+// Pure synthesis: same inputs → same output. A trace absent from the side-car is
+// non-benchmark (e.g. dogfooding) and skipped, so a stray dump can't move the numbers.
+// gapEvents is reserved for the trace × gap cross-check; not consumed here yet.
 export function computeReport(
   traces: QueryTrace[],
   gapEvents: GapEvent[],

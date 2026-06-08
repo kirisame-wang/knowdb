@@ -17,7 +17,7 @@ export interface BenchmarkProblem {
   id: string;                              // e.g. "t001"; = thread id
   domain: "mcp" | "langchain" | "knowdb_self" | "sparse" | `mtrag_${string}`;
   thread_type: "symmetric" | "structural" | "lexical_gap" | "sparse" | "mtrag";
-  turns: BenchmarkTurn[];                  // ~3-4 turns per thread (corpus C3a)
+  turns: BenchmarkTurn[];                  // ~3-4 turns per thread
   difficulty?: "easy" | "medium" | "hard"; // optional, for stratification
 }
 
@@ -31,7 +31,7 @@ export interface BenchmarkTurn {
   expected_chunk_ids?: string[];           // optional, finer-grained
   expected_answer_keypoints: string[];     // rubric keypoints; unanswerable → "should report not-found"
   expected_classification: "within_doc" | "cross_doc";  // ground-truth reference
-  rouge1_precision_vs_chunk?: number;      // lexical_gap turns; corpus C4 gate wants < 0.1
+  rouge1_precision_vs_chunk?: number;      // rouge-1 precision of question vs chunk; lexical_gap turns only
 }
 
 export interface HumanGrade {
