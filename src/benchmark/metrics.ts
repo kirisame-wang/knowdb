@@ -88,10 +88,12 @@ export function encounteredKnownGap(trace: QueryTrace): boolean {
   return trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
 }
 
-// Gap reporting is the structured known_gap signal only; currently identical to
-// encounteredKnownGap.
-export function detectExplicitGap(trace: QueryTrace): boolean {
-  return encounteredKnownGap(trace);
+// A turn reports a gap as its terminal outcome: an unanswerable turn that hit the
+// gap signal (a correct abstention), or an answerable turn that hit a gap and did
+// not recover to an answer. A recovered answerable turn is not a reported gap.
+export function terminalGapReported(turn: BenchmarkTurn, trace: QueryTrace, success: boolean): boolean {
+  const encountered = encounteredKnownGap(trace);
+  return turn.answerable ? encountered && !success : encountered;
 }
 
 // Chunk ids the agent actually read (read_chunk / read_chunks). Discovery and
@@ -117,7 +119,7 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
     const read = new Set(readChunkIds(trace));
     return expected.every((id) => read.has(id));
   }
-  return detectExplicitGap(trace);
+  return encounteredKnownGap(trace);
 }
 
 // Defaults to the reach oracle; an optional human grade overrides it per-turn,

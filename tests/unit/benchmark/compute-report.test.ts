@@ -363,6 +363,7 @@ describe("computeReport — recovery_rate end-to-end (non-null path through real
     );
     const agg = rep.aggregates[0]!;
     expect(rep.results[0]!.encountered_gap_signal).toBe(true); // derived via real encounteredKnownGap
+    expect(rep.results[0]!.explicit_gap_reported).toBe(false); // recovered answerable turn is not a terminal gap report
     expect(agg.recovery_rate).toBe(1); // answerable ∧ hit gap ∧ success
     expect(agg.recovery_avg_decision_steps).toBe(2); // 2 tool calls
   });
