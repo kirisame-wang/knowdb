@@ -68,8 +68,12 @@ export function computeReport(
   const externalVariant = run.external_variant;
 
   const aggregates = run.variants.map((v) => rollupVariant(v, results, traces, assignOf, problemOf));
+  // A role is "present" only if its named variant actually ran. A run may omit the
+  // baseline (e.g. a single-axis run); then per_axis is empty by design, not an
+  // error — there is nothing to subtract axes from. The external role is optional.
   const baseline = aggregates.find((x) => x.variant === baselineVariant);
-  const external = aggregates.find((x) => x.variant === externalVariant);
+  const external =
+    externalVariant !== undefined ? aggregates.find((x) => x.variant === externalVariant) : undefined;
 
   // per-axis delta = baseline − axis-off (the cost-floor comparison is not an axis)
   const per_axis: AxisDelta[] = baseline

@@ -247,6 +247,33 @@ describe("computeReport — variant roles injected (domain-agnostic)", () => {
     expect(rep2.deltas.external_token_ratio).toBeUndefined();
     expect(rep2.deltas.external_variant).toBe("cfg_b"); // role still echoed
   });
+
+  it("a run that declares no cost floor omits both the external role and the ratio", () => {
+    const noFloorRun: BenchmarkRun = { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] };
+    delete (noFloorRun as { external_variant?: string }).external_variant;
+    const rep3 = computeReport(
+      [...A.traces, ...X.traces], [],
+      [...A.assignments, ...X.assignments],
+      [problem],
+      [...A.grades, ...X.grades],
+      noFloorRun,
+    );
+    expect(rep3.deltas.external_variant).toBeUndefined();
+    expect(rep3.deltas.external_token_ratio).toBeUndefined();
+    expect(rep3.deltas.per_axis.map((d) => d.variant)).toEqual(["cfg_axisoff"]);
+  });
+
+  it("a run whose baseline variant did not run yields empty deltas, not a throw", () => {
+    const rep4 = computeReport(
+      [...X.traces], [],
+      [...X.assignments],
+      [problem],
+      [...X.grades],
+      { ...rolesRun, variants: ["cfg_axisoff"] }, // baseline cfg_a absent from this run
+    );
+    expect(rep4.deltas.per_axis).toEqual([]);
+    expect(rep4.deltas.external_token_ratio).toBeUndefined();
+  });
 });
 
 // B1 — judge-free reach oracle: success ＝ answerable turn reaches its minimal

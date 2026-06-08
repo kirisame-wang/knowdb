@@ -100,12 +100,12 @@ export interface VariantAggregate {
   cumulative_passage_coverage: number;     // mean per-thread expected_chunk_ids union hit-rate
 }
 
-// Ablation per-axis contribution: full-config minus the axis-off variant.
+// Ablation per-axis contribution: the baseline minus the axis-off variant.
 export interface AxisDelta {
   variant: string;                          // axis-off variant, e.g. "no_structure"
-  success_rate_delta: number;               // full − variant (positive = the axis helps)
-  decision_steps_delta: number;             // variant − full (positive = removal costs steps)
-  explicit_gap_rate_delta: number;          // full − variant
+  success_rate_delta: number;               // baseline − variant (positive = the axis helps)
+  decision_steps_delta: number;             // variant − baseline (positive = removal costs steps)
+  explicit_gap_rate_delta: number;          // baseline − variant
 }
 
 export interface BenchmarkReport {
