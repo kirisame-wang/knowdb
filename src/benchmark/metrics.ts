@@ -49,35 +49,36 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
 }
 
 // Pure classification from `tool_calls`. No ground truth needed; this is the
-// *actual* path the agent took. A query is cross_doc if it located chunks in
-// more than one document, or used jump_to_ref (a cross-doc edge by nature).
+// *actual* path the agent took. A query is cross_doc when the agent read chunk
+// content in more than one document.
 //
-// Locators are the calls that pin a position in the map. search / list_docs are
-// discovery, not location, so they never count toward the doc set.
-const LOCATORS = new Set(["read_chunk", "read_chunks", "read_index", "parent", "jump_to_ref"]);
+// Locators are the chunk-content reads — the same calls the reach oracle counts
+// (readChunkIds), so the within/cross split stays consistent with the success it
+// buckets. Discovery (search / list_docs / jump_to_ref), a TOC survey
+// (read_index) and structural moves (parent) don't count toward the doc set.
+const LOCATORS = new Set(["read_chunk", "read_chunks"]);
 
 function docIdOf(input: Record<string, unknown>): string | undefined {
-  const raw = input["id"] ?? input["doc_id"];
-  if (typeof raw !== "string") return undefined;
-  return raw.split("/")[0];
+  const id = input["id"];
+  if (typeof id !== "string") return undefined;
+  return id.split("/")[0];
 }
 
 export function classifyQuery(trace: QueryTrace): "within_doc" | "cross_doc" {
   const docIds = new Set<string>();
-  let usedJump = false;
   for (const c of trace.tool_calls) {
-    if (c.tool === "jump_to_ref") usedJump = true;
     if (!LOCATORS.has(c.tool)) continue;
     const docId = docIdOf(c.input);
     if (docId) docIds.add(docId);
   }
-  return docIds.size > 1 || usedJump ? "cross_doc" : "within_doc";
+  return docIds.size > 1 ? "cross_doc" : "within_doc";
 }
 
-// Did the agent explicitly report a coverage gap? Two signals, OR-combined:
-//   strong: a `search` returned {status:"known_gap"}.
-//   weak:   the final answer phrases a not-found in EN/ZH (GAP_REGEX).
-const GAP_REGEX = /找不到|not covered|don['']?t have|couldn['']?t find|no\s+coverage|沒有(收錄|涵蓋)/i;
+// A coverage gap is read only from the structured `known_gap` a `search` returns
+// — judge-free, and decided by the index, not the agent. A prose regex on the
+// final answer was dropped: matching not-found phrasing is language-biased, and
+// inferring a gap from the agent's own wording lets the measured agent judge its
+// own abstention (player as referee).
 
 function isKnownGap(output_summary: string): boolean {
   try {
@@ -88,15 +89,18 @@ function isKnownGap(output_summary: string): boolean {
   }
 }
 
-// The strong signal alone: did any `search` this turn return known_gap? "Hit a
-// gap signal", regardless of how the turn ended (≠ terminal report).
+// Did any `search` this turn return known_gap? Serves as both the explicit-gap
+// signal and the recovery denominator ("hit a gap", regardless of how the turn
+// ended). Splitting terminal-report from mid-turn is deferred to the
+// retry-scaffold axis.
 export function encounteredKnownGap(trace: QueryTrace): boolean {
   return trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
 }
 
+// Gap reporting is the structured known_gap signal only (see above); identical to
+// encounteredKnownGap until the terminal-vs-mid-turn split lands.
 export function detectExplicitGap(trace: QueryTrace): boolean {
-  const weakSignal = trace.final_answer ? GAP_REGEX.test(trace.final_answer) : false;
-  return encounteredKnownGap(trace) || weakSignal;
+  return encounteredKnownGap(trace);
 }
 
 // Chunk ids the agent actually read (read_chunk / read_chunks). Discovery and

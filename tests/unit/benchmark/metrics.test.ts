@@ -43,9 +43,17 @@ describe("classifyQuery", () => {
     ).toBe("cross_doc");
   });
 
-  it("jump_to_ref forces cross_doc even within one doc", () => {
+  it("jump_to_ref alone is discovery, not a locator → within_doc", () => {
     expect(
       classifyQuery(trace([call("read_chunk", { id: "abc/01" }), call("jump_to_ref", { id: "abc/02" })])),
+    ).toBe("within_doc");
+  });
+
+  it("jump_to_ref then reading another doc → cross_doc (via the read, not the jump)", () => {
+    expect(
+      classifyQuery(
+        trace([call("read_chunk", { id: "abc/01" }), call("jump_to_ref", { id: "abc/01" }), call("read_chunk", { id: "def/03" })]),
+      ),
     ).toBe("cross_doc");
   });
 
@@ -53,10 +61,16 @@ describe("classifyQuery", () => {
     expect(classifyQuery(trace([]))).toBe("within_doc");
   });
 
-  it("locator with doc_id field (no id) is honoured", () => {
+  it("read_chunks counts as a locator (consistent with the reach oracle)", () => {
     expect(
-      classifyQuery(trace([call("read_index", { doc_id: "abc" }), call("parent", { doc_id: "def" })])),
+      classifyQuery(trace([call("read_chunk", { id: "abc/01" }), call("read_chunks", { id: "def/05" })])),
     ).toBe("cross_doc");
+  });
+
+  it("read_index / parent are not locators — a TOC survey or structural move doesn't cross docs", () => {
+    expect(
+      classifyQuery(trace([call("read_chunk", { id: "abc/01" }), call("read_index", { doc_id: "def" }), call("parent", { id: "def/03" })])),
+    ).toBe("within_doc");
   });
 
   it("unknown / non-locator tools are ignored for doc counting", () => {
@@ -91,46 +105,23 @@ function gapTrace(opts: { calls?: ToolCallEvent[]; final_answer?: string }): Que
   return opts.final_answer === undefined ? base : { ...base, final_answer: opts.final_answer };
 }
 
-describe("detectExplicitGap — strong × weak signal matrix", () => {
-  // strong = search returned {status:"known_gap"}; weak = final_answer matches GAP_REGEX
-  it("strong=no, weak=no → false", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(NORMAL_HITS)], final_answer: "Here is the answer." }))).toBe(false);
-  });
-
-  it("strong=yes, weak=no → true", () => {
+describe("detectExplicitGap — structured known_gap signal only (no prose regex)", () => {
+  it("a search returned known_gap → true", () => {
     expect(detectExplicitGap(gapTrace({ calls: [searchCall(KNOWN_GAP)], final_answer: "Here is the answer." }))).toBe(true);
   });
 
-  it("strong=no, weak=yes → true", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(NORMAL_HITS)], final_answer: "Sorry, I couldn't find that." }))).toBe(true);
+  it("no known_gap → false, even when the final answer phrases a not-found (EN/ZH)", () => {
+    expect(detectExplicitGap(gapTrace({ calls: [searchCall(NORMAL_HITS)], final_answer: "Sorry, I couldn't find that." }))).toBe(false);
+    expect(detectExplicitGap(gapTrace({ final_answer: "文件中找不到相關內容" }))).toBe(false);
   });
 
-  it("strong=yes, weak=yes → true", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(KNOWN_GAP)], final_answer: "not covered here" }))).toBe(true);
-  });
-});
-
-describe("detectExplicitGap — signal robustness", () => {
-  it("matches Chinese gap phrasing in final_answer", () => {
-    expect(detectExplicitGap(gapTrace({ final_answer: "文件中找不到相關內容" }))).toBe(true);
-    expect(detectExplicitGap(gapTrace({ final_answer: "目前沒有收錄這個主題" }))).toBe(true);
-  });
-
-  it("missing final_answer (interrupted) → weak signal off", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(NORMAL_HITS)] }))).toBe(false);
-  });
-
-  it("malformed search output is not a strong signal (no throw)", () => {
+  it("malformed search output is not a signal (no throw)", () => {
     expect(detectExplicitGap(gapTrace({ calls: [searchCall("not json <<")], final_answer: "ok" }))).toBe(false);
   });
 
   it("known_gap shape on a non-search tool is ignored", () => {
     const c: ToolCallEvent = { ordinal: 1, tool: "read_chunk", input: {}, output_summary: KNOWN_GAP, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
     expect(detectExplicitGap(gapTrace({ calls: [c], final_answer: "ok" }))).toBe(false);
-  });
-
-  it("regex is case-insensitive", () => {
-    expect(detectExplicitGap(gapTrace({ final_answer: "NOT COVERED in the docs" }))).toBe(true);
   });
 });
 

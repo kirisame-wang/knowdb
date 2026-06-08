@@ -238,9 +238,9 @@ describe("successOf — reach oracle (B1) + optional grade override", () => {
     expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), tr([call("read_chunk", { id: "x" })]))).toBe(false);
   });
 
-  it("unanswerable: success via weak signal (final_answer phrases not-found)", () => {
+  it("unanswerable: prose 'not found' alone no longer counts — structured known_gap required", () => {
     const t: QueryTrace = { ...tr([call("read_chunk", { id: "x" })]), final_answer: "Sorry, not covered here." };
-    expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), t)).toBe(true);
+    expect(successOf(aTurn({ answerable: false, expected_chunk_ids: [] }), t)).toBe(false);
   });
 
   it("grade overrides reach (answer-quality layer)", () => {
