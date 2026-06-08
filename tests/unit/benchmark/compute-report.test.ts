@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { computeReport, successOf } from "../../../src/benchmark/compute-report.js";
-import { rollupVariant } from "../../../src/benchmark/rollup.js";
+import { computeReport } from "../../../src/benchmark/compute-report.js";
+import { rollupVariant, successOf } from "../../../src/benchmark/metrics.js";
 import type {
   BenchmarkProblem,
   BenchmarkRun,

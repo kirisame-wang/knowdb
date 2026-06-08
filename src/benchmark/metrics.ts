@@ -1,12 +1,16 @@
 import type { QueryTrace, ToolCallEvent } from "../types.js";
 import type {
   BenchmarkProblem,
+  BenchmarkTurn,
+  HumanGrade,
   TurnResult,
   VariantAggregate,
   VariantAssignment,
 } from "./types.js";
 
-// ── small numeric helpers (rates over empty sets → 0, documented) ──────────
+// Leaf pure functions: every per-turn / per-variant value computeReport assembles
+// is derived here. compute-report.ts (the orchestrator) imports from this file,
+// never the reverse.
 
 function rate(pass: number, total: number): number {
   return total === 0 ? 0 : pass / total;
@@ -16,8 +20,8 @@ function mean(xs: number[]): number {
   return xs.length === 0 ? 0 : xs.reduce((s, x) => s + x, 0) / xs.length;
 }
 
-// Least-squares slope of y over x. Undefined (returns null) when x has no
-// spread — a single-turn thread can't show degradation.
+// Least-squares slope of y over x. Returns null when x has no spread — a
+// single-turn thread can't show degradation.
 function linregSlope(xs: number[], ys: number[]): number | null {
   const n = xs.length;
   if (n < 2) return null;
@@ -33,8 +37,70 @@ function linregSlope(xs: number[], ys: number[]): number | null {
   return den === 0 ? null : num / den;
 }
 
+function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const it of items) {
+    const k = key(it);
+    const bucket = m.get(k);
+    if (bucket) bucket.push(it);
+    else m.set(k, [it]);
+  }
+  return m;
+}
+
+// Pure classification from `tool_calls`. No ground truth needed; this is the
+// *actual* path the agent took. A query is cross_doc if it located chunks in
+// more than one document, or used jump_to_ref (a cross-doc edge by nature).
+//
+// Locators are the calls that pin a position in the map. search / list_docs are
+// discovery, not location, so they never count toward the doc set.
+const LOCATORS = new Set(["read_chunk", "read_chunks", "read_index", "parent", "jump_to_ref"]);
+
+function docIdOf(input: Record<string, unknown>): string | undefined {
+  const raw = input["id"] ?? input["doc_id"];
+  if (typeof raw !== "string") return undefined;
+  return raw.split("/")[0];
+}
+
+export function classifyQuery(trace: QueryTrace): "within_doc" | "cross_doc" {
+  const docIds = new Set<string>();
+  let usedJump = false;
+  for (const c of trace.tool_calls) {
+    if (c.tool === "jump_to_ref") usedJump = true;
+    if (!LOCATORS.has(c.tool)) continue;
+    const docId = docIdOf(c.input);
+    if (docId) docIds.add(docId);
+  }
+  return docIds.size > 1 || usedJump ? "cross_doc" : "within_doc";
+}
+
+// Did the agent explicitly report a coverage gap? Two signals, OR-combined:
+//   strong: a `search` returned {status:"known_gap"}.
+//   weak:   the final answer phrases a not-found in EN/ZH (GAP_REGEX).
+const GAP_REGEX = /找不到|not covered|don['']?t have|couldn['']?t find|no\s+coverage|沒有(收錄|涵蓋)/i;
+
+function isKnownGap(output_summary: string): boolean {
+  try {
+    const out: unknown = JSON.parse(output_summary);
+    return typeof out === "object" && out !== null && (out as { status?: unknown }).status === "known_gap";
+  } catch {
+    return false;
+  }
+}
+
+// The strong signal alone: did any `search` this turn return known_gap? "Hit a
+// gap signal", regardless of how the turn ended (≠ terminal report).
+export function encounteredKnownGap(trace: QueryTrace): boolean {
+  return trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
+}
+
+export function detectExplicitGap(trace: QueryTrace): boolean {
+  const weakSignal = trace.final_answer ? GAP_REGEX.test(trace.final_answer) : false;
+  return encounteredKnownGap(trace) || weakSignal;
+}
+
 // Chunk ids the agent actually read (read_chunk / read_chunks). Discovery and
-// index reads don't count as passage hits. Shared with the reach oracle (compute-report).
+// index reads don't count as passage hits. Shared by the reach oracle and rollup.
 export function readChunkIds(trace: QueryTrace): string[] {
   const ids: string[] = [];
   for (const c of trace.tool_calls) {
@@ -45,6 +111,25 @@ export function readChunkIds(trace: QueryTrace): string[] {
     if (Array.isArray(many)) for (const m of many) if (typeof m === "string") ids.push(m);
   }
   return ids;
+}
+
+// Success oracle, judge-free: an answerable turn succeeds when it reads its
+// minimal sufficient chunk set (⊇); an unanswerable turn, when it reports the gap.
+export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
+  if (turn.answerable) {
+    const expected = turn.expected_chunk_ids ?? [];
+    if (expected.length === 0) return false;
+    const read = new Set(readChunkIds(trace));
+    return expected.every((id) => read.has(id));
+  }
+  return detectExplicitGap(trace);
+}
+
+// Defaults to the reach oracle; an optional human grade overrides it per-turn,
+// so graded and reach-scored turns coexist.
+export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
+  if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
+  return reachSuccess(turn, trace);
 }
 
 // Mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls that
@@ -67,17 +152,6 @@ function readChunkOutputChars(traces: QueryTrace[]): { with_pattern: number; wit
   };
 }
 
-function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
-  const m = new Map<string, T[]>();
-  for (const it of items) {
-    const k = key(it);
-    const bucket = m.get(k);
-    if (bucket) bucket.push(it);
-    else m.set(k, [it]);
-  }
-  return m;
-}
-
 export function rollupVariant(
   variant: string,
   results: TurnResult[],
@@ -96,7 +170,6 @@ export function rollupVariant(
   // Answerable turns whose search false-alarmed a gap — the recovery denominator.
   const recoveryCandidates = rs.filter((r) => r.answerable && r.encountered_gap_signal);
 
-  // ── per-thread metrics ──
   const byThread = groupBy(rs, (r) => r.problem_id);
   const slopes: number[] = [];
   const coverages: number[] = [];

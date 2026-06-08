@@ -1,36 +1,20 @@
 import type { GapEvent, QueryTrace } from "../types.js";
-import { classifyQuery } from "./classify.js";
-import { detectExplicitGap, encounteredKnownGap } from "./detect-gap.js";
-import { readChunkIds, rollupVariant } from "./rollup.js";
+import {
+  classifyQuery,
+  detectExplicitGap,
+  encounteredKnownGap,
+  rollupVariant,
+  successOf,
+} from "./metrics.js";
 import type {
   AxisDelta,
   BenchmarkProblem,
   BenchmarkReport,
   BenchmarkRun,
-  BenchmarkTurn,
   HumanGrade,
   TurnResult,
   VariantAssignment,
 } from "./types.js";
-
-// Success oracle, judge-free: an answerable turn succeeds when it reads its
-// minimal sufficient chunk set (⊇); an unanswerable turn, when it reports the gap.
-export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
-  if (turn.answerable) {
-    const expected = turn.expected_chunk_ids ?? [];
-    if (expected.length === 0) return false;
-    const read = new Set(readChunkIds(trace));
-    return expected.every((id) => read.has(id));
-  }
-  return detectExplicitGap(trace);
-}
-
-// Defaults to the reach oracle; an optional human grade overrides it per-turn,
-// so graded and reach-scored turns coexist.
-export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
-  if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
-  return reachSuccess(turn, trace);
-}
 
 // Ablation convention: the full-config variant is the baseline every axis-off
 // variant is measured against. grep+cat is an external comparison, not an
