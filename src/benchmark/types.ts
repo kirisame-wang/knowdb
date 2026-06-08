@@ -15,7 +15,7 @@ export interface VariantAssignment {
 // Multi-turn conversation thread. The type is owned here (harness side).
 export interface BenchmarkProblem {
   id: string;                              // e.g. "t001"; = thread id
-  domain: "mcp" | "langchain" | "knowdb_self" | "sparse" | `mtrag_${string}`;
+  domain: string;                          // corpus-instance label; taxonomy owned by spec-benchmark-corpus.md
   thread_type: "symmetric" | "structural" | "lexical_gap" | "sparse" | "mtrag";
   turns: BenchmarkTurn[];                  // ~3-4 turns per thread
   difficulty?: "easy" | "medium" | "hard"; // for stratification
