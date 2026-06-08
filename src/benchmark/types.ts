@@ -55,7 +55,7 @@ export interface BenchmarkRun {
   tool_set_version: string;                // hash of KNOWDB_TOOLS
   problem_set_id: string;                  // e.g. "corpus-v1"
   variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_search_read"]
-  baseline_variant: string;                // injected baseline role (conventionally "full"); the compute layer reads it from here, never hardcodes
+  baseline_variant: string;                // injected baseline role (conventionally "full")
   external_variant?: string;               // injected cost-floor role (conventionally "baseline_search_read"); absent when no cost comparison ran
   started_at: string;
   ended_at: string;

@@ -63,8 +63,8 @@ const run: BenchmarkRun = {
   tool_set_version: "v1",
   problem_set_id: "corpus-test",
   variants: ["full", "no_search", "baseline_search_read"], // ablation axes + cost floor
-  baseline_variant: "full",                                 // injected role (not hardcoded in compute layer)
-  external_variant: "baseline_search_read",                 // injected role; cost floor
+  baseline_variant: "full",                                 // injected baseline role
+  external_variant: "baseline_search_read",                 // injected cost-floor role
   started_at: "2026-06-03T00:00:00Z",
   ended_at: "2026-06-03T01:00:00Z",
   reviewer: "tester",
@@ -204,10 +204,9 @@ describe("computeReport — contract guards", () => {
   });
 });
 
-// B12 — the compute layer is domain-agnostic: baseline / cost-floor roles come
-// from the run, not hardcoded variant strings. A run naming its roles "cfg_a" /
-// "cfg_b" must compute deltas off those — proving no "full" / "baseline_search_read"
-// literal survives in the compute layer.
+// The compute layer is domain-agnostic: baseline / cost-floor roles come from the
+// run, not hardcoded variant strings. Arbitrary role names ("cfg_a"/"cfg_b") must
+// compute the same deltas — proof no variant literal survives in the compute layer.
 describe("computeReport — variant roles injected (domain-agnostic)", () => {
   const A = buildVariant("cfg_a", 200, 100, false);      // baseline role
   const X = buildVariant("cfg_axisoff", 100, 50, true);  // an ablation axis
