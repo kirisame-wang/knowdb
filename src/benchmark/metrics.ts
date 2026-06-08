@@ -8,9 +8,8 @@ import type {
   VariantAssignment,
 } from "./types.js";
 
-// Leaf pure functions: every per-turn / per-variant value computeReport assembles
-// is derived here. compute-report.ts (the orchestrator) imports from this file,
-// never the reverse.
+// Leaf pure functions: the per-turn / per-variant values computeReport assembles.
+// The orchestrator imports from here, never the reverse.
 
 function rate(pass: number, total: number): number {
   return total === 0 ? 0 : pass / total;
@@ -48,14 +47,11 @@ function groupBy<T>(items: T[], key: (t: T) => string): Map<string, T[]> {
   return m;
 }
 
-// Pure classification from `tool_calls`. No ground truth needed; this is the
-// *actual* path the agent took. A query is cross_doc when the agent read chunk
-// content in more than one document.
-//
-// Locators are the chunk-content reads — the same calls the reach oracle counts
+// Pure classification from `tool_calls` — the *actual* path the agent took, no
+// ground truth needed: cross_doc when the agent read chunk content in >1 doc.
+// Locators are the chunk-content reads, the same calls the reach oracle counts
 // (readChunkIds), so the within/cross split stays consistent with the success it
-// buckets. Discovery (search / list_docs / jump_to_ref), a TOC survey
-// (read_index) and structural moves (parent) don't count toward the doc set.
+// buckets; discovery and structural calls don't count.
 const LOCATORS = new Set(["read_chunk", "read_chunks"]);
 
 function docIdOf(input: Record<string, unknown>): string | undefined {
@@ -75,10 +71,7 @@ export function classifyQuery(trace: QueryTrace): "within_doc" | "cross_doc" {
 }
 
 // A coverage gap is read only from the structured `known_gap` a `search` returns
-// — judge-free, and decided by the index, not the agent. A prose regex on the
-// final answer was dropped: matching not-found phrasing is language-biased, and
-// inferring a gap from the agent's own wording lets the measured agent judge its
-// own abstention (player as referee).
+// — judge-free, decided by the index, not the agent's own wording.
 
 function isKnownGap(output_summary: string): boolean {
   try {
@@ -90,15 +83,13 @@ function isKnownGap(output_summary: string): boolean {
 }
 
 // Did any `search` this turn return known_gap? Serves as both the explicit-gap
-// signal and the recovery denominator ("hit a gap", regardless of how the turn
-// ended). Splitting terminal-report from mid-turn is deferred to the
-// retry-scaffold axis.
+// signal and the recovery denominator ("hit a gap", regardless of how the turn ended).
 export function encounteredKnownGap(trace: QueryTrace): boolean {
   return trace.tool_calls.some((c) => c.tool === "search" && isKnownGap(c.output_summary));
 }
 
-// Gap reporting is the structured known_gap signal only (see above); identical to
-// encounteredKnownGap until the terminal-vs-mid-turn split lands.
+// Gap reporting is the structured known_gap signal only; currently identical to
+// encounteredKnownGap.
 export function detectExplicitGap(trace: QueryTrace): boolean {
   return encounteredKnownGap(trace);
 }
