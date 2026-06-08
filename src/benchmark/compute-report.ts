@@ -16,12 +16,6 @@ import type {
   VariantAssignment,
 } from "./types.js";
 
-// Ablation convention: the full-config variant is the baseline every axis-off
-// variant is measured against. grep+cat is an external comparison, not an
-// ablation axis, so it is excluded from per_axis.
-const BASELINE_VARIANT = "full";
-const EXTERNAL_VARIANT = "baseline_grep_cat";
-
 // Pure synthesis: same inputs → same output. A trace absent from the side-car is
 // non-benchmark (e.g. dogfooding) and skipped, so a stray dump can't move the numbers.
 // gapEvents is reserved for the trace × gap cross-check; not consumed here yet.
@@ -68,19 +62,24 @@ export function computeReport(
       };
     });
 
-  const aggregates = run.variants.map((v) => rollupVariant(v, results, traces, assignOf, problemOf));
-  const full = aggregates.find((x) => x.variant === BASELINE_VARIANT);
-  const external = aggregates.find((x) => x.variant === EXTERNAL_VARIANT);
+  // Baseline / cost-floor roles are injected via the run — the compute layer
+  // stays domain-agnostic, never hardcoding which variant string plays which role.
+  const baselineVariant = run.baseline_variant;
+  const externalVariant = run.external_variant;
 
-  // per-axis delta = full − axis-off (the external grep+cat comparison is not an axis)
-  const per_axis: AxisDelta[] = full
+  const aggregates = run.variants.map((v) => rollupVariant(v, results, traces, assignOf, problemOf));
+  const baseline = aggregates.find((x) => x.variant === baselineVariant);
+  const external = aggregates.find((x) => x.variant === externalVariant);
+
+  // per-axis delta = baseline − axis-off (the cost-floor comparison is not an axis)
+  const per_axis: AxisDelta[] = baseline
     ? aggregates
-        .filter((x) => x.variant !== BASELINE_VARIANT && x.variant !== EXTERNAL_VARIANT)
+        .filter((x) => x.variant !== baselineVariant && x.variant !== externalVariant)
         .map((x) => ({
           variant: x.variant,
-          success_rate_delta: full.success_rate - x.success_rate,
-          decision_steps_delta: x.avg_decision_steps - full.avg_decision_steps,
-          explicit_gap_rate_delta: full.explicit_gap_rate - x.explicit_gap_rate,
+          success_rate_delta: baseline.success_rate - x.success_rate,
+          decision_steps_delta: x.avg_decision_steps - baseline.avg_decision_steps,
+          explicit_gap_rate_delta: baseline.explicit_gap_rate - x.explicit_gap_rate,
         }))
     : [];
 
@@ -89,13 +88,14 @@ export function computeReport(
     results,
     aggregates,
     deltas: {
-      baseline_variant: BASELINE_VARIANT,
+      baseline_variant: baselineVariant,
+      ...(externalVariant !== undefined ? { external_variant: externalVariant } : {}),
       per_axis,
-      ...(full && external
+      ...(baseline && external
         ? {
-            knowdb_vs_grep_cat_token_ratio: {
-              input: full.avg_tokens.input / external.avg_tokens.input,
-              output: full.avg_tokens.output / external.avg_tokens.output,
+            external_token_ratio: {
+              input: baseline.avg_tokens.input / external.avg_tokens.input,
+              output: baseline.avg_tokens.output / external.avg_tokens.output,
             },
           }
         : {}),

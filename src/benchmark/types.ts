@@ -6,7 +6,7 @@
 // dump, never folded into QueryTrace. One row per turn (one turn = one trace).
 export interface VariantAssignment {
   query_id: string;        // matches QueryTrace.query_id (one turn = one trace)
-  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_grep_cat"
+  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_search_read"
   problem_id: string;      // = thread id; shared across a thread's turns
   turn_index: number;      // 0-based position of this turn within the thread
   assigned_at: string;     // ISO 8601 UTC; harness inject point
@@ -54,7 +54,9 @@ export interface BenchmarkRun {
   knowdb_commit_sha: string;
   tool_set_version: string;                // hash of KNOWDB_TOOLS
   problem_set_id: string;                  // e.g. "corpus-v1"
-  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_grep_cat"]
+  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_search_read"]
+  baseline_variant: string;                // injected baseline role (conventionally "full"); the compute layer reads it from here, never hardcodes
+  external_variant?: string;               // injected cost-floor role (conventionally "baseline_search_read"); absent when no cost comparison ran
   started_at: string;
   ended_at: string;
   reviewer: string;
@@ -110,11 +112,12 @@ export interface BenchmarkReport {
   run: BenchmarkRun;
   results: TurnResult[];                    // flat list, all variants × all turns
   aggregates: VariantAggregate[];           // per-variant rollup
-  deltas: {                                 // ablation: each axis delta = full − axis-off
-    baseline_variant: string;               // baseline axis name (conventionally "full")
-    per_axis: AxisDelta[];                  // one per non-baseline axis; "search net contribution" = the variant==="no_search" entry
-    knowdb_vs_grep_cat_token_ratio?: {      // optional external comparison; undefined unless baseline_grep_cat ran
-      input: number;                        // full / grep+cat
+  deltas: {                                 // ablation: each axis delta = baseline − axis-off
+    baseline_variant: string;               // baseline axis name, echoed from run.baseline_variant
+    external_variant?: string;              // cost-floor axis name, echoed from run.external_variant (absent when none declared)
+    per_axis: AxisDelta[];                  // one per non-baseline / non-external axis; "search net contribution" = the variant==="no_search" entry
+    external_token_ratio?: {                // cost comparison; undefined unless the external variant both was declared and ran
+      input: number;                        // baseline.input / external.input
       output: number;
     };
   };
