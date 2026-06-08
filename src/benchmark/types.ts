@@ -1,0 +1,121 @@
+// Benchmark domain types. The data-layer (`src/types.ts`) is NOT modified —
+// variant association rides a side-car table, the same opaque-id join pattern
+// as `GapEvent.query_id` ↔ `QueryTrace.query_id`.
+
+// Side-car: query_id → (variant, thread, turn). Stored alongside the trace
+// dump, never folded into QueryTrace. One row per turn (one turn = one trace).
+export interface VariantAssignment {
+  query_id: string;        // matches QueryTrace.query_id (one turn = one trace)
+  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_grep_cat"
+  problem_id: string;      // = thread id; shared across a thread's turns
+  turn_index: number;      // 0-based position of this turn within the thread
+  assigned_at: string;     // ISO 8601 UTC; harness inject point
+}
+
+// Multi-turn conversation thread. The type is owned here (harness side).
+export interface BenchmarkProblem {
+  id: string;                              // e.g. "t001"; = thread id
+  domain: string;                          // corpus-instance label; taxonomy owned by spec-benchmark-corpus.md
+  thread_type: "symmetric" | "structural" | "lexical_gap" | "sparse" | "mtrag";
+  turns: BenchmarkTurn[];                  // ~3-4 turns per thread
+  difficulty?: "easy" | "medium" | "hard"; // for stratification
+}
+
+export interface BenchmarkTurn {
+  turn_index: number;                      // 0-based
+  question: string;
+  is_followup: boolean;                    // co-ref / non-standalone → followup scoring
+  turn_type: "symmetric" | "structural" | "lexical_gap";
+  answerable: boolean;                     // false = correct answer is an explicit gap
+  expected_doc_ids: string[];              // non-empty when answerable
+  expected_chunk_ids?: string[];           // finer-grained
+  expected_answer_keypoints: string[];     // rubric keypoints; unanswerable → "should report not-found"
+  expected_classification: "within_doc" | "cross_doc";  // ground-truth reference
+  rouge1_precision_vs_chunk?: number;      // rouge-1 precision of question vs chunk; lexical_gap turns only
+}
+
+export interface HumanGrade {
+  problem_id: string;                      // = thread id
+  turn_index: number;                      // grade per-turn
+  query_id: string;
+  variant: string;
+  rubric_1_covers_keypoints: boolean;
+  rubric_2_citations_valid: boolean;
+  notes?: string;
+  reviewer: string;
+  graded_at: string;
+}
+
+export interface BenchmarkRun {
+  run_id: string;
+  model: string;                           // e.g. "claude-opus-4-7"
+  temperature: number;
+  max_tokens: number;
+  knowdb_commit_sha: string;
+  tool_set_version: string;                // hash of KNOWDB_TOOLS
+  problem_set_id: string;                  // e.g. "corpus-v1"
+  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_grep_cat"]
+  started_at: string;
+  ended_at: string;
+  reviewer: string;
+}
+
+// One row per turn (one turn = one trace = one row).
+export interface TurnResult {
+  problem_id: string;                      // = thread id
+  turn_index: number;
+  query_id: string;
+  variant: string;
+  is_followup: boolean;                    // from BenchmarkTurn; co-ref aggregation
+  turn_type: "symmetric" | "structural" | "lexical_gap";
+  answerable: boolean;                     // ground truth; gap-correctness judgement
+  success: boolean;                        // reach oracle (answerable: read expected chunks; unanswerable: reported gap); a human grade overrides if present
+  classification_actual: "within_doc" | "cross_doc";
+  explicit_gap_reported: boolean;          // agent terminally reported a coverage gap
+  encountered_gap_signal: boolean;         // a search returned known_gap mid-turn (recovery denominator; ≠ terminal report)
+  decision_steps: number;                  // from QueryTrace.tool_calls.length
+  tokens: { input: number; output: number };
+}
+
+export interface VariantAggregate {
+  variant: string;
+  turn_count: number;
+  thread_count: number;
+  success_rate: number;                    // over all turns
+  within_doc_success_rate: number;
+  cross_doc_success_rate: number;
+  explicit_gap_rate: number;
+  abstention_precision: number | null;     // of reported-gap turns, share truly unanswerable; null when none reported
+  recovery_rate: number | null;            // of answerable turns that hit a gap signal, share that still succeeded; null when none qualify
+  recovery_avg_decision_steps: number | null;  // paired step guard for recovery_rate; avg total steps over the same candidates (coarse retry-effort proxy)
+  avg_decision_steps: number;
+  avg_tokens: { input: number; output: number };
+  read_chunk_pattern_usage_rate: number | null;  // fraction of read_chunk calls using the pattern filter; null if none
+  avg_read_chunk_output_chars: { with_pattern: number; without_pattern: number };  // mean read_chunk chars by pattern use; empty group → 0
+  // multi-turn metrics (three)
+  followup_success_rate: number;           // success rate of is_followup turns (co-ref)
+  turn_degradation_slope: number;          // mean per-thread per-turn decision_steps slope
+  cumulative_passage_coverage: number;     // mean per-thread expected_chunk_ids union hit-rate
+}
+
+// Ablation per-axis contribution: full-config minus the axis-off variant.
+export interface AxisDelta {
+  variant: string;                          // axis-off variant, e.g. "no_structure"
+  success_rate_delta: number;               // full − variant (positive = the axis helps)
+  decision_steps_delta: number;             // variant − full (positive = removal costs steps)
+  explicit_gap_rate_delta: number;          // full − variant
+}
+
+export interface BenchmarkReport {
+  run: BenchmarkRun;
+  results: TurnResult[];                    // flat list, all variants × all turns
+  aggregates: VariantAggregate[];           // per-variant rollup
+  deltas: {                                 // ablation: each axis delta = full − axis-off
+    baseline_variant: string;               // baseline axis name (conventionally "full")
+    per_axis: AxisDelta[];                  // one per non-baseline axis; "search net contribution" = the variant==="no_search" entry
+    knowdb_vs_grep_cat_token_ratio?: {      // optional external comparison; undefined unless baseline_grep_cat ran
+      input: number;                        // full / grep+cat
+      output: number;
+    };
+  };
+}
