@@ -18,7 +18,7 @@ export interface BenchmarkProblem {
   domain: "mcp" | "langchain" | "knowdb_self" | "sparse" | `mtrag_${string}`;
   thread_type: "symmetric" | "structural" | "lexical_gap" | "sparse" | "mtrag";
   turns: BenchmarkTurn[];                  // ~3-4 turns per thread
-  difficulty?: "easy" | "medium" | "hard"; // optional, for stratification
+  difficulty?: "easy" | "medium" | "hard"; // for stratification
 }
 
 export interface BenchmarkTurn {
@@ -28,7 +28,7 @@ export interface BenchmarkTurn {
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // false = correct answer is an explicit gap
   expected_doc_ids: string[];              // non-empty when answerable
-  expected_chunk_ids?: string[];           // optional, finer-grained
+  expected_chunk_ids?: string[];           // finer-grained
   expected_answer_keypoints: string[];     // rubric keypoints; unanswerable → "should report not-found"
   expected_classification: "within_doc" | "cross_doc";  // ground-truth reference
   rouge1_precision_vs_chunk?: number;      // rouge-1 precision of question vs chunk; lexical_gap turns only
@@ -39,8 +39,8 @@ export interface HumanGrade {
   turn_index: number;                      // grade per-turn
   query_id: string;
   variant: string;
-  rubric_1_covers_keypoints: boolean;      // rubric item 1
-  rubric_2_citations_valid: boolean;       // rubric item 2
+  rubric_1_covers_keypoints: boolean;
+  rubric_2_citations_valid: boolean;
   notes?: string;
   reviewer: string;
   graded_at: string;
