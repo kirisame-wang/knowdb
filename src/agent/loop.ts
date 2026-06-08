@@ -36,7 +36,7 @@ export interface AgentLoopDeps {
   signal?: AbortSignal;
   /** Benchmark ablation hook: transforms a successful tool result before it is
    *  recorded and sent to the agent. Absent in normal use (identity). */
-  ablation?: (toolName: string, input: Record<string, unknown>, result: string) => string;
+  ablation?: (toolName: string, result: string) => string;
 }
 
 export interface AgentLoopHooks {
@@ -136,7 +136,7 @@ export async function runAgentTurn(
         // Ablation (benchmark only): transform the result before it is recorded
         // and surfaced, so the trace reflects the ablated environment. Errors skip it.
         if (!isError && deps.ablation) {
-          result = deps.ablation(block.name, input, result);
+          result = deps.ablation(block.name, result);
         }
         deps.collector.recordToolCall(query_id, {
           tool: block.name,

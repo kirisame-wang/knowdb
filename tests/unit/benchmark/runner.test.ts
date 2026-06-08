@@ -150,4 +150,14 @@ describe("runBenchmark — orchestration", () => {
       "no_search",
     ]);
   });
+
+  it("rejects an unknown ablation variant before running (no side effects)", async () => {
+    const kv = new FakeKV();
+    await expect(
+      runBenchmark(
+        config({ client: scriptedClient([]), store: kv, problems: [problem("t001", [turn(0, "q0")])], variants: ["no_strcuture"], runId: "r4" }),
+      ),
+    ).rejects.toThrow(/unknown ablation variant/i);
+    expect(kv.getItem(benchmarkVariantKey("r4"))).toBeNull();
+  });
 });

@@ -110,11 +110,13 @@ describe("ablateResult — Seam B result transforms", () => {
       expect(out["status"]).toBe("results");
     });
 
-    it("replaces read_index and read_chunks output with a constant structure-unavailable note", () => {
+    it("replaces read_index, read_chunks, and parent output with a constant structure-unavailable note", () => {
       const a = ablateResult("no_structure", "read_index", "# heading tree\n- 00");
       const b = ablateResult("no_structure", "read_chunks", JSON.stringify([{ id: "a/2", preview: "x" }]));
+      const c = ablateResult("no_structure", "parent", JSON.stringify("a/0"));
       expect(a).toMatch(/structure/i);
       expect(a).toBe(b); // constant, independent of the stripped input
+      expect(a).toBe(c); // parent (a structural step) is blanked too
       expect(a).not.toContain("heading tree");
     });
 

@@ -6,7 +6,7 @@ import { BrowserGapSink } from "../gaps.js";
 import type { SessionContext } from "../utils.js";
 import type { Manifest, SearchIndex } from "../types.js";
 import type { BenchmarkProblem } from "./types.js";
-import { toolsFor, ablateResult } from "./ablation.js";
+import { toolsFor, ablateResult, ABLATION_VARIANTS } from "./ablation.js";
 import { benchmarkTraceSink, benchmarkGapKey, benchmarkVariantKey, VariantSink } from "./sink.js";
 
 export interface BenchmarkRunnerConfig {
@@ -30,6 +30,12 @@ export interface BenchmarkRunnerConfig {
 // query_id → variant side-car to run-scoped sinks. A thread runs its turns in one
 // shared chatHistory (co-ref preserved); each variant replays it from a fresh one.
 export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
+  // Fail loud on a misspelled variant before any side effects — an unknown axis
+  // would otherwise run silently as full.
+  for (const v of cfg.variants) {
+    if (!ABLATION_VARIANTS.has(v)) throw new Error(`Unknown ablation variant: ${v}`);
+  }
+
   const traceSink = benchmarkTraceSink(cfg.store, cfg.runId);
   const gapSink = new BrowserGapSink(cfg.store, benchmarkGapKey(cfg.runId), cfg.session);
   const variantSink = new VariantSink(cfg.store, benchmarkVariantKey(cfg.runId));
@@ -37,8 +43,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
 
   for (const variant of cfg.variants) {
     const tools = toolsFor(variant, cfg.tools);
-    const ablation = (name: string, _input: Record<string, unknown>, result: string): string =>
-      ablateResult(variant, name, result);
+    const ablation = (name: string, result: string): string => ablateResult(variant, name, result);
 
     for (const problem of cfg.problems) {
       const collector = new BrowserTraceCollector(cfg.session);
