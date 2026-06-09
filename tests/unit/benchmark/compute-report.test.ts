@@ -62,7 +62,9 @@ const run: BenchmarkRun = {
   knowdb_commit_sha: "deadbeef",
   tool_set_version: "v1",
   problem_set_id: "corpus-test",
-  variants: ["full", "no_search", "baseline_grep_cat"], // ablation axes + external comparison
+  variants: ["full", "no_search", "baseline_search_read"], // ablation axes + cost floor
+  baseline_variant: "full",                                 // injected baseline role
+  external_variant: "baseline_search_read",                 // injected cost-floor role
   started_at: "2026-06-03T00:00:00Z",
   ended_at: "2026-06-03T01:00:00Z",
   reviewer: "tester",
@@ -70,7 +72,7 @@ const run: BenchmarkRun = {
 
 // full: tokens 200/100, all pass → success_rate 1 (the baseline).
 // no_search (search-off axis): tokens 100/50, turn1 fails → success_rate 2/3.
-// baseline_grep_cat (external): tokens 400/200, all pass → drives token ratio.
+// baseline_search_read (cost floor): tokens 400/200, all pass → drives token ratio.
 function buildVariant(v: string, input: number, output: number, failTurn1: boolean) {
   const traces: QueryTrace[] = turnCalls.map((calls, i) => trace(`q_${v}_${i}`, calls, input, output));
   const assignments: VariantAssignment[] = traces.map((t, i) => ({
@@ -95,17 +97,17 @@ function buildVariant(v: string, input: number, output: number, failTurn1: boole
 
 const FULL = buildVariant("full", 200, 100, false);
 const NOSEARCH = buildVariant("no_search", 100, 50, true);
-const GREPCAT = buildVariant("baseline_grep_cat", 400, 200, false);
+const FLOOR = buildVariant("baseline_search_read", 400, 200, false);
 
 // A dogfooding trace with NO side-car assignment — must be skipped entirely.
 const dogfooding = trace("q_dogfood", [call("read_chunk", { id: "zzz/01" })], 999, 999);
 
 const report = computeReport(
-  [...FULL.traces, ...NOSEARCH.traces, ...GREPCAT.traces, dogfooding],
+  [...FULL.traces, ...NOSEARCH.traces, ...FLOOR.traces, dogfooding],
   [], // gapEvents — reserved cross-check, unused here
-  [...FULL.assignments, ...NOSEARCH.assignments, ...GREPCAT.assignments],
+  [...FULL.assignments, ...NOSEARCH.assignments, ...FLOOR.assignments],
   [problem],
-  [...FULL.grades, ...NOSEARCH.grades, ...GREPCAT.grades],
+  [...FULL.grades, ...NOSEARCH.grades, ...FLOOR.grades],
   run,
 );
 
@@ -116,7 +118,7 @@ describe("computeReport — end-to-end pipeline", () => {
   });
 
   it("emits one aggregate per declared variant, in declared order", () => {
-    expect(report.aggregates.map((a) => a.variant)).toEqual(["full", "no_search", "baseline_grep_cat"]);
+    expect(report.aggregates.map((a) => a.variant)).toEqual(["full", "no_search", "baseline_search_read"]);
   });
 
   it("no_search axis rollup matches hand-computed values", () => {
@@ -148,9 +150,10 @@ describe("computeReport — end-to-end pipeline", () => {
     expect(b.cumulative_passage_coverage).toBeCloseTo(2 / 3);
   });
 
-  it("deltas: per-axis full − axis-off, grep+cat excluded from axes", () => {
+  it("deltas: per-axis baseline − axis-off, cost floor excluded from axes", () => {
     expect(report.deltas.baseline_variant).toBe("full");
-    // only no_search is an ablation axis; baseline_grep_cat is the external comparison
+    expect(report.deltas.external_variant).toBe("baseline_search_read");
+    // only no_search is an ablation axis; baseline_search_read is the cost floor
     expect(report.deltas.per_axis.map((d) => d.variant)).toEqual(["no_search"]);
     const ns = report.deltas.per_axis[0]!;
     expect(ns.success_rate_delta).toBeCloseTo(1 / 3); // full 1 − no_search 2/3 (search net contribution)
@@ -158,8 +161,8 @@ describe("computeReport — end-to-end pipeline", () => {
     expect(ns.explicit_gap_rate_delta).toBeCloseTo(0); // both 1/3
   });
 
-  it("deltas: knowdb_vs_grep_cat_token_ratio = full / grep+cat when external ran", () => {
-    expect(report.deltas.knowdb_vs_grep_cat_token_ratio).toEqual({ input: 0.5, output: 0.5 }); // 200/400, 100/200
+  it("deltas: external_token_ratio = baseline / external when the cost floor ran", () => {
+    expect(report.deltas.external_token_ratio).toEqual({ input: 0.5, output: 0.5 }); // 200/400, 100/200
   });
 
   it("per-turn TurnResult carries classification / gap / followup", () => {
@@ -189,15 +192,106 @@ describe("computeReport — contract guards", () => {
 
   it("no grade → success derived from reach oracle (B1), not a throw", () => {
     // problem turn0 is answerable, expected_chunk_ids = [abc/01, abc/02]; reach both → success.
+    // Reach-rates-only run: no baseline declared → no deltas (and no throw on its absence).
+    const reachRun: BenchmarkRun = { ...run, variants: ["A"] };
+    delete (reachRun as { baseline_variant?: string }).baseline_variant;
+    delete (reachRun as { external_variant?: string }).external_variant;
     const t = trace("q_ungraded", [call("read_chunk", { id: "abc/01" }), call("read_chunk", { id: "abc/02" })], 100, 50);
     const rep = computeReport(
       [t], [],
       [{ query_id: "q_ungraded", variant: "A", problem_id: "t001", turn_index: 0, assigned_at: "x" }],
       [problem],
       [], // no grades — MVP reach oracle
-      { ...run, variants: ["A"] },
+      reachRun,
     );
     expect(rep.results[0]!.success).toBe(true);
+  });
+});
+
+// The compute layer is domain-agnostic: baseline / cost-floor roles come from the
+// run, not hardcoded variant strings. Arbitrary role names ("cfg_a"/"cfg_b") must
+// compute the same deltas — proof no variant literal survives in the compute layer.
+describe("computeReport — variant roles injected (domain-agnostic)", () => {
+  const A = buildVariant("cfg_a", 200, 100, false);      // baseline role
+  const X = buildVariant("cfg_axisoff", 100, 50, true);  // an ablation axis
+  const F = buildVariant("cfg_b", 400, 200, false);      // cost-floor role
+  const rolesRun: BenchmarkRun = {
+    ...run, variants: ["cfg_a", "cfg_axisoff", "cfg_b"], baseline_variant: "cfg_a", external_variant: "cfg_b",
+  };
+  const rep = computeReport(
+    [...A.traces, ...X.traces, ...F.traces], [],
+    [...A.assignments, ...X.assignments, ...F.assignments],
+    [problem],
+    [...A.grades, ...X.grades, ...F.grades],
+    rolesRun,
+  );
+
+  it("baseline / external echo the injected role names", () => {
+    expect(rep.deltas.baseline_variant).toBe("cfg_a");
+    expect(rep.deltas.external_variant).toBe("cfg_b");
+  });
+
+  it("per_axis excludes both the injected baseline and the injected cost-floor role", () => {
+    expect(rep.deltas.per_axis.map((d) => d.variant)).toEqual(["cfg_axisoff"]);
+  });
+
+  it("external_token_ratio = injected-baseline / injected-external tokens", () => {
+    expect(rep.deltas.external_token_ratio).toEqual({ input: 0.5, output: 0.5 }); // 200/400, 100/200
+  });
+
+  it("throws when a declared cost floor did not run (declaring it intends the ratio)", () => {
+    expect(() =>
+      computeReport(
+        [...A.traces, ...X.traces], [],
+        [...A.assignments, ...X.assignments],
+        [problem],
+        [...A.grades, ...X.grades],
+        { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] }, // cfg_b declared as role but absent from this run
+      ),
+    ).toThrow(/external/i);
+  });
+
+  it("a run that declares no cost floor omits both the external role and the ratio", () => {
+    const noFloorRun: BenchmarkRun = { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] };
+    delete (noFloorRun as { external_variant?: string }).external_variant;
+    const rep3 = computeReport(
+      [...A.traces, ...X.traces], [],
+      [...A.assignments, ...X.assignments],
+      [problem],
+      [...A.grades, ...X.grades],
+      noFloorRun,
+    );
+    expect(rep3.deltas.external_variant).toBeUndefined();
+    expect(rep3.deltas.external_token_ratio).toBeUndefined();
+    expect(rep3.deltas.per_axis.map((d) => d.variant)).toEqual(["cfg_axisoff"]);
+  });
+
+  it("throws when a declared baseline did not run (declaring it intends deltas)", () => {
+    expect(() =>
+      computeReport(
+        [...X.traces], [],
+        [...X.assignments],
+        [problem],
+        [...X.grades],
+        { ...rolesRun, variants: ["cfg_axisoff"] }, // baseline cfg_a absent from this run
+      ),
+    ).toThrow(/baseline/i);
+  });
+
+  it("no baseline declared → aggregates only, no per_axis deltas", () => {
+    const reachOnly: BenchmarkRun = { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] };
+    delete (reachOnly as { baseline_variant?: string }).baseline_variant;
+    delete (reachOnly as { external_variant?: string }).external_variant;
+    const rep5 = computeReport(
+      [...A.traces, ...X.traces], [],
+      [...A.assignments, ...X.assignments],
+      [problem],
+      [...A.grades, ...X.grades],
+      reachOnly,
+    );
+    expect(rep5.deltas.baseline_variant).toBeUndefined();
+    expect(rep5.deltas.per_axis).toEqual([]);
+    expect(rep5.aggregates).toHaveLength(2); // aggregates still produced
   });
 });
 
@@ -258,12 +352,14 @@ describe("computeReport — recovery_rate end-to-end (non-null path through real
     };
     // search known_gap (false alarm on answerable content) → read_chunk → answered.
     const recTrace = trace("q_rec", [call("search", { keyword: "cashflow" }, KNOWN_GAP), call("read_chunk", { id: "abc/01" })], 50, 25);
+    const recRun: BenchmarkRun = { ...run, variants: ["full"] }; // baseline full ran; no external declared
+    delete (recRun as { external_variant?: string }).external_variant;
     const rep = computeReport(
       [recTrace], [],
       [{ query_id: "q_rec", variant: "full", problem_id: "trec", turn_index: 0, assigned_at: "x" }],
       [recProblem],
       [{ problem_id: "trec", turn_index: 0, query_id: "q_rec", variant: "full", rubric_1_covers_keypoints: true, rubric_2_citations_valid: true, reviewer: "t", graded_at: "x" }],
-      { ...run, variants: ["full"] },
+      recRun,
     );
     const agg = rep.aggregates[0]!;
     expect(rep.results[0]!.encountered_gap_signal).toBe(true); // derived via real encounteredKnownGap

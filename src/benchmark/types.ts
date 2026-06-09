@@ -6,7 +6,7 @@
 // dump, never folded into QueryTrace. One row per turn (one turn = one trace).
 export interface VariantAssignment {
   query_id: string;        // matches QueryTrace.query_id (one turn = one trace)
-  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_grep_cat"
+  variant: string;         // ablation axis, e.g. "full" | "no_structure" | "no_search" | "baseline_search_read"
   problem_id: string;      // = thread id; shared across a thread's turns
   turn_index: number;      // 0-based position of this turn within the thread
   assigned_at: string;     // ISO 8601 UTC; harness inject point
@@ -54,7 +54,9 @@ export interface BenchmarkRun {
   knowdb_commit_sha: string;
   tool_set_version: string;                // hash of KNOWDB_TOOLS
   problem_set_id: string;                  // e.g. "corpus-v1"
-  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_grep_cat"]
+  variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_search_read"]
+  baseline_variant?: string;               // injected baseline role; declaring it requires that variant to have run (deltas intended). Omit for reach-rates-only runs.
+  external_variant?: string;               // injected cost-floor role; declaring it requires that variant to have run (cost ratio intended)
   started_at: string;
   ended_at: string;
   reviewer: string;
@@ -98,23 +100,24 @@ export interface VariantAggregate {
   cumulative_passage_coverage: number;     // mean per-thread expected_chunk_ids union hit-rate
 }
 
-// Ablation per-axis contribution: full-config minus the axis-off variant.
+// Ablation per-axis contribution: the baseline minus the axis-off variant.
 export interface AxisDelta {
   variant: string;                          // axis-off variant, e.g. "no_structure"
-  success_rate_delta: number;               // full − variant (positive = the axis helps)
-  decision_steps_delta: number;             // variant − full (positive = removal costs steps)
-  explicit_gap_rate_delta: number;          // full − variant
+  success_rate_delta: number;               // baseline − variant (positive = the axis helps)
+  decision_steps_delta: number;             // variant − baseline (positive = removal costs steps)
+  explicit_gap_rate_delta: number;          // baseline − variant
 }
 
 export interface BenchmarkReport {
   run: BenchmarkRun;
   results: TurnResult[];                    // flat list, all variants × all turns
   aggregates: VariantAggregate[];           // per-variant rollup
-  deltas: {                                 // ablation: each axis delta = full − axis-off
-    baseline_variant: string;               // baseline axis name (conventionally "full")
-    per_axis: AxisDelta[];                  // one per non-baseline axis; "search net contribution" = the variant==="no_search" entry
-    knowdb_vs_grep_cat_token_ratio?: {      // optional external comparison; undefined unless baseline_grep_cat ran
-      input: number;                        // full / grep+cat
+  deltas: {                                 // ablation: each axis delta = baseline − axis-off
+    baseline_variant?: string;              // echoed when declared; absent when the run is reach-rates-only (no deltas)
+    external_variant?: string;              // echoed when declared
+    per_axis: AxisDelta[];                  // one delta per axis variant (excludes the baseline and external roles)
+    external_token_ratio?: {                // cost comparison; undefined unless the external variant both was declared and ran
+      input: number;                        // baseline.input / external.input
       output: number;
     };
   };
