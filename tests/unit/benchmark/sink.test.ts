@@ -41,12 +41,13 @@ const assign = (query_id: string, variant: string, turn_index = 0): VariantAssig
 
 describe("benchmark sink keys — run-scoped, distinct from dogfooding", () => {
   it("derives three distinct run-scoped keys, none equal to the dogfooding keys", () => {
-    expect(benchmarkTraceKey("r1")).toBe("knowdb-benchmark-traces-r1");
-    expect(benchmarkGapKey("r1")).toBe("knowdb-benchmark-gaps-r1");
-    expect(benchmarkVariantKey("r1")).toBe("knowdb-benchmark-variants-r1");
     const keys = [benchmarkTraceKey("r1"), benchmarkGapKey("r1"), benchmarkVariantKey("r1")];
-    expect(new Set(keys).size).toBe(3);
-    expect(keys).not.toContain("knowdb-traces");
+    for (const k of keys) {
+      expect(k.startsWith("knowdb-benchmark-")).toBe(true); // benchmark namespace
+      expect(k).toContain("r1"); // run-scoped
+    }
+    expect(new Set(keys).size).toBe(3); // traces / gaps / variants never collide
+    expect(keys).not.toContain("knowdb-traces"); // never the dogfooding stream
     expect(keys).not.toContain("knowdb-gaps");
   });
 

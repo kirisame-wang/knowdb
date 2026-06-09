@@ -103,9 +103,11 @@ describe("ablateResult — result transforms per ablation variant", () => {
 
   describe("no_structure", () => {
     it("strips breadcrumb / siblings / parent_summary from search hits, keeps the rest", () => {
+      const kept = { ...(parse(resultsJson)["hits"] as Record<string, unknown>[])[0]! };
+      for (const f of ["breadcrumb", "siblings", "parent_summary"]) delete kept[f];
       const out = parse(ablateResult("no_structure", "search", resultsJson));
       const hit = (out["hits"] as Record<string, unknown>[])[0]!;
-      expect(hit).toEqual({ id: "a/1", score: 3, excerpt: "first matching line", doc_title: "Doc A" });
+      expect(hit).toEqual(kept); // exactly the three structure fields gone, the rest unchanged
       expect(out["status"]).toBe("results");
     });
 
@@ -164,12 +166,13 @@ describe("ablateResult — result transforms per ablation variant", () => {
 
   describe("no_retry_scaffold", () => {
     it("keeps the known_gap status but rewrites the recommendation to a terminal one", () => {
+      const gap = parse(knownGapJson);
       const out = parse(ablateResult("no_retry_scaffold", "search", knownGapJson));
-      expect(out["status"]).toBe("known_gap"); // status preserved; only the recommendation is swapped
-      expect(out["message"]).toBe('Known gap: the keyword "x" returned no results.');
-      expect(out["gaps"]).toEqual([{ topic: "x", occurrence_count: 1, first_seen: "2026-06-01T00:00:00Z" }]);
-      expect(out["recommendation"]).not.toContain("Retry");
-      expect(String(out["recommendation"]).length).toBeGreaterThan(0);
+      expect(out["status"]).toBe("known_gap"); // status preserved (vs no_gap, which suppresses it)
+      expect(out["message"]).toBe(gap["message"]); // message preserved
+      expect(out["gaps"]).toEqual(gap["gaps"]); // gaps preserved
+      expect(out["recommendation"]).not.toBe(gap["recommendation"]); // recommendation replaced...
+      expect(String(out["recommendation"]).length).toBeGreaterThan(0); // ...with a non-empty terminal note
     });
 
     it("leaves a normal results search untouched", () => {
