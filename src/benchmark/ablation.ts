@@ -63,6 +63,7 @@ function stripHitStructure(result: string): string {
   return JSON.stringify({ ...obj, hits });
 }
 
+// Rewrites the search result only; the GapEvent written upstream is left as is.
 function suppressKnownGap(result: string): string {
   const obj = asStatusObject(result);
   return obj && obj["status"] === "known_gap"
