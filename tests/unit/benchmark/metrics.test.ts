@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, detectExplicitGap, encounteredKnownGap } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
+import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
 // classifyQuery and the gap detectors are the leaf signal functions. successOf
 // and rollupVariant (also in metrics.ts) are exercised in compute-report.test.ts,
@@ -105,44 +106,62 @@ function gapTrace(opts: { calls?: ToolCallEvent[]; final_answer?: string }): Que
   return opts.final_answer === undefined ? base : { ...base, final_answer: opts.final_answer };
 }
 
-describe("detectExplicitGap — structured known_gap signal only (no prose regex)", () => {
-  it("a search returned known_gap → true", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(KNOWN_GAP)], final_answer: "Here is the answer." }))).toBe(true);
-  });
-
-  it("no known_gap → false, even when the final answer phrases a not-found (EN/ZH)", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall(NORMAL_HITS)], final_answer: "Sorry, I couldn't find that." }))).toBe(false);
-    expect(detectExplicitGap(gapTrace({ final_answer: "文件中找不到相關內容" }))).toBe(false);
-  });
-
-  it("malformed search output is not a signal (no throw)", () => {
-    expect(detectExplicitGap(gapTrace({ calls: [searchCall("not json <<")], final_answer: "ok" }))).toBe(false);
-  });
-
-  it("known_gap shape on a non-search tool is ignored", () => {
-    const c: ToolCallEvent = { ordinal: 1, tool: "read_chunk", input: {}, output_summary: KNOWN_GAP, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
-    expect(detectExplicitGap(gapTrace({ calls: [c], final_answer: "ok" }))).toBe(false);
-  });
-});
-
-// The strong-signal half, exposed on its own: "did this turn ever hit a
-// known_gap?" — the recovery-metric denominator. Distinct from detectExplicitGap
-// in that final_answer phrasing is irrelevant (a turn can hit a gap then recover).
-describe("encounteredKnownGap (recovery-denominator helper)", () => {
+// "Did this turn ever hit a known_gap?" — the mid-turn signal: the recovery
+// denominator and the unanswerable-success oracle. final_answer phrasing is
+// irrelevant (a turn can hit a gap then recover); only the structured signal counts.
+describe("encounteredKnownGap (mid-turn gap signal)", () => {
   it("true when a search returned known_gap, regardless of a substantive final answer", () => {
     expect(encounteredKnownGap(gapTrace({ calls: [searchCall(KNOWN_GAP)], final_answer: "Here is the answer." }))).toBe(true);
   });
 
-  it("false when no search returned known_gap, even if final_answer phrases a gap", () => {
+  it("false when no search returned known_gap, even if final_answer phrases a gap (EN/ZH)", () => {
     expect(encounteredKnownGap(gapTrace({ calls: [searchCall(NORMAL_HITS)], final_answer: "not covered" }))).toBe(false);
+    expect(encounteredKnownGap(gapTrace({ final_answer: "文件中找不到相關內容" }))).toBe(false);
   });
 
   it("true when one of several searches returned known_gap (.some short-circuit)", () => {
     expect(encounteredKnownGap(gapTrace({ calls: [searchCall(NORMAL_HITS), searchCall(KNOWN_GAP)] }))).toBe(true);
   });
 
+  it("malformed search output is not a signal (no throw)", () => {
+    expect(encounteredKnownGap(gapTrace({ calls: [searchCall("not json <<")] }))).toBe(false);
+  });
+
   it("known_gap shape on a non-search tool is ignored", () => {
     const c: ToolCallEvent = { ordinal: 1, tool: "read_chunk", input: {}, output_summary: KNOWN_GAP, duration_ms: 0, timestamp: "2026-06-03T00:00:00Z" };
     expect(encounteredKnownGap(gapTrace({ calls: [c] }))).toBe(false);
+  });
+});
+
+// explicit_gap_reported is terminal: an unanswerable turn that hit the gap signal
+// (a correct abstention), or an answerable turn that hit a gap and did NOT recover.
+// A recovered answerable turn (hit a gap, then answered) is NOT a reported gap.
+describe("terminalGapReported — terminal abstention signal", () => {
+  const aTurn = (answerable: boolean): BenchmarkTurn => ({
+    turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric",
+    answerable, expected_doc_ids: [], expected_answer_keypoints: [], expected_classification: "within_doc",
+  });
+  const hitGap = gapTrace({ calls: [searchCall(KNOWN_GAP)] });
+  const noGap = gapTrace({ calls: [searchCall(NORMAL_HITS)] });
+
+  it("unanswerable + hit gap → true regardless of success (correct abstention counts)", () => {
+    expect(terminalGapReported(aTurn(false), hitGap, true)).toBe(true);
+    expect(terminalGapReported(aTurn(false), hitGap, false)).toBe(true);
+  });
+
+  it("unanswerable without a gap signal → false (fabricated, not a reported gap)", () => {
+    expect(terminalGapReported(aTurn(false), noGap, false)).toBe(false);
+  });
+
+  it("answerable + hit gap + recovered (success) → false (the retry-scaffold fix)", () => {
+    expect(terminalGapReported(aTurn(true), hitGap, true)).toBe(false);
+  });
+
+  it("answerable + hit gap + failed → true (a false gap on answerable content)", () => {
+    expect(terminalGapReported(aTurn(true), hitGap, false)).toBe(true);
+  });
+
+  it("answerable without a gap signal → false", () => {
+    expect(terminalGapReported(aTurn(true), noGap, true)).toBe(false);
   });
 });

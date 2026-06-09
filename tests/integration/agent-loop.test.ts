@@ -488,3 +488,78 @@ describe("runAgentTurn — integration", () => {
     expect(trace.api_rounds).toHaveLength(2);
   });
 });
+
+// The benchmark ablation hook: an injected deps.ablation transforms a tool result
+// before it is recorded and before it reaches the agent; absent in normal use.
+describe("runAgentTurn — ablation hook", () => {
+  function toolResultBlock(deps: AgentLoopDeps): Anthropic.Messages.ToolResultBlockParam {
+    const turn = deps.chatHistory.find(
+      (m) =>
+        m.role === "user" &&
+        Array.isArray(m.content) &&
+        m.content.some((b) => (b as { type: string }).type === "tool_result"),
+    )!;
+    return (turn.content as Anthropic.Messages.ToolResultBlockParam[]).find(
+      (b) => b.type === "tool_result",
+    )!;
+  }
+
+  it("transforms a successful result before recording it (record-before invariant)", async () => {
+    const client = scriptedClient([
+      msg([toolUse("tu_1", "search", { keyword: "BM25" })]),
+      msg([text("done")]),
+    ]);
+    const deps = makeDeps(client);
+    const calls: string[] = [];
+    deps.ablation = (name) => {
+      calls.push(name);
+      return "ABLATED";
+    };
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+
+    // Both the recorded trace and the agent-facing tool_result carry the ablated
+    // output → the transform ran before recordToolCall, not after.
+    expect(trace.tool_calls[0]!.output_summary).toBe("ABLATED");
+    expect(trace.tool_calls[0]!.output_chars).toBe("ABLATED".length);
+    expect(toolResultBlock(deps).content).toBe("ABLATED");
+    expect(calls).toEqual(["search"]);
+  });
+
+  it("without an ablation dep, the raw result passes through unchanged", async () => {
+    const client = scriptedClient([
+      msg([toolUse("tu_1", "search", { keyword: "BM25" })]),
+      msg([text("done")]),
+    ]);
+    const deps = makeDeps(client); // no deps.ablation
+
+    const trace = (await runAgentTurn(deps, "Q"))!;
+    const out: unknown = JSON.parse(trace.tool_calls[0]!.output_summary);
+    expect((out as { status?: string }).status).toBe("results"); // raw search shape
+  });
+
+  it("does not ablate an errored tool result (is_error passes through raw)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    try {
+      const client = scriptedClient([
+        msg([toolUse("tu_1", "read_chunk", { id: "aaa00001/99" })]),
+        msg([text("another route")]),
+      ]);
+      const deps = makeDeps(client);
+      const calls: string[] = [];
+      deps.ablation = (name) => {
+        calls.push(name);
+        return "ABLATED";
+      };
+
+      await runAgentTurn(deps, "Q");
+
+      const block = toolResultBlock(deps);
+      expect(block.is_error).toBe(true);
+      expect(String(block.content)).not.toBe("ABLATED"); // raw error preserved
+      expect(calls).toEqual([]); // ablation skipped for errored tools
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

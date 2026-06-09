@@ -1,10 +1,10 @@
 import type { GapEvent, QueryTrace } from "../types.js";
 import {
   classifyQuery,
-  detectExplicitGap,
   encounteredKnownGap,
   rollupVariant,
   successOf,
+  terminalGapReported,
 } from "./metrics.js";
 import type {
   AxisDelta,
@@ -42,6 +42,7 @@ export function computeReport(
       const turn = problem.turns.find((x) => x.turn_index === a.turn_index);
       if (!turn) throw new Error(`Unknown turn ${a.problem_id}#${a.turn_index}`);
       const grade = gradeOf.get(t.query_id); // optional: present → answer-quality override; absent → reach oracle
+      const success = successOf(turn, t, grade);
       return {
         problem_id: a.problem_id,
         turn_index: a.turn_index,
@@ -50,9 +51,9 @@ export function computeReport(
         is_followup: turn.is_followup,
         turn_type: turn.turn_type,
         answerable: turn.answerable,
-        success: successOf(turn, t, grade),
+        success,
         classification_actual: classifyQuery(t),
-        explicit_gap_reported: detectExplicitGap(t),
+        explicit_gap_reported: terminalGapReported(turn, t, success),
         encountered_gap_signal: encounteredKnownGap(t),
         decision_steps: t.tool_calls.length,
         tokens: {
