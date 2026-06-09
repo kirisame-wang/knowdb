@@ -132,7 +132,7 @@ describe("runBenchmark — orchestration", () => {
 
     const search = benchmarkTraceSink(kv, "r2").readAll()[0]!.tool_calls.find((c) => c.tool === "search")!;
     expect(JSON.parse(search.output_summary)).toEqual({ status: "results", hits: [] });
-    // Boundary: the GapEvent is still written (to the run-scoped gap key), inert for metrics.
+    // the GapEvent is still written, to the run-scoped gap key (not the dogfooding key).
     expect(parseJsonl<GapEvent>(kv.getItem(benchmarkGapKey("r2")) ?? "").length).toBeGreaterThanOrEqual(1);
     expect(kv.getItem("knowdb-gaps")).toBeNull();
   });

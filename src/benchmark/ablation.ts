@@ -1,8 +1,7 @@
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type { ResultsResponse, SearchResult } from "../types.js";
 
-// The known ablation axes — the single source of truth the runner validates
-// against, so a misspelled variant fails loud instead of degrading to full.
+// The known ablation axes; the runner validates declared variants against this set.
 export const ABLATION_VARIANTS = new Set<string>([
   "full",
   "no_structure",
@@ -13,9 +12,8 @@ export const ABLATION_VARIANTS = new Set<string>([
   "baseline_search_read",
 ]);
 
-// Seam A — ablation by tool allowlist: a variant removes the tools its axis
-// turns off, so the agent simply lacks them. Content-transform axes leave the
-// set whole (they ablate via Seam B); unknown variants default to the full set.
+// Ablation by tool allowlist: a variant drops the tools its axis turns off.
+// Content axes and unknown variants keep the full set (they ablate via result transform).
 
 // The cost-floor variant keeps a flat search+read surface plus orientation tools.
 const SEARCH_READ_FLOOR = new Set(["get_instructions", "list_docs", "search", "read_chunk"]);
@@ -29,14 +27,13 @@ export function toolsFor(variant: string, tools: Tool[]): Tool[] {
     case "baseline_search_read":
       return tools.filter((t) => SEARCH_READ_FLOOR.has(t.name));
     default:
-      // full, the content-transform axes (Seam B), and unknown variants keep all.
+      // full, content axes, and unknown variants keep all.
       return tools;
   }
 }
 
-// Seam B — ablation by tool-result transform: a content axis rewrites a tool's
-// output before it reaches the agent (and the trace). The agent loop applies this
-// via deps.ablation before recordToolCall, so the trace reflects what the agent saw.
+// Ablation by tool-result transform: a content axis rewrites a tool's output.
+// The agent loop applies this via deps.ablation before recordToolCall.
 
 const STRUCTURE_STRIPPED = "Structure navigation is unavailable in this configuration.";
 const TERMINAL_GAP = "The probed wording is not in the current knowledge base coverage.";
@@ -51,8 +48,7 @@ function asStatusObject(result: string): Record<string, unknown> | null {
   }
 }
 
-// The hierarchy fields stripped from each search hit. Typed against SearchResult
-// so a rename in the data-layer schema breaks here rather than silently no-opping.
+// Hierarchy fields stripped from each search hit; typed against SearchResult.
 const STRUCTURE_FIELDS: (keyof SearchResult)[] = ["breadcrumb", "siblings", "parent_summary"];
 
 // Drop the hierarchy fields from each search hit, leaving flat retrieval data.

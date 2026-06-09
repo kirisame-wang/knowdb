@@ -489,10 +489,9 @@ describe("runAgentTurn — integration", () => {
   });
 });
 
-// Seam B — the benchmark ablation hook. An injected deps.ablation transforms a
-// tool result before it is recorded and before it reaches the agent; without it
-// the dogfooding path is unchanged.
-describe("runAgentTurn — ablation hook (Seam B)", () => {
+// The benchmark ablation hook: an injected deps.ablation transforms a tool result
+// before it is recorded and before it reaches the agent; absent in normal use.
+describe("runAgentTurn — ablation hook", () => {
   function toolResultContent(deps: AgentLoopDeps): unknown {
     const turn = deps.chatHistory.find(
       (m) =>

@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import { toolsFor, ablateResult } from "../../../src/benchmark/ablation.js";
 
-// The full KnowDB tool surface (names only — toolsFor filters by name, never by
-// schema). Order matters: toolsFor must preserve the input order and identity.
+// The full KnowDB tool surface (names only; toolsFor filters by name, preserving order and identity).
 const NAMES = [
   "get_instructions",
   "list_docs",
@@ -24,7 +23,7 @@ const TOOLS: Tool[] = NAMES.map((name) => ({
 
 const namesOf = (ts: Tool[]) => ts.map((t) => t.name);
 
-describe("toolsFor — Seam A tool allowlist per ablation variant", () => {
+describe("toolsFor — tool allowlist per ablation variant", () => {
   it("full keeps every tool, in order, by identity", () => {
     const out = toolsFor("full", TOOLS);
     expect(namesOf(out)).toEqual([...NAMES]);
@@ -52,7 +51,7 @@ describe("toolsFor — Seam A tool allowlist per ablation variant", () => {
     ]);
   });
 
-  it("content-transform axes do not touch the tool list (they use Seam B)", () => {
+  it("content-transform axes do not touch the tool list", () => {
     for (const v of ["no_structure", "no_gap", "no_retry_scaffold"]) {
       expect(namesOf(toolsFor(v, TOOLS))).toEqual([...NAMES]);
     }
@@ -94,7 +93,7 @@ const knownGapJson = JSON.stringify({
 
 const parse = (s: string) => JSON.parse(s) as Record<string, unknown>;
 
-describe("ablateResult — Seam B result transforms", () => {
+describe("ablateResult — result transforms per ablation variant", () => {
   it("non-ablating variants pass any result through unchanged", () => {
     for (const v of ["full", "no_search", "no_jump", "baseline_search_read", "mystery"]) {
       expect(ablateResult(v, "search", resultsJson)).toBe(resultsJson);
@@ -144,7 +143,7 @@ describe("ablateResult — Seam B result transforms", () => {
   describe("no_retry_scaffold", () => {
     it("keeps the known_gap status but rewrites the recommendation to a terminal one", () => {
       const out = parse(ablateResult("no_retry_scaffold", "search", knownGapJson));
-      expect(out["status"]).toBe("known_gap"); // signal preserved → recovery denominator intact
+      expect(out["status"]).toBe("known_gap"); // status preserved; only the recommendation is swapped
       expect(out["message"]).toBe('Known gap: the keyword "x" returned no results.');
       expect(out["gaps"]).toEqual([{ topic: "x", occurrence_count: 1, first_seen: "2026-06-01T00:00:00Z" }]);
       expect(out["recommendation"]).not.toContain("Retry");

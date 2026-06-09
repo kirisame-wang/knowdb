@@ -25,13 +25,11 @@ export interface BenchmarkRunnerConfig {
   now?: () => Date;
 }
 
-// Drive every (variant × thread × turn) through the agent loop with the variant's
-// tool allowlist and result ablation applied, writing traces/gaps and the
-// query_id → variant side-car to run-scoped sinks. A thread runs its turns in one
-// shared chatHistory (co-ref preserved); each variant replays it from a fresh one.
+// Drive every (variant × problem × turn) through the agent loop with the variant's
+// tool allowlist and result ablation applied; traces, gaps and the query_id → variant
+// side-car go to run-scoped sinks. Turns in a problem share one chatHistory.
 export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
-  // Fail loud on a misspelled variant before any side effects — an unknown axis
-  // would otherwise run silently as full.
+  // Fail loud on an unknown variant before any side effects.
   for (const v of cfg.variants) {
     if (!ABLATION_VARIANTS.has(v)) throw new Error(`Unknown ablation variant: ${v}`);
   }

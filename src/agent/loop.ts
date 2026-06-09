@@ -133,8 +133,8 @@ export async function runAgentTurn(
           result = err instanceof Error ? err.message : String(err);
           deps.hooks?.onError?.(err);
         }
-        // Ablation (benchmark only): transform the result before it is recorded
-        // and surfaced, so the trace reflects the ablated environment. Errors skip it.
+        // Ablation (benchmark only): transform a successful result before it is
+        // recorded and surfaced; errors skip it.
         if (!isError && deps.ablation) {
           result = deps.ablation(block.name, result);
         }
