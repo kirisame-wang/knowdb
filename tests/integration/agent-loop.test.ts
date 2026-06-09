@@ -492,7 +492,7 @@ describe("runAgentTurn — integration", () => {
 // The benchmark ablation hook: an injected deps.ablation transforms a tool result
 // before it is recorded and before it reaches the agent; absent in normal use.
 describe("runAgentTurn — ablation hook", () => {
-  function toolResultContent(deps: AgentLoopDeps): unknown {
+  function toolResultBlock(deps: AgentLoopDeps): Anthropic.Messages.ToolResultBlockParam {
     const turn = deps.chatHistory.find(
       (m) =>
         m.role === "user" &&
@@ -522,7 +522,7 @@ describe("runAgentTurn — ablation hook", () => {
     // output → the transform ran before recordToolCall, not after.
     expect(trace.tool_calls[0]!.output_summary).toBe("ABLATED");
     expect(trace.tool_calls[0]!.output_chars).toBe("ABLATED".length);
-    expect((toolResultContent(deps) as Anthropic.Messages.ToolResultBlockParam).content).toBe("ABLATED");
+    expect(toolResultBlock(deps).content).toBe("ABLATED");
     expect(calls).toEqual(["search"]);
   });
 
@@ -554,7 +554,7 @@ describe("runAgentTurn — ablation hook", () => {
 
       await runAgentTurn(deps, "Q");
 
-      const block = toolResultContent(deps) as Anthropic.Messages.ToolResultBlockParam;
+      const block = toolResultBlock(deps);
       expect(block.is_error).toBe(true);
       expect(String(block.content)).not.toBe("ABLATED"); // raw error preserved
       expect(calls).toEqual([]); // ablation skipped for errored tools

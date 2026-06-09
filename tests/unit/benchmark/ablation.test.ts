@@ -127,6 +127,28 @@ describe("ablateResult — result transforms per ablation variant", () => {
     it("returns an unparseable search result as-is (defensive)", () => {
       expect(ablateResult("no_structure", "search", "not json")).toBe("not json");
     });
+
+    it("strips every hit and tolerates hits missing some structure fields", () => {
+      const multi = JSON.stringify({
+        status: "results",
+        hits: [
+          { id: "a/1", score: 3, excerpt: "e1", breadcrumb: [{ title: "R", id: "a/0" }], siblings: ["a/2"], parent_summary: "p" },
+          { id: "a/2", score: 2, excerpt: "e2", siblings: ["a/1"] }, // breadcrumb / parent_summary already absent
+        ],
+      });
+      const hits = parse(ablateResult("no_structure", "search", multi))["hits"] as Record<string, unknown>[];
+      expect(hits).toEqual([
+        { id: "a/1", score: 3, excerpt: "e1" },
+        { id: "a/2", score: 2, excerpt: "e2" },
+      ]);
+    });
+
+    it("leaves a results object whose hits is absent/non-array untouched (defensive)", () => {
+      const noHits = JSON.stringify({ status: "results" });
+      const badHits = JSON.stringify({ status: "results", hits: "oops" });
+      expect(ablateResult("no_structure", "search", noHits)).toBe(noHits);
+      expect(ablateResult("no_structure", "search", badHits)).toBe(badHits);
+    });
   });
 
   describe("no_gap", () => {

@@ -42,6 +42,27 @@ function scriptedClient(responses: Anthropic.Messages.Message[]): MessagesClient
   };
 }
 
+// Like scriptedClient, but records each create call's params (messages + tools) so a
+// test can observe the conversation history and tool allowlist the agent actually saw.
+function capturingClient(responses: Anthropic.Messages.Message[]): {
+  client: MessagesClient;
+  calls: { messages: Anthropic.Messages.MessageParam[]; tools: Anthropic.Messages.Tool[] }[];
+} {
+  const calls: { messages: Anthropic.Messages.MessageParam[]; tools: Anthropic.Messages.Tool[] }[] = [];
+  let i = 0;
+  const client: MessagesClient = {
+    messages: {
+      create: async (params) => {
+        // Snapshot: params.messages is the loop's mutable chatHistory reference.
+        calls.push({ messages: [...params.messages], tools: [...((params.tools ?? []) as Anthropic.Messages.Tool[])] });
+        if (i >= responses.length) throw new Error("capturingClient: ran out of responses");
+        return responses[i++]!;
+      },
+    },
+  };
+  return { client, calls };
+}
+
 const text = (s: string): Anthropic.Messages.TextBlock => ({ type: "text", text: s, citations: null });
 const toolUse = (id: string, name: string, input: object): Anthropic.Messages.ToolUseBlock => ({
   type: "tool_use",
@@ -159,5 +180,70 @@ describe("runBenchmark — orchestration", () => {
       ),
     ).rejects.toThrow(/unknown ablation variant/i);
     expect(kv.getItem(benchmarkVariantKey("r4"))).toBeNull();
+  });
+
+  it("rejects the whole batch when any variant is unknown, before running the valid ones", async () => {
+    const kv = new FakeKV();
+    await expect(
+      runBenchmark(
+        config({ client: scriptedClient([]), store: kv, problems: [problem("t001", [turn(0, "q0")])], variants: ["full", "no_strcuture"], runId: "r5" }),
+      ),
+    ).rejects.toThrow(/unknown ablation variant/i);
+    expect(benchmarkTraceSink(kv, "r5").readAll()).toHaveLength(0); // "full" never ran
+    expect(kv.getItem(benchmarkVariantKey("r5"))).toBeNull();
+  });
+
+  it("carries one chatHistory across the turns of a problem", async () => {
+    const kv = new FakeKV();
+    // turn 0 issues a tool call then answers; turn 1 answers. If history reset per
+    // turn, turn 1's request would not contain turn 0's question.
+    const { client, calls } = capturingClient([
+      msg([toolUse("t1", "search", { keyword: "BM25" })]),
+      msg([text("a0")]),
+      msg([text("a1")]),
+    ]);
+    await runBenchmark(
+      config({ client, store: kv, problems: [problem("t001", [turn(0, "q0"), turn(1, "q1")])], variants: ["full"], runId: "rH" }),
+    );
+
+    expect(calls[0]!.messages).toHaveLength(1); // turn 0 starts with just its question
+    const turn1Request = calls[2]!.messages; // turn 1's initial request
+    expect(turn1Request.length).toBeGreaterThan(1);
+    expect(JSON.stringify(turn1Request)).toContain("q0"); // turn 0's exchange carried forward
+    expect(JSON.stringify(turn1Request)).toContain("q1");
+  });
+
+  it("starts each problem with a clean history (no cross-problem bleed)", async () => {
+    const kv = new FakeKV();
+    const { client, calls } = capturingClient([msg([text("a")]), msg([text("b")])]);
+    await runBenchmark(
+      config({
+        client,
+        store: kv,
+        problems: [problem("t001", [turn(0, "qA")]), problem("t002", [turn(0, "qB")])],
+        variants: ["full"],
+        runId: "rP",
+      }),
+    );
+
+    const assignments = new VariantSink(kv, benchmarkVariantKey("rP")).readAll();
+    expect(assignments.map((a) => [a.problem_id, a.turn_index])).toEqual([
+      ["t001", 0],
+      ["t002", 0],
+    ]);
+    expect(calls[1]!.messages).toHaveLength(1); // problem t002 starts fresh
+    expect(JSON.stringify(calls[1]!.messages)).not.toContain("qA"); // t001's turn did not bleed in
+  });
+
+  it("withholds the tool its axis turns off from the agent (no_search lacks search)", async () => {
+    const kv = new FakeKV();
+    const { client, calls } = capturingClient([msg([text("x")]), msg([text("y")])]);
+    await runBenchmark(
+      config({ client, store: kv, problems: [problem("t001", [turn(0, "q0")])], variants: ["full", "no_search"], runId: "rT" }),
+    );
+
+    const toolNames = (i: number): string[] => calls[i]!.tools.map((t) => t.name);
+    expect(toolNames(0)).toContain("search"); // full keeps the whole surface
+    expect(toolNames(1)).not.toContain("search"); // no_search withholds it via the allowlist
   });
 });
