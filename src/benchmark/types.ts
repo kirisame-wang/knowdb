@@ -115,7 +115,7 @@ export interface BenchmarkReport {
   deltas: {                                 // ablation: each axis delta = baseline − axis-off
     baseline_variant: string;               // baseline axis name, echoed from run.baseline_variant
     external_variant?: string;              // cost-floor axis name, echoed from run.external_variant (absent when none declared)
-    per_axis: AxisDelta[];                  // one per non-baseline / non-external axis; "search net contribution" = the variant==="no_search" entry
+    per_axis: AxisDelta[];                  // one delta per axis variant (excludes the baseline and external roles)
     external_token_ratio?: {                // cost comparison; undefined unless the external variant both was declared and ran
       input: number;                        // baseline.input / external.input
       output: number;
