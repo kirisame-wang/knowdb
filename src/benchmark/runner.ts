@@ -23,6 +23,10 @@ export interface BenchmarkRunnerConfig {
   variants: string[];
   runId: string;
   now?: () => Date;
+  /** User cancel (Stop): threaded into each turn and checked at turn boundaries. */
+  signal?: AbortSignal;
+  /** Progress callback fired after each turn settles (label = "variant · problem#turn"). */
+  onProgress?: (done: number, total: number, label: string) => void;
 }
 
 // Drive every (variant × problem × turn) through the agent loop with the variant's
@@ -38,6 +42,8 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
   const gapSink = new BrowserGapSink(cfg.store, benchmarkGapKey(cfg.runId), cfg.session);
   const variantSink = new VariantSink(cfg.store, benchmarkVariantKey(cfg.runId));
   const now = cfg.now ?? (() => new Date());
+  const total = cfg.variants.length * cfg.problems.reduce((s, p) => s + p.turns.length, 0);
+  let done = 0;
 
   for (const variant of cfg.variants) {
     const tools = toolsFor(variant, cfg.tools);
@@ -49,6 +55,9 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
       const turns = [...problem.turns].sort((a, b) => a.turn_index - b.turn_index);
 
       for (const t of turns) {
+        // Stop at a turn boundary: the in-flight turn (if any) already settled and
+        // its history is complete, so we leave the batch on a clean trace.
+        if (cfg.signal?.aborted) return;
         const deps: AgentLoopDeps = {
           client: cfg.client,
           collector,
@@ -63,6 +72,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
           chatHistory,
           ablation,
           now,
+          ...(cfg.signal ? { signal: cfg.signal } : {}),
         };
         const trace = await runAgentTurn(deps, t.question);
         if (trace) {
@@ -74,6 +84,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
             assigned_at: now().toISOString(),
           });
         }
+        cfg.onProgress?.(++done, total, `${variant} · ${problem.id}#${t.turn_index}`);
       }
     }
   }

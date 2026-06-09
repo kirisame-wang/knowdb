@@ -246,4 +246,66 @@ describe("runBenchmark — orchestration", () => {
     expect(toolNames(0)).toContain("search"); // full keeps the whole surface
     expect(toolNames(1)).not.toContain("search"); // no_search withholds it via the allowlist
   });
+
+  it("reports progress after each turn with the right total (variants × turns)", async () => {
+    const kv = new FakeKV();
+    const client = scriptedClient([msg([text("a")]), msg([text("b")]), msg([text("c")]), msg([text("d")])]);
+    const calls: [number, number][] = [];
+    await runBenchmark(
+      config({
+        client,
+        store: kv,
+        problems: [problem("t001", [turn(0, "q0"), turn(1, "q1")])],
+        variants: ["full", "no_search"], // 2 variants × 2 turns = 4
+        runId: "rProg",
+        onProgress: (done, total) => calls.push([done, total]),
+      }),
+    );
+    expect(calls).toEqual([
+      [1, 4],
+      [2, 4],
+      [3, 4],
+      [4, 4],
+    ]);
+  });
+
+  it("an already-aborted signal stops the batch before any turn runs", async () => {
+    const kv = new FakeKV();
+    const ac = new AbortController();
+    ac.abort();
+    await runBenchmark(
+      config({
+        client: scriptedClient([]),
+        store: kv,
+        problems: [problem("t001", [turn(0, "q0")])],
+        variants: ["full"],
+        runId: "rAbort",
+        signal: ac.signal,
+      }),
+    );
+    expect(benchmarkTraceSink(kv, "rAbort").readAll()).toHaveLength(0);
+    expect(kv.getItem(benchmarkVariantKey("rAbort"))).toBeNull();
+  });
+
+  it("aborting mid-batch stops subsequent turns", async () => {
+    const kv = new FakeKV();
+    const ac = new AbortController();
+    const client = scriptedClient([msg([text("a")]), msg([text("b")])]);
+    await runBenchmark(
+      config({
+        client,
+        store: kv,
+        problems: [problem("t001", [turn(0, "q0"), turn(1, "q1")])],
+        variants: ["full"],
+        runId: "rMid",
+        signal: ac.signal,
+        onProgress: (done) => {
+          if (done === 1) ac.abort(); // stop after the first turn settles
+        },
+      }),
+    );
+    // Only the first turn's trace + assignment were recorded.
+    expect(benchmarkTraceSink(kv, "rMid").readAll()).toHaveLength(1);
+    expect(new VariantSink(kv, benchmarkVariantKey("rMid")).readAll()).toHaveLength(1);
+  });
 });
