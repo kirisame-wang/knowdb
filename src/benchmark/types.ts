@@ -55,8 +55,8 @@ export interface BenchmarkRun {
   tool_set_version: string;                // hash of KNOWDB_TOOLS
   problem_set_id: string;                  // e.g. "corpus-v1"
   variants: string[];                      // ablation axes, e.g. ["full","no_structure","no_search","baseline_search_read"]
-  baseline_variant: string;                // injected baseline role (conventionally "full")
-  external_variant?: string;               // injected cost-floor role (conventionally "baseline_search_read"); absent when no cost comparison ran
+  baseline_variant?: string;               // injected baseline role; declaring it requires that variant to have run (deltas intended). Omit for reach-rates-only runs.
+  external_variant?: string;               // injected cost-floor role; declaring it requires that variant to have run (cost ratio intended)
   started_at: string;
   ended_at: string;
   reviewer: string;
@@ -113,8 +113,8 @@ export interface BenchmarkReport {
   results: TurnResult[];                    // flat list, all variants × all turns
   aggregates: VariantAggregate[];           // per-variant rollup
   deltas: {                                 // ablation: each axis delta = baseline − axis-off
-    baseline_variant: string;               // baseline axis name, echoed from run.baseline_variant
-    external_variant?: string;              // cost-floor axis name, echoed from run.external_variant (absent when none declared)
+    baseline_variant?: string;              // echoed when declared; absent when the run is reach-rates-only (no deltas)
+    external_variant?: string;              // echoed when declared
     per_axis: AxisDelta[];                  // one delta per axis variant (excludes the baseline and external roles)
     external_token_ratio?: {                // cost comparison; undefined unless the external variant both was declared and ran
       input: number;                        // baseline.input / external.input

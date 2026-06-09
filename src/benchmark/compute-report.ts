@@ -65,15 +65,21 @@ export function computeReport(
   // Baseline / cost-floor roles come from the run, not module constants.
   const baselineVariant = run.baseline_variant;
   const externalVariant = run.external_variant;
-
   const aggregates = run.variants.map((v) => rollupVariant(v, results, traces, assignOf, problemOf));
-  // A role is present only if its variant ran. A run may omit the baseline
-  // (single-axis run) → per_axis empty rather than thrown; external is optional.
-  const baseline = aggregates.find((x) => x.variant === baselineVariant);
-  const external =
-    externalVariant !== undefined ? aggregates.find((x) => x.variant === externalVariant) : undefined;
 
-  // per-axis delta = baseline − axis-off (the cost-floor comparison is not an axis)
+  // A declared role must have run (else misconfiguration → throw); an undeclared
+  // baseline means reach-rates-only, so no per-axis deltas.
+  const findRole = (role: string, name: string | undefined) => {
+    if (name === undefined) return undefined;
+    const agg = aggregates.find((x) => x.variant === name);
+    if (!agg) throw new Error(`Declared ${role} variant "${name}" did not run (not in run.variants)`);
+    return agg;
+  };
+  const baseline = findRole("baseline", baselineVariant);
+  const external = findRole("external", externalVariant);
+
+  // per-axis delta = baseline − axis-off (the cost-floor comparison is not an axis);
+  // empty when no baseline is declared.
   const per_axis: AxisDelta[] = baseline
     ? aggregates
         .filter((x) => x.variant !== baselineVariant && x.variant !== externalVariant)
@@ -90,7 +96,7 @@ export function computeReport(
     results,
     aggregates,
     deltas: {
-      baseline_variant: baselineVariant,
+      ...(baselineVariant !== undefined ? { baseline_variant: baselineVariant } : {}),
       ...(externalVariant !== undefined ? { external_variant: externalVariant } : {}),
       per_axis,
       ...(baseline && external

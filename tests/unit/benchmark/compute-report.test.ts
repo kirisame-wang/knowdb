@@ -192,13 +192,17 @@ describe("computeReport — contract guards", () => {
 
   it("no grade → success derived from reach oracle (B1), not a throw", () => {
     // problem turn0 is answerable, expected_chunk_ids = [abc/01, abc/02]; reach both → success.
+    // Reach-rates-only run: no baseline declared → no deltas (and no throw on its absence).
+    const reachRun: BenchmarkRun = { ...run, variants: ["A"] };
+    delete (reachRun as { baseline_variant?: string }).baseline_variant;
+    delete (reachRun as { external_variant?: string }).external_variant;
     const t = trace("q_ungraded", [call("read_chunk", { id: "abc/01" }), call("read_chunk", { id: "abc/02" })], 100, 50);
     const rep = computeReport(
       [t], [],
       [{ query_id: "q_ungraded", variant: "A", problem_id: "t001", turn_index: 0, assigned_at: "x" }],
       [problem],
       [], // no grades — MVP reach oracle
-      { ...run, variants: ["A"] },
+      reachRun,
     );
     expect(rep.results[0]!.success).toBe(true);
   });
@@ -235,16 +239,16 @@ describe("computeReport — variant roles injected (domain-agnostic)", () => {
     expect(rep.deltas.external_token_ratio).toEqual({ input: 0.5, output: 0.5 }); // 200/400, 100/200
   });
 
-  it("external_token_ratio absent when the declared cost floor did not run", () => {
-    const rep2 = computeReport(
-      [...A.traces, ...X.traces], [],
-      [...A.assignments, ...X.assignments],
-      [problem],
-      [...A.grades, ...X.grades],
-      { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] }, // cfg_b declared as role but absent from this run
-    );
-    expect(rep2.deltas.external_token_ratio).toBeUndefined();
-    expect(rep2.deltas.external_variant).toBe("cfg_b"); // role still echoed
+  it("throws when a declared cost floor did not run (declaring it intends the ratio)", () => {
+    expect(() =>
+      computeReport(
+        [...A.traces, ...X.traces], [],
+        [...A.assignments, ...X.assignments],
+        [problem],
+        [...A.grades, ...X.grades],
+        { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] }, // cfg_b declared as role but absent from this run
+      ),
+    ).toThrow(/external/i);
   });
 
   it("a run that declares no cost floor omits both the external role and the ratio", () => {
@@ -262,16 +266,32 @@ describe("computeReport — variant roles injected (domain-agnostic)", () => {
     expect(rep3.deltas.per_axis.map((d) => d.variant)).toEqual(["cfg_axisoff"]);
   });
 
-  it("a run whose baseline variant did not run yields empty deltas, not a throw", () => {
-    const rep4 = computeReport(
-      [...X.traces], [],
-      [...X.assignments],
+  it("throws when a declared baseline did not run (declaring it intends deltas)", () => {
+    expect(() =>
+      computeReport(
+        [...X.traces], [],
+        [...X.assignments],
+        [problem],
+        [...X.grades],
+        { ...rolesRun, variants: ["cfg_axisoff"] }, // baseline cfg_a absent from this run
+      ),
+    ).toThrow(/baseline/i);
+  });
+
+  it("no baseline declared → aggregates only, no per_axis deltas", () => {
+    const reachOnly: BenchmarkRun = { ...rolesRun, variants: ["cfg_a", "cfg_axisoff"] };
+    delete (reachOnly as { baseline_variant?: string }).baseline_variant;
+    delete (reachOnly as { external_variant?: string }).external_variant;
+    const rep5 = computeReport(
+      [...A.traces, ...X.traces], [],
+      [...A.assignments, ...X.assignments],
       [problem],
-      [...X.grades],
-      { ...rolesRun, variants: ["cfg_axisoff"] }, // baseline cfg_a absent from this run
+      [...A.grades, ...X.grades],
+      reachOnly,
     );
-    expect(rep4.deltas.per_axis).toEqual([]);
-    expect(rep4.deltas.external_token_ratio).toBeUndefined();
+    expect(rep5.deltas.baseline_variant).toBeUndefined();
+    expect(rep5.deltas.per_axis).toEqual([]);
+    expect(rep5.aggregates).toHaveLength(2); // aggregates still produced
   });
 });
 
@@ -332,12 +352,14 @@ describe("computeReport — recovery_rate end-to-end (non-null path through real
     };
     // search known_gap (false alarm on answerable content) → read_chunk → answered.
     const recTrace = trace("q_rec", [call("search", { keyword: "cashflow" }, KNOWN_GAP), call("read_chunk", { id: "abc/01" })], 50, 25);
+    const recRun: BenchmarkRun = { ...run, variants: ["full"] }; // baseline full ran; no external declared
+    delete (recRun as { external_variant?: string }).external_variant;
     const rep = computeReport(
       [recTrace], [],
       [{ query_id: "q_rec", variant: "full", problem_id: "trec", turn_index: 0, assigned_at: "x" }],
       [recProblem],
       [{ problem_id: "trec", turn_index: 0, query_id: "q_rec", variant: "full", rubric_1_covers_keypoints: true, rubric_2_citations_valid: true, reviewer: "t", graded_at: "x" }],
-      { ...run, variants: ["full"] },
+      recRun,
     );
     const agg = rep.aggregates[0]!;
     expect(rep.results[0]!.encountered_gap_signal).toBe(true); // derived via real encounteredKnownGap
