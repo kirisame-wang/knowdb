@@ -19,7 +19,10 @@ import {
   buildSmokeRun,
   collectSmokeReport,
   renderSmokeReportText,
+  smokeReportView,
+  variantRowCells,
 } from "../benchmark/smoke.js";
+import type { SmokeReportView } from "../benchmark/smoke.js";
 import {
   benchmarkTraceKey,
   benchmarkGapKey,
@@ -28,7 +31,7 @@ import {
 import { SessionContext } from "../utils.js";
 import { MODEL, MAX_OUTPUT_TOKENS } from "../constants.js";
 import type { SearchIndex, Manifest } from "../types.js";
-import type { BenchmarkProblem } from "../benchmark/types.js";
+import type { BenchmarkProblem, BenchmarkReport } from "../benchmark/types.js";
 
 // Mirrors the chat system prompt so the cost story reflects the real agent.
 const SMOKE_SYSTEM =
@@ -59,6 +62,72 @@ function download(filename: string, text: string, mime: string): void {
 const fmtUsd = (x: number): string => `$${x.toFixed(2)}`;
 const fmtTok = (x: number): string => (x >= 1000 ? `${(x / 1000).toFixed(0)}k` : String(x));
 
+// ── Report rendering (zero-dep DOM; cells via textContent, XSS-safe) ──────────
+
+function tableEl(headers: readonly string[], rows: string[][]): HTMLTableElement {
+  const table = document.createElement("table");
+  table.style.cssText = "border-collapse:collapse;font-size:12px;margin:6px 0";
+  const htr = document.createElement("tr");
+  headers.forEach((h, i) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    th.style.cssText = `text-align:${i === 0 ? "left" : "right"};border-bottom:1px solid #d0d7de;padding:4px 10px;color:#656d76;white-space:nowrap`;
+    htr.appendChild(th);
+  });
+  const thead = document.createElement("thead");
+  thead.appendChild(htr);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (const r of rows) {
+    const tr = document.createElement("tr");
+    r.forEach((cell, i) => {
+      const td = document.createElement("td");
+      td.textContent = cell;
+      td.style.cssText = `text-align:${i === 0 ? "left" : "right"};border-bottom:1px solid #eee;padding:4px 10px${i === 0 ? ";font-family:SFMono-Regular,Consolas,monospace" : ""}`;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  return table;
+}
+
+function block(tag: "h1" | "h2" | "p", text: string, css = ""): HTMLElement {
+  const e = document.createElement(tag);
+  e.textContent = text;
+  e.style.cssText = css;
+  return e;
+}
+
+const signedDelta = (x: number): string => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
+
+// Build the report as DOM blocks (headings + real tables) from the pure view.
+export function renderReport(view: SmokeReportView): HTMLElement {
+  const root = document.createElement("div");
+  root.appendChild(block("h1", view.title, "font-size:16px;margin:0 0 6px"));
+  root.appendChild(block("p", view.disclaimer, "margin:4px 0;color:#656d76;font-size:12px;border-left:3px solid #d0d7de;padding-left:10px"));
+  root.appendChild(block("p", view.meta, "margin:4px 0;color:#656d76;font-size:12px"));
+
+  root.appendChild(block("h2", "Per-variant (cost + behavior)", "font-size:13px;margin:14px 0 4px"));
+  root.appendChild(tableEl(view.perVariant.columns, view.perVariant.rows.map(variantRowCells)));
+
+  root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
+  const c = view.cost;
+  root.appendChild(block("p", `Realized usage: ${c.realized.input} in / ${c.realized.output} out tokens over ${c.realized.turns} turns.`, "margin:4px 0"));
+  root.appendChild(
+    c.ratio
+      ? block(
+          "p",
+          `Token ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): input ×${c.ratio.input.toFixed(2)}, output ×${c.ratio.output.toFixed(2)} (>1 = full config costs more than the flat search+read floor).`,
+          "margin:4px 0",
+        )
+      : block("p", "No token ratio: the cost-floor variant produced no turns (partial or aborted run).", "margin:4px 0;color:#656d76"),
+  );
+  root.appendChild(block("p", "Per-axis decision-steps delta (axis-off minus baseline; positive = removing the axis costs more steps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
+  root.appendChild(tableEl(["axis-off variant", "Δ avg steps"], c.perAxis.map((d) => [d.variant, signedDelta(d.stepsDelta)])));
+  return root;
+}
+
 export async function mountBenchmarkMode(): Promise<void> {
   const panel = elFromHtml(`
     <div id="knowdb-smoke" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
@@ -71,7 +140,7 @@ export async function mountBenchmarkMode(): Promise<void> {
       </div>
       <div id="smoke-meta" style="padding:10px 16px;border-bottom:1px solid #d0d7de;color:#656d76;font-size:12px"></div>
       <div id="smoke-downloads" style="display:none;gap:8px;padding:8px 16px;border-bottom:1px solid #d0d7de"></div>
-      <pre id="smoke-report" style="flex:1;overflow:auto;margin:0;padding:16px;font-family:SFMono-Regular,Consolas,monospace;font-size:12px;white-space:pre-wrap;line-height:1.6"></pre>
+      <div id="smoke-report" style="flex:1;overflow:auto;margin:0;padding:16px;line-height:1.5"></div>
     </div>
   `);
   document.body.appendChild(panel);
@@ -79,7 +148,7 @@ export async function mountBenchmarkMode(): Promise<void> {
   const $ = <T extends HTMLElement>(id: string): T => panel.querySelector(`#${id}`) as T;
   const statusEl = $("smoke-status");
   const metaEl = $("smoke-meta");
-  const reportEl = $<HTMLPreElement>("smoke-report");
+  const reportEl = $<HTMLDivElement>("smoke-report");
   const runBtn = $<HTMLButtonElement>("smoke-run");
   const downloadsEl = $<HTMLDivElement>("smoke-downloads");
   const setStatus = (s: string): void => void (statusEl.textContent = s);
@@ -189,7 +258,8 @@ export async function mountBenchmarkMode(): Promise<void> {
         reviewer: "",
       });
       const report = collectSmokeReport(window.localStorage, runId, problems, run);
-      reportEl.textContent = renderSmokeReportText(report);
+      reportEl.textContent = "";
+      reportEl.appendChild(renderReport(smokeReportView(report)));
       setStatus(ac.signal.aborted ? "Stopped — partial report below." : "Done.");
       showDownloads(runId, report);
     } catch (err) {
@@ -199,7 +269,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     }
   }
 
-  function showDownloads(runId: string, report: unknown): void {
+  function showDownloads(runId: string, report: BenchmarkReport): void {
     downloadsEl.innerHTML = "";
     const add = (label: string, make: () => { name: string; text: string; mime: string }): void => {
       const b = elFromHtml(
@@ -216,6 +286,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     add("⤓ variant-assignments.jsonl", () => ({ name: `${runId}-variant-assignments.jsonl`, text: ls.getItem(benchmarkVariantKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ gaps.jsonl", () => ({ name: `${runId}-gaps.jsonl`, text: ls.getItem(benchmarkGapKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ report.json", () => ({ name: `${runId}-report.json`, text: JSON.stringify(report, null, 2), mime: "application/json" }));
+    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderSmokeReportText(report), mime: "text/markdown" }));
     downloadsEl.style.display = "flex";
   }
 
