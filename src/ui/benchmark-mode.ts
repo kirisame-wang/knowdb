@@ -17,6 +17,7 @@ import {
   renderReportText,
   reportView,
   variantRowCells,
+  successRowCells,
 } from "../benchmark/report.js";
 import type { ReportView } from "../benchmark/report.js";
 import {
@@ -110,6 +111,13 @@ export function renderReport(view: ReportView): HTMLElement {
 
   root.appendChild(block("h2", "Per-variant (cost + behavior)", "font-size:13px;margin:14px 0 4px"));
   root.appendChild(tableEl(view.perVariant.columns, view.perVariant.rows.map(variantRowCells)));
+
+  if (view.success) {
+    root.appendChild(block("h2", "Success (pilot — steps/tokens gated on reach)", "font-size:13px;margin:14px 0 4px"));
+    root.appendChild(tableEl(view.success.columns, view.success.rows.map(successRowCells)));
+    root.appendChild(block("p", "Per-axis success-rate delta (baseline minus axis-off; positive = the axis helps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
+    root.appendChild(tableEl(["axis-off variant", "Δ success"], view.success.perAxis.map((d) => [d.variant, signedDelta(d.successRateDelta)])));
+  }
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
   const c = view.cost;
@@ -290,13 +298,13 @@ export async function mountBenchmarkMode(): Promise<void> {
         runId,
         knowdbCommitSha: "unknown (browser)",
         tools: KNOWDB_TOOLS,
-        problemSetId: "smoke",
+        problemSetId: "pilot",
         startedAt,
         endedAt: new Date().toISOString(),
         reviewer: "",
       });
       const report = collectReport(window.localStorage, runId, problems, run);
-      const view = reportView(report);
+      const view = reportView(report, problems);
       reportEl.textContent = "";
       // Loud failure: no tokens means no API call succeeded — don't dress it up as Done.
       const noWork = view.cost.realized.input + view.cost.realized.output === 0;
@@ -336,7 +344,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     add("⤓ variant-assignments.jsonl", () => ({ name: `${runId}-variant-assignments.jsonl`, text: ls.getItem(benchmarkVariantKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ gaps.jsonl", () => ({ name: `${runId}-gaps.jsonl`, text: ls.getItem(benchmarkGapKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ report.json", () => ({ name: `${runId}-report.json`, text: JSON.stringify(report, null, 2), mime: "application/json" }));
-    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderReportText(report), mime: "text/markdown" }));
+    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderReportText(report, problems), mime: "text/markdown" }));
     downloadsEl.style.display = "flex";
   }
 

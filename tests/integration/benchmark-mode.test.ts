@@ -108,6 +108,36 @@ describe("renderReport — DOM tables", () => {
     expect(el.textContent).toContain("Realized usage"); // cost story present
   });
 
+  it("renders a success table with the outcome split when ground truth is present", async () => {
+    setUrl("");
+    const { renderReport } = await import("../../src/ui/benchmark-mode.js");
+    const view: ReportView = {
+      ...VIEW,
+      title: "Benchmark run r1 — pilot (hand-filled ground truth)",
+      success: {
+        columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
+        rows: [
+          { variant: "full", successRate: 0.5, withinSuccess: 0.5, crossSuccess: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
+          { variant: "no_search", successRate: 0, withinSuccess: 0, crossSuccess: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
+        ],
+        perAxis: [{ variant: "no_search", successRateDelta: 0.5 }],
+      },
+    };
+    const el = renderReport(view);
+    const headers = Array.from(el.querySelectorAll("table thead")).map((h) => h.textContent ?? "");
+    expect(headers.some((h) => h.includes("within✓") && h.includes("steps ✓/✗"))).toBe(true);
+    const allText = el.textContent ?? "";
+    expect(allText).toContain("3.00/8.00"); // full: succeeded/failed steps
+    expect(allText).toContain("—/9.00"); // no_search: no successes → — on the ✓ side
+  });
+
+  it("renders no success table without ground truth (GT-free view)", async () => {
+    setUrl("");
+    const { renderReport } = await import("../../src/ui/benchmark-mode.js");
+    const headers = Array.from(renderReport(VIEW).querySelectorAll("table thead")).map((h) => (h.textContent ?? "").toLowerCase());
+    expect(headers.some((h) => h.includes("success"))).toBe(false);
+  });
+
   it("renders a loud banner when a run did no work (0 tokens)", async () => {
     setUrl("");
     const { renderErrors } = await import("../../src/ui/benchmark-mode.js");
