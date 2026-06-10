@@ -27,11 +27,11 @@ export const BASELINE_VARIANT = "full";
 export const EXTERNAL_VARIANT = "baseline_search_read";
 
 // ── Cost estimate (rough) ────────────────────────────────────────────────────
-// Per-turn token assumptions for the pre-run preview only. A turn is multi-round,
-// so these are deliberately rough — they convey magnitude, not a billing promise.
-const EST_ROUNDS_PER_TURN = 6;
-const EST_INPUT_TOKENS_PER_ROUND = 3500;
-const EST_OUTPUT_TOKENS_PER_ROUND = 400;
+// Rough per-turn token estimate for the pre-run preview, sized to err high. A turn is
+// multi-round so input accumulates across rounds and dominates cost; these are
+// calibrated to sit a little above observed runs — magnitude, not a billing promise.
+const EST_INPUT_TOKENS_PER_TURN = 28000;
+const EST_OUTPUT_TOKENS_PER_TURN = 1000;
 
 export interface RunEstimate {
   variantCount: number;
@@ -45,8 +45,8 @@ export interface RunEstimate {
 export function estimateRun(problems: BenchmarkProblem[], variants: readonly string[]): RunEstimate {
   const turnCount = problems.reduce((s, p) => s + p.turns.length, 0);
   const units = variants.length * turnCount;
-  const input = units * EST_ROUNDS_PER_TURN * EST_INPUT_TOKENS_PER_ROUND;
-  const output = units * EST_ROUNDS_PER_TURN * EST_OUTPUT_TOKENS_PER_ROUND;
+  const input = units * EST_INPUT_TOKENS_PER_TURN;
+  const output = units * EST_OUTPUT_TOKENS_PER_TURN;
   const estCostUsd =
     (input / 1_000_000) * MODEL.pricing.inputPerMTok + (output / 1_000_000) * MODEL.pricing.outputPerMTok;
   return { variantCount: variants.length, problemCount: problems.length, turnCount, units, estTokens: { input, output }, estCostUsd };
