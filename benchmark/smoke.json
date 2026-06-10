@@ -2,16 +2,16 @@
   {
     "id": "t-smoke-01",
     "domain": "annual_report",
-    "thread_type": "structural",
+    "thread_type": "lexical_gap",
     "turns": [
       {
         "turn_index": 0,
-        "question": "今晧實業股份有限公司的股票代號是什麼？",
+        "question": "What is the stock ticker code of Ji-Haw Industrial Co., Ltd.?",
         "is_followup": false,
-        "turn_type": "structural",
+        "turn_type": "lexical_gap",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe — English query over a Traditional-Chinese corpus; the grep pain point)"],
         "expected_classification": "within_doc"
       }
     ]
@@ -19,16 +19,16 @@
   {
     "id": "t-smoke-02",
     "domain": "annual_report",
-    "thread_type": "symmetric",
+    "thread_type": "lexical_gap",
     "turns": [
       {
         "turn_index": 0,
-        "question": "113 年度（2024）年報的營業結果摘要為何？",
+        "question": "Was war laut dem Jahresbericht für das Geschäftsjahr 2024 das Geschäftsergebnis des Unternehmens?",
         "is_followup": false,
-        "turn_type": "symmetric",
+        "turn_type": "lexical_gap",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe — German query over a Traditional-Chinese corpus; the grep pain point)"],
         "expected_classification": "within_doc"
       }
     ]
