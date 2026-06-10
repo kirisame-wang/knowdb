@@ -101,6 +101,8 @@ function block(tag: "h1" | "h2" | "p", text: string, css = ""): HTMLElement {
 }
 
 const signedDelta = (x: number): string => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
+// A delta of two rates is in percentage points, not a raw fraction.
+const signedPp = (x: number): string => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(0)}pp`;
 
 // Build the report as DOM blocks (headings + real tables) from the pure view.
 export function renderReport(view: ReportView): HTMLElement {
@@ -116,7 +118,7 @@ export function renderReport(view: ReportView): HTMLElement {
     root.appendChild(block("h2", "Success (pilot — steps/tokens gated on reach)", "font-size:13px;margin:14px 0 4px"));
     root.appendChild(tableEl(view.success.columns, view.success.rows.map(successRowCells)));
     root.appendChild(block("p", "Per-axis success-rate delta (baseline minus axis-off; positive = the axis helps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
-    root.appendChild(tableEl(["axis-off variant", "Δ success"], view.success.perAxis.map((d) => [d.variant, signedDelta(d.successRateDelta)])));
+    root.appendChild(tableEl(["axis-off variant", "Δ success (pp)"], view.success.perAxis.map((d) => [d.variant, signedPp(d.successRateDelta)])));
   }
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));

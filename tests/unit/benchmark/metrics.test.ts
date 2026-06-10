@@ -208,6 +208,11 @@ describe("reachSuccess — chunk groups (any-of within a group, all groups requi
     expect(reachSuccess(t, read("b"))).toBe(true); // legacy ⊇-all would need a,b,c
   });
 
+  it("an empty group is unsatisfiable → failure (malformed GT fails rather than free-passes)", () => {
+    expect(reachSuccess(turn({ expected_chunk_groups: [[]] }), read("a"))).toBe(false);
+    expect(reachSuccess(turn({ expected_chunk_groups: [["a"], []] }), read("a"))).toBe(false);
+  });
+
   it("unanswerable turns ignore chunk groups; success = reported gap", () => {
     const t = turn({ answerable: false, expected_chunk_groups: [["a"]] });
     expect(reachSuccess(t, trace([searchCall(KNOWN_GAP)]))).toBe(true);

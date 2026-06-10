@@ -129,6 +129,9 @@ function classificationCounts(results: TurnResult[], variant: string): { within:
 const n2 = (x: number): string => x.toFixed(2);
 const pct = (x: number | null): string => (x === null ? "—" : `${(x * 100).toFixed(0)}%`);
 const signed = (x: number): string => `${x >= 0 ? "+" : ""}${n2(x)}`;
+// A delta of two rates is in percentage points, not a raw fraction — keep it visually
+// consistent with the % cells beside it and unambiguous against the step-count delta.
+const signedPp = (x: number): string => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(0)}pp`;
 
 // Column labels for the per-variant table, shared by the text and DOM renderers.
 export const PER_VARIANT_COLUMNS = [
@@ -169,7 +172,9 @@ export interface SuccessRow {
   variant: string;
   successRate: number;
   withinSuccess: number;
+  withinTurns: number; // within-doc turns; 0 → within✓ rendered "—" (no turns ≠ all failed)
   crossSuccess: number;
+  crossTurns: number;
   success: OutcomeStats;
   failure: OutcomeStats;
 }
@@ -206,7 +211,7 @@ export interface ReportView {
 
 const DISCLAIMER =
   "No-ground-truth run: validates the ablation runtime end-to-end and reports the cost/behaviour story over the existing db/. " +
-  "With no ground truth (expected_chunk_ids empty), success-derived metrics — success rate, within/cross-doc success, recovery, " +
+  "With no ground truth (no expected chunks declared), success-derived metrics — success rate, within/cross-doc success, recovery, " +
   "follow-up success, abstention precision, explicit-gap rate, cumulative passage coverage — are suppressed as noise. Not a corpus result.";
 
 const PILOT_DISCLAIMER =
@@ -236,11 +241,14 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
   const { aggregates, results, deltas } = report;
   const rows: SuccessRow[] = aggregates.map((a) => {
     const rs = results.filter((r) => r.variant === a.variant);
+    const cc = classificationCounts(results, a.variant);
     return {
       variant: a.variant,
       successRate: a.success_rate,
       withinSuccess: a.within_doc_success_rate,
+      withinTurns: cc.within,
       crossSuccess: a.cross_doc_success_rate,
+      crossTurns: cc.cross,
       success: outcomeStats(rs.filter((r) => r.success)),
       failure: outcomeStats(rs.filter((r) => !r.success)),
     };
@@ -327,8 +335,8 @@ export function successRowCells(r: SuccessRow): string[] {
   return [
     r.variant,
     pct(r.successRate),
-    pct(r.withinSuccess),
-    pct(r.crossSuccess),
+    r.withinTurns ? pct(r.withinSuccess) : "—",
+    r.crossTurns ? pct(r.crossSuccess) : "—",
     split((o) => o.avgSteps, n2),
     split((o) => o.avgIn, round),
     split((o) => o.avgOut, round),
@@ -353,8 +361,8 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
     for (const row of v.success.rows) lines.push(`| ${successRowCells(row).join(" | ")} |`);
     lines.push("");
     lines.push("**Per-axis success-rate delta** (baseline minus axis-off; positive = the axis helps):", "");
-    lines.push("| axis-off variant | Δ success |", "|---|--:|");
-    for (const d of v.success.perAxis) lines.push(`| ${d.variant} | ${signed(d.successRateDelta)} |`);
+    lines.push("| axis-off variant | Δ success (pp) |", "|---|--:|");
+    for (const d of v.success.perAxis) lines.push(`| ${d.variant} | ${signedPp(d.successRateDelta)} |`);
     lines.push("");
   }
 

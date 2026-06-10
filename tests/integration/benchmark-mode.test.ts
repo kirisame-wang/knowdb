@@ -117,8 +117,8 @@ describe("renderReport — DOM tables", () => {
       success: {
         columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
         rows: [
-          { variant: "full", successRate: 0.5, withinSuccess: 0.5, crossSuccess: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
-          { variant: "no_search", successRate: 0, withinSuccess: 0, crossSuccess: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
+          { variant: "full", successRate: 0.5, withinSuccess: 0.5, withinTurns: 2, crossSuccess: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
+          { variant: "no_search", successRate: 0, withinSuccess: 0, withinTurns: 1, crossSuccess: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
         ],
         perAxis: [{ variant: "no_search", successRateDelta: 0.5 }],
       },
@@ -129,6 +129,7 @@ describe("renderReport — DOM tables", () => {
     const allText = el.textContent ?? "";
     expect(allText).toContain("3.00/8.00"); // full: succeeded/failed steps
     expect(allText).toContain("—/9.00"); // no_search: no successes → — on the ✓ side
+    expect(allText).toContain("+50pp"); // success-rate delta in percentage points, not a raw fraction
   });
 
   it("renders no success table without ground truth (GT-free view)", async () => {

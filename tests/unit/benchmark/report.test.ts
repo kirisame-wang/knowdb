@@ -10,6 +10,7 @@ import {
   collectReport,
   renderReportText,
   reportView,
+  successRowCells,
   BENCHMARK_VARIANTS,
 } from "../../../src/benchmark/report.js";
 import { MODEL } from "../../../src/constants.js";
@@ -333,10 +334,20 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(sv.perAxis).toEqual([{ variant: "no_search", successRateDelta: 0.5 }]);
   });
 
-  it("renderReportText shows the success section and an empty (—) cell for an absent outcome", () => {
+  it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {
+    const sv = reportView(report, gtProblems).success!;
+    const full = sv.rows.find((r) => r.variant === "full")!;
+    expect(full.withinTurns).toBe(2); // both results are within_doc
+    expect(full.crossTurns).toBe(0);  // no cross_doc turns → cross✓ should render —
+    expect(successRowCells(full)[3]).toBe("—"); // cross✓ cell
+  });
+
+  it("renderReportText shows the success section, — for an absent outcome, and a pp-unit delta", () => {
     const md = renderReportText(report, gtProblems);
     expect(md.toLowerCase()).toContain("pilot");
     expect(md).toMatch(/3\.00\/8\.00/);   // full: steps ✓/✗
     expect(md).toContain("—/9.00");        // no_search: no successes → — for the ✓ side
+    expect(md).toContain("+50pp");         // success-rate delta in percentage points
+    expect(md).not.toMatch(/\| no_search \| \+0\.50 \|/); // not a raw fraction
   });
 });
