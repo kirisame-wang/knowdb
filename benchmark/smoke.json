@@ -11,7 +11,7 @@
         "turn_type": "lexical_gap",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe — English query over a Traditional-Chinese corpus; the grep pain point)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
         "expected_classification": "within_doc"
       }
     ]
@@ -28,7 +28,7 @@
         "turn_type": "lexical_gap",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe — German query over a Traditional-Chinese corpus; the grep pain point)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
         "expected_classification": "within_doc"
       }
     ]
@@ -36,16 +36,16 @@
   {
     "id": "t-smoke-03",
     "domain": "annual_report",
-    "thread_type": "structural",
+    "thread_type": "lexical_gap",
     "turns": [
       {
         "turn_index": 0,
-        "question": "113 年度（2024）年報的公司治理報告裡，簽證會計師的公費資訊是怎麼揭露的？",
+        "question": "In the corporate-governance section of the 2024 annual report, how are the certified public accountant's audit fees disclosed?",
         "is_followup": false,
-        "turn_type": "structural",
+        "turn_type": "lexical_gap",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
         "expected_classification": "within_doc"
       }
     ]
@@ -72,7 +72,7 @@
         "turn_type": "symmetric",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth; co-ref on prior turn)"],
+        "expected_answer_keypoints": ["(smoke: no ground truth & co-ref)"],
         "expected_classification": "within_doc"
       }
     ]
@@ -89,7 +89,7 @@
         "turn_type": "symmetric",
         "answerable": true,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth; expected cross-doc)"],
+        "expected_answer_keypoints": ["(smoke: no ground truth & cross-doc)"],
         "expected_classification": "cross_doc"
       }
     ]
@@ -101,12 +101,12 @@
     "turns": [
       {
         "turn_index": 0,
-        "question": "年報裡有提到公司的淨零碳排（net zero）目標嗎？",
+        "question": "Le rapport annuel mentionne-t-il un objectif de zéro émission nette pour l'entreprise ?",
         "is_followup": false,
         "turn_type": "lexical_gap",
         "answerable": false,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: gap probe — likely uncovered wording)"],
+        "expected_answer_keypoints": ["(smoke: cross-language probe & gap probe)"],
         "expected_classification": "within_doc"
       }
     ]
