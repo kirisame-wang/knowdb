@@ -132,6 +132,40 @@ export function renderReport(view: ReportView): HTMLElement {
   return root;
 }
 
+// Loud red banner when turns errored (or the whole run spent nothing) — so a failed
+// run is never mistaken for a real one.
+export function renderErrors(errors: string[], noWork: boolean): HTMLElement {
+  const box = document.createElement("div");
+  box.style.cssText = "margin:0 0 12px;padding:10px 12px;border:1px solid #cf222e;border-radius:6px;background:#fff5f5;color:#cf222e;font-size:12px";
+  box.appendChild(
+    block(
+      "p",
+      noWork
+        ? "This run made no successful API call (0 tokens). Likely a bad/missing API key, model id, or network error — nothing was actually tested."
+        : "Some turns errored.",
+      "margin:0 0 6px;font-weight:600",
+    ),
+  );
+  if (errors.length === 0) {
+    box.appendChild(block("p", "No error detail was captured.", "margin:0"));
+    return box;
+  }
+  const list = document.createElement("ul");
+  list.style.cssText = "margin:0;padding-left:18px;font-family:SFMono-Regular,Consolas,monospace";
+  for (const e of errors.slice(0, 8)) {
+    const li = document.createElement("li");
+    li.textContent = e;
+    list.appendChild(li);
+  }
+  if (errors.length > 8) {
+    const li = document.createElement("li");
+    li.textContent = `…and ${errors.length - 8} more`;
+    list.appendChild(li);
+  }
+  box.appendChild(list);
+  return box;
+}
+
 export async function mountBenchmarkMode(): Promise<void> {
   const panel = elFromHtml(`
     <div id="knowdb-benchmark" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
@@ -234,6 +268,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
     const runId = `run-${nowStamp()}`;
     const startedAt = new Date().toISOString();
+    const errors: string[] = [];
 
     try {
       await runBenchmark({
@@ -252,6 +287,7 @@ export async function mountBenchmarkMode(): Promise<void> {
         concurrency: RUN_CONCURRENCY,
         signal: ac.signal,
         onProgress: (done, total, label) => setStatus(`${done}/${total} — ${label}`),
+        onError: (err, label) => errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`),
       });
 
       const run = buildRun({
@@ -264,9 +300,21 @@ export async function mountBenchmarkMode(): Promise<void> {
         reviewer: "",
       });
       const report = collectReport(window.localStorage, runId, problems, run);
+      const view = reportView(report);
       reportEl.textContent = "";
-      reportEl.appendChild(renderReport(reportView(report)));
-      setStatus(ac.signal.aborted ? "Stopped — partial report below." : "Done.");
+      // Loud failure: no tokens means no API call succeeded — don't dress it up as Done.
+      const noWork = view.cost.realized.input + view.cost.realized.output === 0;
+      if (errors.length || noWork) reportEl.appendChild(renderErrors(errors, noWork));
+      reportEl.appendChild(renderReport(view));
+      setStatus(
+        ac.signal.aborted
+          ? "Stopped — partial report below."
+          : noWork
+            ? `⚠ No tokens spent — ${errors.length} turn(s) errored. The run did not execute.`
+            : errors.length
+              ? `Done with ${errors.length} error(s) — see top of report.`
+              : "Done.",
+      );
       showDownloads(runId, report);
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`);

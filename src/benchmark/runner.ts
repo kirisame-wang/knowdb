@@ -27,6 +27,9 @@ export interface BenchmarkRunnerConfig {
   signal?: AbortSignal;
   /** Progress callback fired after each turn settles (label = "variant · problem#turn"). */
   onProgress?: (done: number, total: number, label: string) => void;
+  /** Per-turn error callback — a failed turn is recorded but not re-thrown, so this
+   *  is the only way a caller learns a turn errored (e.g. a bad API key). */
+  onError?: (err: unknown, label: string) => void;
   /** Max (variant × problem) threads in flight. Defaults to 1 (sequential). */
   concurrency?: number;
 }
@@ -67,6 +70,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
       // Stop at a turn boundary: the in-flight turn (if any) already settled and
       // its history is complete, so we leave the thread on a clean trace.
       if (cfg.signal?.aborted) return;
+      const label = `${variant} · ${problem.id}#${t.turn_index}`;
       const deps: AgentLoopDeps = {
         client: cfg.client,
         collector,
@@ -82,6 +86,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
         ablation,
         now,
         ...(cfg.signal ? { signal: cfg.signal } : {}),
+        ...(cfg.onError ? { hooks: { onError: (err: unknown) => cfg.onError!(err, label) } } : {}),
       };
       const trace = await runAgentTurn(deps, t.question);
       if (trace) {
@@ -95,7 +100,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
       }
       // ++done is atomic between awaits (single-threaded), so the count stays exact
       // even when several units report concurrently.
-      cfg.onProgress?.(++done, total, `${variant} · ${problem.id}#${t.turn_index}`);
+      cfg.onProgress?.(++done, total, label);
     }
   };
 

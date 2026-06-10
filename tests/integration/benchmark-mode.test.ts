@@ -107,4 +107,12 @@ describe("renderReport — DOM tables", () => {
     expect(tables[0]!.querySelector("tbody")?.textContent).toContain("full"); // a variant row
     expect(el.textContent).toContain("Realized usage"); // cost story present
   });
+
+  it("renders a loud banner when a run did no work (0 tokens)", async () => {
+    setUrl("");
+    const { renderErrors } = await import("../../src/ui/benchmark-mode.js");
+    const el = renderErrors(["full · t1#0: 401 invalid x-api-key"], true);
+    expect(el.textContent).toContain("no successful API call");
+    expect(el.textContent).toContain("401 invalid x-api-key");
+  });
 });

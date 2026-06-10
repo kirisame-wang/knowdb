@@ -386,3 +386,32 @@ describe("runBenchmark — concurrency", () => {
     expect(benchmarkTraceSink(kv, "rc4").readAll()).toHaveLength(0);
   });
 });
+
+describe("runBenchmark — error surfacing", () => {
+  it("forwards each turn's error via onError; a failed call still records a 0-round trace", async () => {
+    const kv = new FakeKV();
+    const client: MessagesClient = {
+      messages: {
+        create: async () => {
+          throw new Error("401 invalid x-api-key");
+        },
+      },
+    };
+    const errors: string[] = [];
+    await runBenchmark(
+      config({
+        client,
+        store: kv,
+        problems: [problem("t001", [turn(0, "q0")])],
+        variants: ["full"],
+        runId: "rErr",
+        onError: (err) => errors.push(err instanceof Error ? err.message : String(err)),
+      }),
+    );
+    expect(errors).toEqual(["401 invalid x-api-key"]);
+    // The turn is still recorded, but with no API round → zero tokens (the silent-fail symptom).
+    const traces = benchmarkTraceSink(kv, "rErr").readAll();
+    expect(traces).toHaveLength(1);
+    expect(traces[0]!.api_rounds).toHaveLength(0);
+  });
+});
