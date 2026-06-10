@@ -10,8 +10,10 @@
         "is_followup": false,
         "turn_type": "lexical_gap",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
+        "expected_doc_ids": ["3f0881f1"],
+        "expected_chunk_ids": ["3f0881f1/01"],
+        "expected_chunk_groups": [["3f0881f1/01"]],
+        "expected_answer_keypoints": ["Stock ticker code is 3011"],
         "expected_classification": "within_doc"
       }
     ]
@@ -27,8 +29,13 @@
         "is_followup": false,
         "turn_type": "lexical_gap",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
+        "expected_doc_ids": ["3f0881f1"],
+        "expected_chunk_ids": ["3f0881f1/01-03-01", "3f0881f1/01-07-02"],
+        "expected_chunk_groups": [["3f0881f1/01-03-01", "3f0881f1/01-07-02"]],
+        "expected_answer_keypoints": [
+          "FY2024 (113) consolidated revenue NT$1,152,170 thousand (roughly flat vs FY2023)",
+          "after-tax net loss NT$254,989 thousand (widened year over year)"
+        ],
         "expected_classification": "within_doc"
       }
     ]
@@ -44,8 +51,13 @@
         "is_followup": false,
         "turn_type": "lexical_gap",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe & no ground truth)"],
+        "expected_doc_ids": ["3f0881f1"],
+        "expected_chunk_ids": ["3f0881f1/01-04-04"],
+        "expected_chunk_groups": [["3f0881f1/01-04-04"]],
+        "expected_answer_keypoints": [
+          "Audit fee 3,630 / non-audit fee 650 / total 4,280 (thousand NT$)",
+          "Auditor: Deloitte (勤業眾信)"
+        ],
         "expected_classification": "within_doc"
       }
     ]
@@ -61,8 +73,12 @@
         "is_followup": false,
         "turn_type": "symmetric",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth)"],
+        "expected_doc_ids": ["3f0881f1"],
+        "expected_chunk_ids": ["3f0881f1/01-03-03"],
+        "expected_chunk_groups": [["3f0881f1/01-03-03"]],
+        "expected_answer_keypoints": [
+          "從零組件向組件/系統整合發展，並擴展至雲端、醫療生技、網通、工業控制、能源科技及車用次系統等高成長市場"
+        ],
         "expected_classification": "within_doc"
       },
       {
@@ -71,8 +87,12 @@
         "is_followup": true,
         "turn_type": "symmetric",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth & co-ref)"],
+        "expected_doc_ids": ["3f0881f1"],
+        "expected_chunk_ids": ["3f0881f1/01-03-04"],
+        "expected_chunk_groups": [["3f0881f1/01-03-04"]],
+        "expected_answer_keypoints": [
+          "有；談到中國本土/東南亞製造商價格競爭、本土化採購政策，以及地緣政治、AI 與綠能等總體與法規環境影響"
+        ],
         "expected_classification": "within_doc"
       }
     ]
@@ -88,8 +108,21 @@
         "is_followup": false,
         "turn_type": "symmetric",
         "answerable": true,
-        "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: no ground truth & cross-doc)"],
+        "expected_doc_ids": ["6621eecc", "3f0881f1"],
+        "expected_chunk_ids": [
+          "6621eecc/02-01",
+          "6621eecc/19-02",
+          "3f0881f1/01-03-01",
+          "3f0881f1/01-07-02"
+        ],
+        "expected_chunk_groups": [
+          ["6621eecc/02-01", "6621eecc/19-02"],
+          ["3f0881f1/01-03-01", "3f0881f1/01-07-02"]
+        ],
+        "expected_answer_keypoints": [
+          "FY2024 revenue 1,152,170 vs FY2023 1,150,689 thousand (roughly flat, +1,481)",
+          "after-tax net loss larger in FY2024 than FY2023"
+        ],
         "expected_classification": "cross_doc"
       }
     ]
@@ -106,7 +139,9 @@
         "turn_type": "lexical_gap",
         "answerable": false,
         "expected_doc_ids": [],
-        "expected_answer_keypoints": ["(smoke: cross-language probe & gap probe)"],
+        "expected_answer_keypoints": [
+          "The report states no net-zero emissions target — should report not-found"
+        ],
         "expected_classification": "within_doc"
       }
     ]
