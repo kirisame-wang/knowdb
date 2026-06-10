@@ -1,7 +1,7 @@
 // Benchmark mode UI, gated behind ?benchmark=1. With the flag it mounts an overlay
 // panel, reuses the page's static db/ index + manifest and the session API key, runs
 // the ablation matrix over a question set, and renders the report. It currently drives
-// the no-ground-truth smoke set and shows only success-independent metrics; the same
+// a no-ground-truth question set and shows only success-independent metrics; the same
 // shell carries forward as the question set evolves. Without the flag the module is
 // inert — no DOM, no fetch, no API call — so the normal chat page is unaffected.
 //
@@ -14,15 +14,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS } from "../agent/tools.js";
 import { runBenchmark } from "../benchmark/runner.js";
 import {
-  SMOKE_VARIANTS,
+  BENCHMARK_VARIANTS,
   estimateRun,
-  buildSmokeRun,
-  collectSmokeReport,
-  renderSmokeReportText,
-  smokeReportView,
+  buildRun,
+  collectReport,
+  renderReportText,
+  reportView,
   variantRowCells,
-} from "../benchmark/smoke.js";
-import type { SmokeReportView } from "../benchmark/smoke.js";
+} from "../benchmark/report.js";
+import type { ReportView } from "../benchmark/report.js";
 import {
   benchmarkTraceKey,
   benchmarkGapKey,
@@ -34,15 +34,15 @@ import type { SearchIndex, Manifest } from "../types.js";
 import type { BenchmarkProblem, BenchmarkReport } from "../benchmark/types.js";
 
 // Mirrors the chat system prompt so the cost story reflects the real agent.
-const SMOKE_SYSTEM =
+const SYSTEM_PROMPT =
   "You are a helpful assistant with access to a knowledge base via tools. " +
   "Call get_instructions first to learn how to use the tools. Be concise in your final answer.";
 
-const SMOKE_JSON_PATH = "benchmark/smoke.json";
+const QUESTION_SET_PATH = "benchmark/smoke.json";
 
 // (variant × problem) threads in flight — a modest cap to cut wall-clock while
 // staying well under the API rate limit.
-const SMOKE_CONCURRENCY = 4;
+const RUN_CONCURRENCY = 4;
 
 function isBenchmarkFlag(): boolean {
   return new URLSearchParams(window.location.search).get("benchmark") === "1";
@@ -106,7 +106,7 @@ function block(tag: "h1" | "h2" | "p", text: string, css = ""): HTMLElement {
 const signedDelta = (x: number): string => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
 
 // Build the report as DOM blocks (headings + real tables) from the pure view.
-export function renderReport(view: SmokeReportView): HTMLElement {
+export function renderReport(view: ReportView): HTMLElement {
   const root = document.createElement("div");
   root.appendChild(block("h1", view.title, "font-size:16px;margin:0 0 6px"));
   root.appendChild(block("p", view.disclaimer, "margin:4px 0;color:#656d76;font-size:12px;border-left:3px solid #d0d7de;padding-left:10px"));
@@ -134,33 +134,33 @@ export function renderReport(view: SmokeReportView): HTMLElement {
 
 export async function mountBenchmarkMode(): Promise<void> {
   const panel = elFromHtml(`
-    <div id="knowdb-smoke" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
+    <div id="knowdb-benchmark" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
       <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#f6f8fa;border-bottom:1px solid #d0d7de;flex-wrap:wrap">
         <strong>KnowDB Benchmark</strong>
-        <span id="smoke-status" style="color:#656d76;font-size:12px"></span>
+        <span id="benchmark-status" style="color:#656d76;font-size:12px"></span>
         <span style="flex:1"></span>
-        <input id="smoke-api-key" type="password" placeholder="sk-ant-… Anthropic API key" autocomplete="off" spellcheck="false" style="height:30px;width:230px;padding:0 8px;border:1px solid #d0d7de;border-radius:6px;font-family:SFMono-Regular,Consolas,monospace;font-size:12px" />
-        <button id="smoke-save-key" style="height:30px;padding:0 10px;border:1px solid #d0d7de;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">Save</button>
-        <button id="smoke-run" style="height:30px;padding:0 16px;border:none;border-radius:6px;background:#0969da;color:#fff;cursor:pointer;font-weight:500">Run benchmark</button>
+        <input id="benchmark-api-key" type="password" placeholder="sk-ant-… Anthropic API key" autocomplete="off" spellcheck="false" style="height:30px;width:230px;padding:0 8px;border:1px solid #d0d7de;border-radius:6px;font-family:SFMono-Regular,Consolas,monospace;font-size:12px" />
+        <button id="benchmark-save-key" style="height:30px;padding:0 10px;border:1px solid #d0d7de;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">Save</button>
+        <button id="benchmark-run" style="height:30px;padding:0 16px;border:none;border-radius:6px;background:#0969da;color:#fff;cursor:pointer;font-weight:500">Run benchmark</button>
         <a href="?" style="height:30px;line-height:30px;padding:0 12px;border:1px solid #d0d7de;border-radius:6px;color:#1f2328;text-decoration:none">Exit</a>
       </div>
-      <div id="smoke-meta" style="padding:10px 16px 4px;color:#656d76;font-size:12px"></div>
-      <div id="smoke-warning" style="padding:0 16px 10px;border-bottom:1px solid #d0d7de;color:#cf222e;font-size:12px;font-weight:500"></div>
-      <div id="smoke-downloads" style="display:none;gap:8px;padding:8px 16px;border-bottom:1px solid #d0d7de"></div>
-      <div id="smoke-report" style="flex:1;overflow:auto;margin:0;padding:16px;line-height:1.5"></div>
+      <div id="benchmark-meta" style="padding:10px 16px 4px;color:#656d76;font-size:12px"></div>
+      <div id="benchmark-warning" style="padding:0 16px 10px;border-bottom:1px solid #d0d7de;color:#cf222e;font-size:12px;font-weight:500"></div>
+      <div id="benchmark-downloads" style="display:none;gap:8px;padding:8px 16px;border-bottom:1px solid #d0d7de"></div>
+      <div id="benchmark-report" style="flex:1;overflow:auto;margin:0;padding:16px;line-height:1.5"></div>
     </div>
   `);
   document.body.appendChild(panel);
 
   const $ = <T extends HTMLElement>(id: string): T => panel.querySelector(`#${id}`) as T;
-  const statusEl = $("smoke-status");
-  const metaEl = $("smoke-meta");
-  const warnEl = $("smoke-warning");
-  const reportEl = $<HTMLDivElement>("smoke-report");
-  const runBtn = $<HTMLButtonElement>("smoke-run");
-  const apiKeyInput = $<HTMLInputElement>("smoke-api-key");
-  const saveKeyBtn = $<HTMLButtonElement>("smoke-save-key");
-  const downloadsEl = $<HTMLDivElement>("smoke-downloads");
+  const statusEl = $("benchmark-status");
+  const metaEl = $("benchmark-meta");
+  const warnEl = $("benchmark-warning");
+  const reportEl = $<HTMLDivElement>("benchmark-report");
+  const runBtn = $<HTMLButtonElement>("benchmark-run");
+  const apiKeyInput = $<HTMLInputElement>("benchmark-api-key");
+  const saveKeyBtn = $<HTMLButtonElement>("benchmark-save-key");
+  const downloadsEl = $<HTMLDivElement>("benchmark-downloads");
   const setStatus = (s: string): void => void (statusEl.textContent = s);
 
   // API key input mirrors the demo's, sharing the same session key. No popups.
@@ -171,32 +171,32 @@ export async function mountBenchmarkMode(): Promise<void> {
     setStatus("API key saved for this session.");
   });
 
-  // Load the static index + manifest (same files the demo uses) and the smoke set.
+  // Load the static index + manifest (same files the demo uses) and the question set.
   let searchIndex: SearchIndex = {};
   let manifest: Manifest = {};
   let problems: BenchmarkProblem[] = [];
   try {
-    const [idx, man, smoke] = await Promise.all([
+    const [idx, man, questionSet] = await Promise.all([
       fetch("db/_search_index.json").then((r) => (r.ok ? r.json() : {})),
       fetch("db/_manifest.json").then((r) => (r.ok ? r.json() : {})),
-      fetch(SMOKE_JSON_PATH).then((r) => {
-        if (!r.ok) throw new Error(`${SMOKE_JSON_PATH}: HTTP ${r.status}`);
+      fetch(QUESTION_SET_PATH).then((r) => {
+        if (!r.ok) throw new Error(`${QUESTION_SET_PATH}: HTTP ${r.status}`);
         return r.json();
       }),
     ]);
     searchIndex = idx as SearchIndex;
     manifest = man as Manifest;
-    problems = smoke as BenchmarkProblem[];
+    problems = questionSet as BenchmarkProblem[];
   } catch (err) {
     setStatus(`Failed to load: ${err instanceof Error ? err.message : String(err)}`);
     runBtn.disabled = true;
     return;
   }
 
-  const est = estimateRun(problems, SMOKE_VARIANTS);
+  const est = estimateRun(problems, BENCHMARK_VARIANTS);
   metaEl.textContent =
     `${est.variantCount} variants × ${est.turnCount} turns = ${est.units} agent turns · ` +
-    `(${SMOKE_VARIANTS.join(", ")})`;
+    `(${BENCHMARK_VARIANTS.join(", ")})`;
   // Persistent, prominent cost warning in place of a modal — Run starts immediately.
   warnEl.textContent =
     `⚠ Spends real API tokens. Rough cost ≈ ${fmtUsd(est.estCostUsd)} ` +
@@ -232,7 +232,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     reportEl.textContent = "";
 
     const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
-    const runId = `smoke-${nowStamp()}`;
+    const runId = `run-${nowStamp()}`;
     const startedAt = new Date().toISOString();
 
     try {
@@ -243,18 +243,18 @@ export async function mountBenchmarkMode(): Promise<void> {
         searchIndex,
         manifest,
         model: MODEL.id,
-        system: SMOKE_SYSTEM,
+        system: SYSTEM_PROMPT,
         maxTokens: MAX_OUTPUT_TOKENS,
         tools: KNOWDB_TOOLS,
         problems,
-        variants: [...SMOKE_VARIANTS],
+        variants: [...BENCHMARK_VARIANTS],
         runId,
-        concurrency: SMOKE_CONCURRENCY,
+        concurrency: RUN_CONCURRENCY,
         signal: ac.signal,
         onProgress: (done, total, label) => setStatus(`${done}/${total} — ${label}`),
       });
 
-      const run = buildSmokeRun({
+      const run = buildRun({
         runId,
         knowdbCommitSha: "unknown (browser)",
         tools: KNOWDB_TOOLS,
@@ -263,9 +263,9 @@ export async function mountBenchmarkMode(): Promise<void> {
         endedAt: new Date().toISOString(),
         reviewer: "",
       });
-      const report = collectSmokeReport(window.localStorage, runId, problems, run);
+      const report = collectReport(window.localStorage, runId, problems, run);
       reportEl.textContent = "";
-      reportEl.appendChild(renderReport(smokeReportView(report)));
+      reportEl.appendChild(renderReport(reportView(report)));
       setStatus(ac.signal.aborted ? "Stopped — partial report below." : "Done.");
       showDownloads(runId, report);
     } catch (err) {
@@ -292,7 +292,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     add("⤓ variant-assignments.jsonl", () => ({ name: `${runId}-variant-assignments.jsonl`, text: ls.getItem(benchmarkVariantKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ gaps.jsonl", () => ({ name: `${runId}-gaps.jsonl`, text: ls.getItem(benchmarkGapKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ report.json", () => ({ name: `${runId}-report.json`, text: JSON.stringify(report, null, 2), mime: "application/json" }));
-    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderSmokeReportText(report), mime: "text/markdown" }));
+    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderReportText(report), mime: "text/markdown" }));
     downloadsEl.style.display = "flex";
   }
 

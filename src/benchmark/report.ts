@@ -1,7 +1,7 @@
-// DOM-free helpers for the smoke run: a no-ground-truth pass over the existing db/
+// DOM-free helpers for a benchmark run: a no-ground-truth pass over the existing db/
 // that exercises the runtime end-to-end and reports the cost story. Without ground
 // truth, success is meaningless (reachSuccess is false on empty expected_chunk_ids),
-// so success-derived metrics are excluded — see renderSmokeReportText.
+// so success-derived metrics are excluded — see renderReportText.
 
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type { KeyValueStore } from "../traces.js";
@@ -11,9 +11,9 @@ import { BrowserGapSink } from "../gaps.js";
 import { computeReport } from "./compute-report.js";
 import type { BenchmarkProblem, BenchmarkReport, BenchmarkRun, TurnResult } from "./types.js";
 
-// The full ablation matrix the smoke run drives. `full` is the baseline; the
+// The full ablation matrix a run drives. `full` is the baseline; the
 // cost floor `baseline_search_read` is the external role (token ratio source).
-export const SMOKE_VARIANTS = [
+export const BENCHMARK_VARIANTS = [
   "full",
   "no_structure",
   "no_search",
@@ -23,8 +23,8 @@ export const SMOKE_VARIANTS = [
   "baseline_search_read",
 ] as const;
 
-export const SMOKE_BASELINE_VARIANT = "full";
-export const SMOKE_EXTERNAL_VARIANT = "baseline_search_read";
+export const BASELINE_VARIANT = "full";
+export const EXTERNAL_VARIANT = "baseline_search_read";
 
 // ── Cost estimate (rough) ────────────────────────────────────────────────────
 // Per-turn token assumptions for the pre-run preview only. A turn is multi-round,
@@ -65,7 +65,7 @@ export function toolSetVersionHash(tools: Tool[]): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
-export interface SmokeRunOptions {
+export interface RunOptions {
   runId: string;
   knowdbCommitSha: string;
   tools: Tool[];
@@ -76,8 +76,8 @@ export interface SmokeRunOptions {
   variants?: readonly string[];
 }
 
-export function buildSmokeRun(opts: SmokeRunOptions): BenchmarkRun {
-  const variants = [...(opts.variants ?? SMOKE_VARIANTS)];
+export function buildRun(opts: RunOptions): BenchmarkRun {
+  const variants = [...(opts.variants ?? BENCHMARK_VARIANTS)];
   return {
     run_id: opts.runId,
     model: MODEL.id,
@@ -87,8 +87,8 @@ export function buildSmokeRun(opts: SmokeRunOptions): BenchmarkRun {
     tool_set_version: toolSetVersionHash(opts.tools),
     problem_set_id: opts.problemSetId,
     variants,
-    baseline_variant: SMOKE_BASELINE_VARIANT,
-    external_variant: SMOKE_EXTERNAL_VARIANT,
+    baseline_variant: BASELINE_VARIANT,
+    external_variant: EXTERNAL_VARIANT,
     started_at: opts.startedAt,
     ended_at: opts.endedAt,
     reviewer: opts.reviewer,
@@ -97,9 +97,9 @@ export function buildSmokeRun(opts: SmokeRunOptions): BenchmarkRun {
 
 // ── Report assembly ──────────────────────────────────────────────────────────
 
-// Read the run-scoped sinks and synthesize the report. No human grades (smoke is
+// Read the run-scoped sinks and synthesize the report. No human grades (this run is
 // grade-free); gapEvents are passed through but computeReport does not consume them.
-export function collectSmokeReport(
+export function collectReport(
   store: KeyValueStore,
   runId: string,
   problems: BenchmarkProblem[],
@@ -160,7 +160,7 @@ export interface VariantRow {
   cross: number;
 }
 
-export interface SmokeReportView {
+export interface ReportView {
   title: string;
   disclaimer: string;
   meta: string;
@@ -173,13 +173,13 @@ export interface SmokeReportView {
 }
 
 const DISCLAIMER =
-  "No-ground-truth smoke run: validates the ablation runtime end-to-end and reports the cost/behaviour story over the existing db/. " +
+  "No-ground-truth run: validates the ablation runtime end-to-end and reports the cost/behaviour story over the existing db/. " +
   "With no ground truth (expected_chunk_ids empty), success-derived metrics — success rate, within/cross-doc success, recovery, " +
   "follow-up success, abstention precision, explicit-gap rate, cumulative passage coverage — are suppressed as noise. Not a corpus result.";
 
 // Pure display model: the single source of truth for what the report shows. It applies
 // the finite-ratio guard and realized totals; both renderers (text, DOM) consume it.
-export function smokeReportView(report: BenchmarkReport): SmokeReportView {
+export function reportView(report: BenchmarkReport): ReportView {
   const { run, aggregates, deltas, results } = report;
 
   const rows: VariantRow[] = aggregates.map((a) => {
@@ -210,7 +210,7 @@ export function smokeReportView(report: BenchmarkReport): SmokeReportView {
       : null;
 
   return {
-    title: `Smoke run ${run.run_id} — ground-truth-free metrics`,
+    title: `Benchmark run ${run.run_id} — ground-truth-free metrics`,
     disclaimer: DISCLAIMER,
     meta:
       `model: ${run.model} · commit: ${run.knowdb_commit_sha} · tools: ${run.tool_set_version} · ` +
@@ -245,8 +245,8 @@ export function variantRowCells(r: VariantRow): string[] {
 }
 
 // Markdown serialization of the view — used for the downloadable .md report.
-export function renderSmokeReportText(report: BenchmarkReport): string {
-  const v = smokeReportView(report);
+export function renderReportText(report: BenchmarkReport): string {
+  const v = reportView(report);
   const lines: string[] = [`# ${v.title}`, "", `> ${v.disclaimer}`, "", v.meta, ""];
 
   lines.push("## Per-variant (cost + behavior)", "");

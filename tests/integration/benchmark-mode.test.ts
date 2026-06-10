@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type { SmokeReportView } from "../../src/benchmark/smoke.js";
+import type { ReportView } from "../../src/benchmark/report.js";
 
 // The module self-gates at import: it must be inert unless ?benchmark=1.
 // These tests exercise that gate by importing the module under two URL states.
@@ -23,7 +23,7 @@ describe("benchmark mode UI — flag gating", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
     await import("../../src/ui/benchmark-mode.js");
-    expect(document.getElementById("knowdb-smoke")).toBeNull();
+    expect(document.getElementById("knowdb-benchmark")).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -32,14 +32,14 @@ describe("benchmark mode UI — flag gating", () => {
     const fetchSpy = vi.fn(async (url: unknown) => ({
       ok: true,
       status: 200,
-      json: async () => (String(url).includes("smoke") ? [] : {}),
+      json: async () => (String(url).includes("smoke.json") ? [] : {}),
     }));
     vi.stubGlobal("fetch", fetchSpy);
     await import("../../src/ui/benchmark-mode.js");
     // The panel is appended synchronously at mount start, before any await.
-    expect(document.getElementById("knowdb-smoke")).not.toBeNull();
+    expect(document.getElementById("knowdb-benchmark")).not.toBeNull();
     // The inline API-key input is present (no prompt popup).
-    expect(document.getElementById("smoke-api-key")).not.toBeNull();
+    expect(document.getElementById("benchmark-api-key")).not.toBeNull();
     // Mount loads index + manifest + smoke.json (all three fetches fire synchronously).
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("smoke.json"))).toBe(true);
@@ -52,8 +52,8 @@ describe("renderReport — DOM tables", () => {
     vi.resetModules();
   });
 
-  const VIEW: SmokeReportView = {
-    title: "Smoke run r1 — ground-truth-free metrics",
+  const VIEW: ReportView = {
+    title: "Benchmark run r1 — ground-truth-free metrics",
     disclaimer: "No-ground-truth run; success-derived metrics suppressed.",
     meta: "model: stub",
     perVariant: {
