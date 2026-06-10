@@ -1,14 +1,10 @@
-// Benchmark mode UI, gated behind ?benchmark=1. With the flag it mounts an overlay
-// panel, reuses the page's static db/ index + manifest and the session API key, runs
-// the ablation matrix over a question set, and renders the report. It currently drives
-// a no-ground-truth question set and shows only success-independent metrics; the same
-// shell carries forward as the question set evolves. Without the flag the module is
-// inert — no DOM, no fetch, no API call — so the normal chat page is unaffected.
+// Benchmark mode UI, gated behind ?benchmark=1: mounts an overlay that runs the
+// ablation matrix over a question set and renders the report. Without the flag the
+// module is inert (no DOM, no fetch, no API call), so the normal chat page is untouched.
 //
 // Safeguards (it spends real tokens): mounts only behind the flag; runs only on an
-// explicit button, never on load; a persistent cost warning is shown and the run
-// needs an API key; it is non-reentrant and stoppable; the live path is not reached
-// by tests.
+// explicit button; a persistent cost warning is shown; needs an API key; non-reentrant
+// and stoppable; the live path is not reached by tests.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS } from "../agent/tools.js";
@@ -205,7 +201,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     setStatus("API key saved for this session.");
   });
 
-  // Load the static index + manifest (same files the demo uses) and the question set.
+  // Load the static index + manifest and the question set.
   let searchIndex: SearchIndex = {};
   let manifest: Manifest = {};
   let problems: BenchmarkProblem[] = [];

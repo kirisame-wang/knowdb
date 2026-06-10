@@ -1,7 +1,5 @@
-// DOM-free helpers for a benchmark run: a no-ground-truth pass over the existing db/
-// that exercises the runtime end-to-end and reports the cost story. Without ground
-// truth, success is meaningless (reachSuccess is false on empty expected_chunk_ids),
-// so success-derived metrics are excluded — see renderReportText.
+// DOM-free helpers for a benchmark run: cost estimate, run metadata, report assembly,
+// and the display view + markdown serialization.
 
 import type { Tool } from "@anthropic-ai/sdk/resources/index.js";
 import type { KeyValueStore } from "../traces.js";
@@ -112,10 +110,8 @@ export function collectReport(
 }
 
 // ── Ground-truth-free rendering ──────────────────────────────────────────────
-// The view below selects only metrics that do NOT depend on `success`. Success-derived
-// fields (success rate, within/cross success, recovery, follow-up success, abstention
-// precision, explicit-gap rate, cumulative passage coverage, and the success / gap
-// deltas) are left out: with no ground truth they are noise.
+// The view selects only success-independent metrics; success-derived fields are noise
+// without ground truth and are left out (DISCLAIMER spells out which).
 
 function gapSignalRate(results: TurnResult[], variant: string): number {
   const rs = results.filter((r) => r.variant === variant);

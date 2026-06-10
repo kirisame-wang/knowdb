@@ -34,11 +34,8 @@ export interface BenchmarkRunnerConfig {
   concurrency?: number;
 }
 
-// Drive every (variant × problem × turn) through the agent loop with the variant's
-// tool allowlist and result ablation applied; traces, gaps and the query_id → variant
-// side-car go to run-scoped sinks. The unit of work is one (variant × problem) thread,
-// whose turns share a chatHistory and stay sequential (co-ref); units run through a
-// bounded pool. concurrency 1 drains units in declared order, like a sequential loop.
+// Each (variant × problem) is one thread: its turns stay sequential (co-ref), while
+// independent threads run through a bounded pool (concurrency 1 = sequential).
 export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
   // Fail loud on an unknown variant before any side effects.
   for (const v of cfg.variants) {
@@ -52,8 +49,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
   const total = cfg.variants.length * cfg.problems.reduce((s, p) => s + p.turns.length, 0);
   let done = 0;
 
-  // Units in declared order (variant outer, problem inner): with concurrency 1 a
-  // single worker drains them in this order, matching the previous sequential loop.
+  // Units in declared (variant, problem) order, so concurrency 1 drains deterministically.
   const units: { variant: string; problem: BenchmarkProblem }[] = [];
   for (const variant of cfg.variants) {
     for (const problem of cfg.problems) units.push({ variant, problem });
@@ -67,8 +63,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
     const turns = [...problem.turns].sort((a, b) => a.turn_index - b.turn_index);
 
     for (const t of turns) {
-      // Stop at a turn boundary: the in-flight turn (if any) already settled and
-      // its history is complete, so we leave the thread on a clean trace.
+      // Stop at a turn boundary, so the thread is left on a complete trace.
       if (cfg.signal?.aborted) return;
       const label = `${variant} · ${problem.id}#${t.turn_index}`;
       const deps: AgentLoopDeps = {
@@ -98,15 +93,13 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
           assigned_at: now().toISOString(),
         });
       }
-      // ++done is atomic between awaits (single-threaded), so the count stays exact
-      // even when several units report concurrently.
+      // ++done is atomic between awaits, so the count stays exact under concurrency.
       cfg.onProgress?.(++done, total, label);
     }
   };
 
-  // Bounded worker pool: each worker pulls the next unit until the queue drains or
-  // a cancel lands. Sink writes are single synchronous getItem→setItem, so parallel
-  // threads cannot interleave a write.
+  // Bounded worker pool. Sink writes are a single synchronous getItem→setItem, so
+  // parallel threads cannot interleave a write.
   const concurrency = Math.max(1, cfg.concurrency ?? 1);
   let next = 0;
   const worker = async (): Promise<void> => {

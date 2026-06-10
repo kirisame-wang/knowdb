@@ -83,7 +83,6 @@ describe("estimateRun", () => {
     expect(est.units).toBe(6); // 2 variants × 3 turns
     expect(est.estTokens.input).toBeGreaterThan(0);
     expect(est.estTokens.output).toBeGreaterThan(0);
-    // cost = input/1e6*inRate + output/1e6*outRate
     const expected =
       (est.estTokens.input / 1_000_000) * MODEL.pricing.inputPerMTok +
       (est.estTokens.output / 1_000_000) * MODEL.pricing.outputPerMTok;
