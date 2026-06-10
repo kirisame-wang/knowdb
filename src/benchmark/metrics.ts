@@ -110,13 +110,19 @@ export function readChunkIds(trace: QueryTrace): string[] {
   return ids;
 }
 
-// Success oracle, judge-free: an answerable turn succeeds when it reads its
-// minimal sufficient chunk set (⊇); an unanswerable turn, when it reports the gap.
+// Success oracle, judge-free. Answerable turn: reads ≥1 chunk from each expected
+// group (any-of within a group, all groups required), so multi-candidate answers
+// don't false-fail; falls back to ⊇-all over expected_chunk_ids when no groups.
+// Unanswerable turn: reports the gap.
 export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
   if (turn.answerable) {
+    const read = new Set(readChunkIds(trace));
+    const groups = turn.expected_chunk_groups;
+    if (groups && groups.length > 0) {
+      return groups.every((g) => g.some((id) => read.has(id)));
+    }
     const expected = turn.expected_chunk_ids ?? [];
     if (expected.length === 0) return false;
-    const read = new Set(readChunkIds(trace));
     return expected.every((id) => read.has(id));
   }
   return encounteredKnownGap(trace);

@@ -28,7 +28,8 @@ export interface BenchmarkTurn {
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // false = correct answer is an explicit gap
   expected_doc_ids: string[];              // non-empty when answerable
-  expected_chunk_ids?: string[];           // finer-grained
+  expected_chunk_ids?: string[];           // finer-grained; full answer-bearing set (coverage)
+  expected_chunk_groups?: string[][];      // reach-success rule: read ≥1 from each group (any-of within a group, all groups required). Supersedes expected_chunk_ids for success when present.
   expected_answer_keypoints: string[];     // rubric keypoints; unanswerable → "should report not-found"
   expected_classification: "within_doc" | "cross_doc";  // ground-truth reference
   rouge1_precision_vs_chunk?: number;      // rouge-1 precision of question vs chunk; lexical_gap turns only
