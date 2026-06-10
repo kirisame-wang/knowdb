@@ -143,69 +143,146 @@ function classificationCounts(results: TurnResult[], variant: string): { within:
 
 const n2 = (x: number): string => x.toFixed(2);
 const pct = (x: number | null): string => (x === null ? "—" : `${(x * 100).toFixed(0)}%`);
+const signed = (x: number): string => `${x >= 0 ? "+" : ""}${n2(x)}`;
 
-// Markdown summary listing only ground-truth-free metrics, with a disclaimer.
-export function renderSmokeReportText(report: BenchmarkReport): string {
+// Column labels for the per-variant table, shared by the text and DOM renderers.
+export const PER_VARIANT_COLUMNS = [
+  "variant",
+  "turns",
+  "avg steps",
+  "avg in-tok",
+  "avg out-tok",
+  "pattern-use",
+  "read-chunk chars (pat/no-pat)",
+  "gap-signal",
+  "within/cross (count)",
+] as const;
+
+export interface VariantRow {
+  variant: string;
+  turns: number;
+  avgSteps: number;
+  avgIn: number;
+  avgOut: number;
+  patternUse: number | null;
+  readChunkChars: { withPattern: number; withoutPattern: number };
+  gapSignal: number;
+  within: number;
+  cross: number;
+}
+
+export interface SmokeReportView {
+  title: string;
+  disclaimer: string;
+  meta: string;
+  perVariant: { columns: readonly string[]; rows: VariantRow[] };
+  cost: {
+    realized: { input: number; output: number; turns: number };
+    ratio: { baseline: string; external: string; input: number; output: number } | null;
+    perAxis: { variant: string; stepsDelta: number }[];
+  };
+}
+
+const DISCLAIMER =
+  "No-ground-truth smoke run: validates the ablation runtime end-to-end and reports the cost/behaviour story over the existing db/. " +
+  "With no ground truth (expected_chunk_ids empty), success-derived metrics — success rate, within/cross-doc success, recovery, " +
+  "follow-up success, abstention precision, explicit-gap rate, cumulative passage coverage — are suppressed as noise. Not a corpus result.";
+
+// Pure display model: the single source of truth for what the report shows. It applies
+// the finite-ratio guard and realized totals; both renderers (text, DOM) consume it.
+export function smokeReportView(report: BenchmarkReport): SmokeReportView {
   const { run, aggregates, deltas, results } = report;
-  const lines: string[] = [];
 
-  lines.push(`# Smoke run ${run.run_id} — ground-truth-free metrics`);
-  lines.push("");
-  lines.push(
-    "> Layer-1 smoke run: validates the ablation runtime end-to-end and reports the cost/behavior story over the existing db/. " +
-      "**No ground truth** (`expected_chunk_ids` is empty), so success-derived metrics — success rate, within/cross-doc success, recovery, " +
-      "follow-up success, abstention precision, explicit-gap rate, cumulative passage coverage — are suppressed as noise. Not a corpus result.",
-  );
-  lines.push("");
-  lines.push(
-    `model: \`${run.model}\` · commit: \`${run.knowdb_commit_sha}\` · tools: \`${run.tool_set_version}\` · ` +
-      `problem set: \`${run.problem_set_id}\` · ${run.started_at} → ${run.ended_at}`,
-  );
-  lines.push("");
-
-  lines.push("## Per-variant (cost + behavior)");
-  lines.push("");
-  lines.push("| variant | turns | avg steps | avg in-tok | avg out-tok | pattern-use | read-chunk chars (pat/no-pat) | gap-signal | within/cross (count) |");
-  lines.push("|---|--:|--:|--:|--:|--:|--:|--:|--:|");
-  for (const a of aggregates) {
+  const rows: VariantRow[] = aggregates.map((a) => {
     const cc = classificationCounts(results, a.variant);
-    const rc = a.avg_read_chunk_output_chars;
-    lines.push(
-      `| \`${a.variant}\` | ${a.turn_count} | ${n2(a.avg_decision_steps)} | ${Math.round(a.avg_tokens.input)} | ` +
-        `${Math.round(a.avg_tokens.output)} | ${pct(a.read_chunk_pattern_usage_rate)} | ` +
-        `${Math.round(rc.with_pattern)}/${Math.round(rc.without_pattern)} | ${pct(gapSignalRate(results, a.variant))} | ` +
-        `${cc.within}/${cc.cross} |`,
-    );
-  }
+    return {
+      variant: a.variant,
+      turns: a.turn_count,
+      avgSteps: a.avg_decision_steps,
+      avgIn: a.avg_tokens.input,
+      avgOut: a.avg_tokens.output,
+      patternUse: a.read_chunk_pattern_usage_rate,
+      readChunkChars: {
+        withPattern: a.avg_read_chunk_output_chars.with_pattern,
+        withoutPattern: a.avg_read_chunk_output_chars.without_pattern,
+      },
+      gapSignal: gapSignalRate(results, a.variant),
+      within: cc.within,
+      cross: cc.cross,
+    };
+  });
+
+  // A partial / aborted run can leave the floor variant with zero turns, making the
+  // ratio Infinity/NaN (mean of no tokens = 0 → divide-by-zero). Drop it to null then.
+  const r = deltas.external_token_ratio;
+  const ratio =
+    r && Number.isFinite(r.input) && Number.isFinite(r.output)
+      ? { baseline: deltas.baseline_variant ?? "", external: deltas.external_variant ?? "", input: r.input, output: r.output }
+      : null;
+
+  return {
+    title: `Smoke run ${run.run_id} — ground-truth-free metrics`,
+    disclaimer: DISCLAIMER,
+    meta:
+      `model: ${run.model} · commit: ${run.knowdb_commit_sha} · tools: ${run.tool_set_version} · ` +
+      `problem set: ${run.problem_set_id} · ${run.started_at} → ${run.ended_at}`,
+    perVariant: { columns: PER_VARIANT_COLUMNS, rows },
+    cost: {
+      realized: {
+        input: results.reduce((s, t) => s + t.tokens.input, 0),
+        output: results.reduce((s, t) => s + t.tokens.output, 0),
+        turns: results.length,
+      },
+      ratio,
+      perAxis: deltas.per_axis.map((d) => ({ variant: d.variant, stepsDelta: d.decision_steps_delta })),
+    },
+  };
+}
+
+// One row's cells as display strings, in PER_VARIANT_COLUMNS order. Shared so the text
+// and DOM renderers format numbers identically.
+export function variantRowCells(r: VariantRow): string[] {
+  return [
+    r.variant,
+    String(r.turns),
+    n2(r.avgSteps),
+    String(Math.round(r.avgIn)),
+    String(Math.round(r.avgOut)),
+    pct(r.patternUse),
+    `${Math.round(r.readChunkChars.withPattern)}/${Math.round(r.readChunkChars.withoutPattern)}`,
+    pct(r.gapSignal),
+    `${r.within}/${r.cross}`,
+  ];
+}
+
+// Markdown serialization of the view — used for the downloadable .md report.
+export function renderSmokeReportText(report: BenchmarkReport): string {
+  const v = smokeReportView(report);
+  const lines: string[] = [`# ${v.title}`, "", `> ${v.disclaimer}`, "", v.meta, ""];
+
+  lines.push("## Per-variant (cost + behavior)", "");
+  lines.push(`| ${v.perVariant.columns.join(" | ")} |`);
+  lines.push(`|${v.perVariant.columns.map(() => "---").join("|")}|`);
+  for (const row of v.perVariant.rows) lines.push(`| ${variantRowCells(row).join(" | ")} |`);
   lines.push("");
 
-  lines.push("## Cost story");
-  lines.push("");
-  // Realized usage across every recorded turn — the actual cost, to reconcile
-  // against the rough pre-run consent estimate.
-  const totalIn = results.reduce((s, r) => s + r.tokens.input, 0);
-  const totalOut = results.reduce((s, r) => s + r.tokens.output, 0);
-  lines.push(`**Realized usage**: ${totalIn} in / ${totalOut} out tokens over ${results.length} turns.`);
-  lines.push("");
-  const ratio = deltas.external_token_ratio;
-  // A partial / aborted run can leave the floor variant with zero turns, making the
-  // ratio Infinity/NaN (mean of no tokens = 0 → divide-by-zero). Only render a real one.
-  if (ratio && Number.isFinite(ratio.input) && Number.isFinite(ratio.output)) {
+  lines.push("## Cost story", "");
+  lines.push(
+    `**Realized usage**: ${v.cost.realized.input} in / ${v.cost.realized.output} out tokens over ${v.cost.realized.turns} turns.`,
+    "",
+  );
+  if (v.cost.ratio) {
     lines.push(
-      `**Token ratio** \`${deltas.baseline_variant}\` vs \`${deltas.external_variant}\` (floor): ` +
-        `input ×${n2(ratio.input)}, output ×${n2(ratio.output)} (>1 = full config costs more than the flat search+read floor).`,
+      `**Token ratio** ${v.cost.ratio.baseline} vs ${v.cost.ratio.external} (floor): ` +
+        `input ×${n2(v.cost.ratio.input)}, output ×${n2(v.cost.ratio.output)} (>1 = full config costs more than the flat search+read floor).`,
     );
   } else {
     lines.push("_No token ratio: the cost-floor variant produced no turns (partial or aborted run)._");
   }
   lines.push("");
-  lines.push("**Per-axis decision-steps delta** (axis-off minus baseline; positive = removing the axis costs more steps):");
-  lines.push("");
-  lines.push("| axis-off variant | Δ avg steps |");
-  lines.push("|---|--:|");
-  for (const d of deltas.per_axis) {
-    lines.push(`| \`${d.variant}\` | ${d.decision_steps_delta >= 0 ? "+" : ""}${n2(d.decision_steps_delta)} |`);
-  }
+  lines.push("**Per-axis decision-steps delta** (axis-off minus baseline; positive = removing the axis costs more steps):", "");
+  lines.push("| axis-off variant | Δ avg steps |", "|---|--:|");
+  for (const d of v.cost.perAxis) lines.push(`| ${d.variant} | ${signed(d.stepsDelta)} |`);
   lines.push("");
   return lines.join("\n");
 }

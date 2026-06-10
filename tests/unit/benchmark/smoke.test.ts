@@ -9,6 +9,7 @@ import {
   toolSetVersionHash,
   collectSmokeReport,
   renderSmokeReportText,
+  smokeReportView,
   SMOKE_VARIANTS,
 } from "../../../src/benchmark/smoke.js";
 import { MODEL } from "../../../src/constants.js";
@@ -205,5 +206,66 @@ describe("collectSmokeReport + renderSmokeReportText (end-to-end, no live API)",
     expect(md).not.toContain("Infinity");
     expect(md).not.toContain("NaN");
     expect(md).toContain("produced no turns");
+  });
+});
+
+describe("smokeReportView (structured display data)", () => {
+  async function reportFor(runId: string, variants: string[], ranVariants: string[]) {
+    const kv = new FakeKV();
+    const problems = [problem("t1", [turn(0, "q0")])];
+    await runBenchmark({
+      client: scriptedClient([msg("a"), msg("b"), msg("c")]),
+      store: kv,
+      session: new SessionContext(`sess-${runId}`),
+      searchIndex: INDEX,
+      manifest: MANIFEST,
+      model: "stub",
+      system: "stub",
+      maxTokens: 256,
+      tools: KNOWDB_TOOLS,
+      problems,
+      variants: ranVariants,
+      runId,
+    });
+    const run = buildSmokeRun({
+      runId,
+      knowdbCommitSha: "abc",
+      tools: KNOWDB_TOOLS,
+      problemSetId: "smoke",
+      startedAt: "2026-06-10T00:00:00.000Z",
+      endedAt: "2026-06-10T00:01:00.000Z",
+      reviewer: "",
+      variants,
+    });
+    return collectSmokeReport(kv, runId, problems, run);
+  }
+
+  it("exposes one row per variant and a finite ratio when the floor ran", async () => {
+    const view = smokeReportView(
+      await reportFor("view-full", ["full", "baseline_search_read"], ["full", "baseline_search_read"]),
+    );
+    expect(view.perVariant.rows.map((r) => r.variant).sort()).toEqual(["baseline_search_read", "full"]);
+    expect(view.cost.ratio).not.toBeNull();
+    expect(Number.isFinite(view.cost.ratio!.input)).toBe(true);
+    expect(view.cost.realized.turns).toBe(2);
+  });
+
+  it("columns are success-free and include the count label", () => {
+    // Pure check on the column labels (no run needed via the type's static columns).
+    const cols = smokeReportView({
+      run: { run_id: "x" } as never,
+      results: [],
+      aggregates: [],
+      deltas: { per_axis: [] },
+    } as never).perVariant.columns.join(" ").toLowerCase();
+    expect(cols).not.toContain("success");
+    expect(cols).not.toContain("recovery");
+    expect(cols).not.toContain("abstention");
+    expect(cols).toContain("count");
+  });
+
+  it("ratio is null when the floor variant produced no turns", async () => {
+    const view = smokeReportView(await reportFor("view-partial", ["full", "baseline_search_read"], ["full"]));
+    expect(view.cost.ratio).toBeNull();
   });
 });
