@@ -40,6 +40,10 @@ const SMOKE_SYSTEM =
 
 const SMOKE_JSON_PATH = "benchmark/smoke.json";
 
+// (variant × problem) threads in flight — a modest cap to cut wall-clock while
+// staying well under the API rate limit.
+const SMOKE_CONCURRENCY = 4;
+
 function isBenchmarkFlag(): boolean {
   return new URLSearchParams(window.location.search).get("benchmark") === "1";
 }
@@ -245,6 +249,7 @@ export async function mountBenchmarkMode(): Promise<void> {
         problems,
         variants: [...SMOKE_VARIANTS],
         runId,
+        concurrency: SMOKE_CONCURRENCY,
         signal: ac.signal,
         onProgress: (done, total, label) => setStatus(`${done}/${total} — ${label}`),
       });
