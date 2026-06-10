@@ -112,21 +112,10 @@ export function collectSmokeReport(
 }
 
 // ── Ground-truth-free rendering ──────────────────────────────────────────────
-// Metrics that do NOT depend on `success`. Success-derived fields (success_rate,
-// within/cross success, recovery_*, followup_success_rate, abstention_precision,
-// explicit_gap_rate, cumulative_passage_coverage, and the success_rate / explicit_gap
-// deltas) are intentionally omitted: with no ground truth they are noise.
-export const GROUND_TRUTH_FREE = [
-  "avg_decision_steps",
-  "avg_tokens",
-  "read_chunk_pattern_usage_rate",
-  "avg_read_chunk_output_chars",
-  "turn_degradation_slope",
-  "encountered_gap_signal_rate",
-  "classification_counts",
-  "external_token_ratio",
-  "decision_steps_delta",
-] as const;
+// The view below selects only metrics that do NOT depend on `success`. Success-derived
+// fields (success rate, within/cross success, recovery, follow-up success, abstention
+// precision, explicit-gap rate, cumulative passage coverage, and the success / gap
+// deltas) are left out: with no ground truth they are noise.
 
 function gapSignalRate(results: TurnResult[], variant: string): number {
   const rs = results.filter((r) => r.variant === variant);
@@ -268,7 +257,7 @@ export function renderSmokeReportText(report: BenchmarkReport): string {
 
   lines.push("## Cost story", "");
   lines.push(
-    `**Realized usage**: ${v.cost.realized.input} in / ${v.cost.realized.output} out tokens over ${v.cost.realized.turns} turns.`,
+    `**Realized usage (all variants)**: ${v.cost.realized.input} in / ${v.cost.realized.output} out tokens over ${v.cost.realized.turns} turns.`,
     "",
   );
   if (v.cost.ratio) {

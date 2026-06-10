@@ -6,9 +6,9 @@
 // inert — no DOM, no fetch, no API call — so the normal chat page is unaffected.
 //
 // Safeguards (it spends real tokens): mounts only behind the flag; runs only on an
-// explicit button, never on load; a cost-preview confirm precedes the first request;
-// the run is non-reentrant and stoppable; the live path needs an API key and is not
-// reached by tests.
+// explicit button, never on load; a persistent cost warning is shown and the run
+// needs an API key; it is non-reentrant and stoppable; the live path is not reached
+// by tests.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { KNOWDB_TOOLS } from "../agent/tools.js";
@@ -113,7 +113,7 @@ export function renderReport(view: SmokeReportView): HTMLElement {
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
   const c = view.cost;
-  root.appendChild(block("p", `Realized usage: ${c.realized.input} in / ${c.realized.output} out tokens over ${c.realized.turns} turns.`, "margin:4px 0"));
+  root.appendChild(block("p", `Realized usage (all variants): ${c.realized.input} in / ${c.realized.output} out tokens over ${c.realized.turns} turns.`, "margin:4px 0"));
   root.appendChild(
     c.ratio
       ? block(
@@ -218,10 +218,9 @@ export async function mountBenchmarkMode(): Promise<void> {
   async function doRun(): Promise<void> {
     const key = apiKey();
     if (!key) {
-      setStatus("Enter and save your Anthropic API key first.");
+      setStatus("Enter your Anthropic API key first.");
       return;
     }
-    sessionStorage.setItem("knowdb-api-key", key);
 
     const ac = new AbortController();
     setRunning(ac);

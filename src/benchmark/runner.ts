@@ -35,7 +35,7 @@ export interface BenchmarkRunnerConfig {
 // tool allowlist and result ablation applied; traces, gaps and the query_id → variant
 // side-car go to run-scoped sinks. The unit of work is one (variant × problem) thread,
 // whose turns share a chatHistory and stay sequential (co-ref); units run through a
-// bounded pool. concurrency 1 runs units in declared order, identical to a plain loop.
+// bounded pool. concurrency 1 drains units in declared order, like a sequential loop.
 export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
   // Fail loud on an unknown variant before any side effects.
   for (const v of cfg.variants) {
@@ -50,7 +50,7 @@ export async function runBenchmark(cfg: BenchmarkRunnerConfig): Promise<void> {
   let done = 0;
 
   // Units in declared order (variant outer, problem inner): with concurrency 1 a
-  // single worker drains them in this order, byte-identical to the old nested loop.
+  // single worker drains them in this order, matching the previous sequential loop.
   const units: { variant: string; problem: BenchmarkProblem }[] = [];
   for (const variant of cfg.variants) {
     for (const problem of cfg.problems) units.push({ variant, problem });
