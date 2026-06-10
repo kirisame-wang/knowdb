@@ -38,6 +38,8 @@ describe("benchmark mode UI — flag gating", () => {
     await import("../../src/ui/benchmark-mode.js");
     // The panel is appended synchronously at mount start, before any await.
     expect(document.getElementById("knowdb-smoke")).not.toBeNull();
+    // The inline API-key input is present (no prompt popup).
+    expect(document.getElementById("smoke-api-key")).not.toBeNull();
     // Mount loads index + manifest + smoke.json (all three fetches fire synchronously).
     expect(fetchSpy).toHaveBeenCalledTimes(3);
     expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("smoke.json"))).toBe(true);

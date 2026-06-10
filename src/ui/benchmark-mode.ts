@@ -131,14 +131,17 @@ export function renderReport(view: SmokeReportView): HTMLElement {
 export async function mountBenchmarkMode(): Promise<void> {
   const panel = elFromHtml(`
     <div id="knowdb-smoke" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f6f8fa;border-bottom:1px solid #d0d7de">
-        <strong>KnowDB Benchmark — Layer-1 Smoke</strong>
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;background:#f6f8fa;border-bottom:1px solid #d0d7de;flex-wrap:wrap">
+        <strong>KnowDB Benchmark</strong>
         <span id="smoke-status" style="color:#656d76;font-size:12px"></span>
         <span style="flex:1"></span>
-        <button id="smoke-run" style="height:30px;padding:0 16px;border:none;border-radius:6px;background:#0969da;color:#fff;cursor:pointer;font-weight:500">Run smoke benchmark</button>
+        <input id="smoke-api-key" type="password" placeholder="sk-ant-… Anthropic API key" autocomplete="off" spellcheck="false" style="height:30px;width:230px;padding:0 8px;border:1px solid #d0d7de;border-radius:6px;font-family:SFMono-Regular,Consolas,monospace;font-size:12px" />
+        <button id="smoke-save-key" style="height:30px;padding:0 10px;border:1px solid #d0d7de;border-radius:6px;background:#fff;cursor:pointer;font-size:12px">Save</button>
+        <button id="smoke-run" style="height:30px;padding:0 16px;border:none;border-radius:6px;background:#0969da;color:#fff;cursor:pointer;font-weight:500">Run benchmark</button>
         <a href="?" style="height:30px;line-height:30px;padding:0 12px;border:1px solid #d0d7de;border-radius:6px;color:#1f2328;text-decoration:none">Exit</a>
       </div>
-      <div id="smoke-meta" style="padding:10px 16px;border-bottom:1px solid #d0d7de;color:#656d76;font-size:12px"></div>
+      <div id="smoke-meta" style="padding:10px 16px 4px;color:#656d76;font-size:12px"></div>
+      <div id="smoke-warning" style="padding:0 16px 10px;border-bottom:1px solid #d0d7de;color:#cf222e;font-size:12px;font-weight:500"></div>
       <div id="smoke-downloads" style="display:none;gap:8px;padding:8px 16px;border-bottom:1px solid #d0d7de"></div>
       <div id="smoke-report" style="flex:1;overflow:auto;margin:0;padding:16px;line-height:1.5"></div>
     </div>
@@ -148,10 +151,21 @@ export async function mountBenchmarkMode(): Promise<void> {
   const $ = <T extends HTMLElement>(id: string): T => panel.querySelector(`#${id}`) as T;
   const statusEl = $("smoke-status");
   const metaEl = $("smoke-meta");
+  const warnEl = $("smoke-warning");
   const reportEl = $<HTMLDivElement>("smoke-report");
   const runBtn = $<HTMLButtonElement>("smoke-run");
+  const apiKeyInput = $<HTMLInputElement>("smoke-api-key");
+  const saveKeyBtn = $<HTMLButtonElement>("smoke-save-key");
   const downloadsEl = $<HTMLDivElement>("smoke-downloads");
   const setStatus = (s: string): void => void (statusEl.textContent = s);
+
+  // API key input mirrors the demo's, sharing the same session key. No popups.
+  apiKeyInput.value = sessionStorage.getItem("knowdb-api-key") ?? "";
+  const apiKey = (): string => apiKeyInput.value.trim() || sessionStorage.getItem("knowdb-api-key") || "";
+  saveKeyBtn.addEventListener("click", () => {
+    sessionStorage.setItem("knowdb-api-key", apiKeyInput.value.trim());
+    setStatus("API key saved for this session.");
+  });
 
   // Load the static index + manifest (same files the demo uses) and the smoke set.
   let searchIndex: SearchIndex = {};
@@ -178,14 +192,17 @@ export async function mountBenchmarkMode(): Promise<void> {
   const est = estimateRun(problems, SMOKE_VARIANTS);
   metaEl.textContent =
     `${est.variantCount} variants × ${est.turnCount} turns = ${est.units} agent turns · ` +
-    `rough estimate ≈ ${fmtTok(est.estTokens.input)} in / ${fmtTok(est.estTokens.output)} out tokens ≈ ${fmtUsd(est.estCostUsd)} ` +
     `(${SMOKE_VARIANTS.join(", ")})`;
+  // Persistent, prominent cost warning in place of a modal — Run starts immediately.
+  warnEl.textContent =
+    `⚠ Spends real API tokens. Rough cost ≈ ${fmtUsd(est.estCostUsd)} ` +
+    `(≈ ${fmtTok(est.estTokens.input)} in / ${fmtTok(est.estTokens.output)} out, ${MODEL.id}). Run starts immediately on click.`;
 
   let running: AbortController | null = null;
 
   const setRunning = (ac: AbortController | null): void => {
     running = ac;
-    runBtn.textContent = ac ? "Stop" : "Run smoke benchmark";
+    runBtn.textContent = ac ? "Stop" : "Run benchmark";
     runBtn.style.background = ac ? "#cf222e" : "#0969da";
   };
 
@@ -199,34 +216,19 @@ export async function mountBenchmarkMode(): Promise<void> {
   });
 
   async function doRun(): Promise<void> {
-    const apiKey =
-      sessionStorage.getItem("knowdb-api-key") ||
-      window.prompt("Anthropic API key (sk-ant-…) — used only for this run, kept in sessionStorage:")?.trim() ||
-      "";
-    if (!apiKey) {
-      setStatus("No API key — run cancelled.");
+    const key = apiKey();
+    if (!key) {
+      setStatus("Enter and save your Anthropic API key first.");
       return;
     }
-    sessionStorage.setItem("knowdb-api-key", apiKey);
-
-    // Cost-preview confirm before the first API request.
-    const ok = window.confirm(
-      `This sends ${est.units} agent turns to the live API ` +
-        `(${est.variantCount} variants × ${est.turnCount} turns).\n\n` +
-        `Rough cost ≈ ${fmtUsd(est.estCostUsd)} (≈ ${fmtTok(est.estTokens.input)} in / ${fmtTok(est.estTokens.output)} out tokens, ${MODEL.id}).\n\n` +
-        `Proceed?`,
-    );
-    if (!ok) {
-      setStatus("Cancelled at confirm.");
-      return;
-    }
+    sessionStorage.setItem("knowdb-api-key", key);
 
     const ac = new AbortController();
     setRunning(ac);
     downloadsEl.style.display = "none";
     reportEl.textContent = "";
 
-    const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+    const client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
     const runId = `smoke-${nowStamp()}`;
     const startedAt = new Date().toISOString();
 
