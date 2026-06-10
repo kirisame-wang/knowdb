@@ -309,3 +309,80 @@ describe("runBenchmark — orchestration", () => {
     expect(new VariantSink(kv, benchmarkVariantKey("rMid")).readAll()).toHaveLength(1);
   });
 });
+
+describe("runBenchmark — concurrency", () => {
+  // A client that returns immediately but yields once, so siblings overlap; it
+  // tracks the peak number of in-flight create() calls.
+  function trackingClient(): { client: MessagesClient; maxActive: () => number } {
+    let active = 0;
+    let max = 0;
+    const client: MessagesClient = {
+      messages: {
+        create: async () => {
+          active++;
+          max = Math.max(max, active);
+          await Promise.resolve();
+          active--;
+          return msg([text("ok")]);
+        },
+      },
+    };
+    return { client, maxActive: () => max };
+  }
+
+  it("runs (variant × problem) units concurrently up to the cap, and runs them all", async () => {
+    const kv = new FakeKV();
+    const { client, maxActive } = trackingClient();
+    const problems = [
+      problem("p1", [turn(0, "q")]),
+      problem("p2", [turn(0, "q")]),
+      problem("p3", [turn(0, "q")]),
+      problem("p4", [turn(0, "q")]),
+    ];
+    await runBenchmark(config({ client, store: kv, problems, variants: ["full"], runId: "rc1", concurrency: 2 }));
+    expect(benchmarkTraceSink(kv, "rc1").readAll()).toHaveLength(4); // every unit ran
+    expect(maxActive()).toBe(2); // overlap happened and was capped at 2
+  });
+
+  it("concurrency 1 never overlaps (sequential, byte-identical default)", async () => {
+    const kv = new FakeKV();
+    const { client, maxActive } = trackingClient();
+    const problems = [problem("p1", [turn(0, "q")]), problem("p2", [turn(0, "q")])];
+    await runBenchmark(config({ client, store: kv, problems, variants: ["full"], runId: "rc2", concurrency: 1 }));
+    expect(maxActive()).toBe(1);
+  });
+
+  it("keeps a thread's turns sequential and in order under concurrency", async () => {
+    const kv = new FakeKV();
+    const { client } = trackingClient();
+    const problems = [
+      problem("pA", [turn(0, "q0"), turn(1, "q1")]),
+      problem("pB", [turn(0, "q0"), turn(1, "q1")]),
+    ];
+    await runBenchmark(config({ client, store: kv, problems, variants: ["full"], runId: "rc3", concurrency: 2 }));
+    const assigns = new VariantSink(kv, benchmarkVariantKey("rc3")).readAll();
+    for (const pid of ["pA", "pB"]) {
+      const idxs = assigns.filter((a) => a.problem_id === pid).map((a) => a.turn_index);
+      expect(idxs).toEqual([0, 1]); // each thread's turns recorded in turn order
+    }
+  });
+
+  it("an already-aborted signal runs nothing even with concurrency", async () => {
+    const kv = new FakeKV();
+    const ac = new AbortController();
+    ac.abort();
+    const { client } = trackingClient();
+    await runBenchmark(
+      config({
+        client,
+        store: kv,
+        problems: [problem("p1", [turn(0, "q")]), problem("p2", [turn(0, "q")])],
+        variants: ["full"],
+        runId: "rc4",
+        concurrency: 2,
+        signal: ac.signal,
+      }),
+    );
+    expect(benchmarkTraceSink(kv, "rc4").readAll()).toHaveLength(0);
+  });
+});
