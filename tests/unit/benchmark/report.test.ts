@@ -15,7 +15,7 @@ import {
 import { MODEL } from "../../../src/constants.js";
 import { SessionContext } from "../../../src/utils.js";
 import type { SearchIndex, Manifest } from "../../../src/types.js";
-import type { BenchmarkProblem, BenchmarkTurn } from "../../../src/benchmark/types.js";
+import type { BenchmarkProblem, BenchmarkTurn, BenchmarkReport, TurnResult, VariantAggregate } from "../../../src/benchmark/types.js";
 
 class FakeKV {
   private m = new Map<string, string>();
@@ -266,5 +266,77 @@ describe("reportView (structured display data)", () => {
   it("ratio is null when the floor variant produced no turns", async () => {
     const view = reportView(await reportFor("view-partial", ["full", "baseline_search_read"], ["full"]));
     expect(view.cost.ratio).toBeNull();
+  });
+});
+
+describe("reportView (pilot — ground truth present)", () => {
+  const gtTurn = (over: Partial<BenchmarkTurn> = {}): BenchmarkTurn => ({
+    ...turn(0, "q0"),
+    expected_chunk_groups: [["aaa00001/00"]],
+    expected_chunk_ids: ["aaa00001/00"],
+    expected_doc_ids: ["aaa00001"],
+    ...over,
+  });
+  const gtProblems = [problem("t1", [gtTurn()])];
+
+  const result = (over: Partial<TurnResult>): TurnResult => ({
+    problem_id: "t1", turn_index: 0, query_id: "q", variant: "full", is_followup: false,
+    turn_type: "symmetric", answerable: true, success: true, classification_actual: "within_doc",
+    explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 0,
+    tokens: { input: 0, output: 0 }, ...over,
+  });
+  const agg = (over: Partial<VariantAggregate>): VariantAggregate => ({
+    variant: "full", turn_count: 0, thread_count: 0, success_rate: 0, within_doc_success_rate: 0,
+    cross_doc_success_rate: 0, explicit_gap_rate: 0, abstention_precision: null, recovery_rate: null,
+    recovery_avg_decision_steps: null, avg_decision_steps: 0, avg_tokens: { input: 0, output: 0 },
+    read_chunk_pattern_usage_rate: null, avg_read_chunk_output_chars: { with_pattern: 0, without_pattern: 0 },
+    followup_success_rate: 0, turn_degradation_slope: 0, cumulative_passage_coverage: 0, ...over,
+  });
+
+  const report = {
+    run: { run_id: "r", model: "m", knowdb_commit_sha: "c", tool_set_version: "t", problem_set_id: "pilot", started_at: "s", ended_at: "e" },
+    results: [
+      result({ variant: "full", success: true, decision_steps: 3, tokens: { input: 100, output: 20 } }),
+      result({ variant: "full", success: false, decision_steps: 8, tokens: { input: 300, output: 40 } }),
+      result({ variant: "no_search", success: false, decision_steps: 9, tokens: { input: 500, output: 60 } }),
+    ],
+    aggregates: [
+      agg({ variant: "full", turn_count: 2, success_rate: 0.5, within_doc_success_rate: 0.5, cross_doc_success_rate: 0 }),
+      agg({ variant: "no_search", turn_count: 1, success_rate: 0 }),
+    ],
+    deltas: { baseline_variant: "full", per_axis: [{ variant: "no_search", success_rate_delta: 0.5, decision_steps_delta: 1, explicit_gap_rate_delta: 0 }] },
+  } as unknown as BenchmarkReport;
+
+  it("surfaces a success view only when ground truth is present", () => {
+    expect(reportView(report).success).toBeUndefined();        // no problems → GT-free
+    expect(reportView(report, gtProblems).success).toBeDefined();
+    expect(reportView(report, [problem("t1", [turn(0, "q0")])]).success).toBeUndefined(); // problems without GT
+  });
+
+  it("title and disclaimer switch to the pilot framing under ground truth", () => {
+    const v = reportView(report, gtProblems);
+    expect(v.title.toLowerCase()).toContain("pilot");
+    expect(v.disclaimer.toLowerCase()).toContain("reach");
+    expect(reportView(report).title.toLowerCase()).toContain("ground-truth-free");
+  });
+
+  it("splits steps and tokens by outcome (✓ succeeded / ✗ failed)", () => {
+    const sv = reportView(report, gtProblems).success!;
+    const full = sv.rows.find((r) => r.variant === "full")!;
+    expect(full.successRate).toBe(0.5);
+    expect(full.success).toMatchObject({ turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 });
+    expect(full.failure).toMatchObject({ turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 });
+    // a variant with no successes shows an empty success group, not a divide-by-zero
+    const ns = sv.rows.find((r) => r.variant === "no_search")!;
+    expect(ns.success.turns).toBe(0);
+    expect(ns.failure).toMatchObject({ turns: 1, avgSteps: 9 });
+    expect(sv.perAxis).toEqual([{ variant: "no_search", successRateDelta: 0.5 }]);
+  });
+
+  it("renderReportText shows the success section and an empty (—) cell for an absent outcome", () => {
+    const md = renderReportText(report, gtProblems);
+    expect(md.toLowerCase()).toContain("pilot");
+    expect(md).toMatch(/3\.00\/8\.00/);   // full: steps ✓/✗
+    expect(md).toContain("—/9.00");        // no_search: no successes → — for the ✓ side
   });
 });

@@ -109,9 +109,9 @@ export function collectReport(
   return computeReport(traces, gapEvents, assignments, problems, [], run);
 }
 
-// ── Ground-truth-free rendering ──────────────────────────────────────────────
-// The view selects only success-independent metrics; success-derived fields are noise
-// without ground truth and are left out (DISCLAIMER spells out which).
+// ── Rendering ────────────────────────────────────────────────────────────────
+// Without ground truth the view shows only success-independent metrics (success-derived
+// fields are noise; DISCLAIMER spells out which). With it, the pilot success view is added.
 
 function gapSignalRate(results: TurnResult[], variant: string): number {
   const rs = results.filter((r) => r.variant === variant);
@@ -156,6 +156,41 @@ export interface VariantRow {
   cross: number;
 }
 
+// Steps/tokens over one outcome group (succeeded or failed turns). turns=0 → a group
+// with no turns, rendered "—" so a fail-fast variant isn't mistaken for a cheap one.
+export interface OutcomeStats {
+  turns: number;
+  avgSteps: number;
+  avgIn: number;
+  avgOut: number;
+}
+
+export interface SuccessRow {
+  variant: string;
+  successRate: number;
+  withinSuccess: number;
+  crossSuccess: number;
+  success: OutcomeStats;
+  failure: OutcomeStats;
+}
+
+// Column labels for the pilot success table (rendered only under ground truth).
+export const SUCCESS_COLUMNS = [
+  "variant",
+  "success",
+  "within✓",
+  "cross✓",
+  "steps ✓/✗",
+  "in-tok ✓/✗",
+  "out-tok ✓/✗",
+] as const;
+
+export interface SuccessView {
+  columns: readonly string[];
+  rows: SuccessRow[];
+  perAxis: { variant: string; successRateDelta: number }[];
+}
+
 export interface ReportView {
   title: string;
   disclaimer: string;
@@ -166,6 +201,7 @@ export interface ReportView {
     ratio: { baseline: string; external: string; input: number; output: number } | null;
     perAxis: { variant: string; stepsDelta: number }[];
   };
+  success?: SuccessView; // present only under ground truth (success is noise without it)
 }
 
 const DISCLAIMER =
@@ -173,10 +209,51 @@ const DISCLAIMER =
   "With no ground truth (expected_chunk_ids empty), success-derived metrics — success rate, within/cross-doc success, recovery, " +
   "follow-up success, abstention precision, explicit-gap rate, cumulative passage coverage — are suppressed as noise. Not a corpus result.";
 
+const PILOT_DISCLAIMER =
+  "Pilot run with hand-filled ground truth over the dogfooding db/ — not a formal corpus (no designed taxonomy or vocabulary-mismatch probes), so read success rates as directional. " +
+  "Success is judge-free reach: an answerable turn succeeds when it reads a sufficient chunk (any-of within each expected group); a gap turn, when it reports the gap. " +
+  "Steps and tokens are split by outcome (✓ succeeded / ✗ failed) so a variant that fails fast isn't mistaken for a cheap one.";
+
+// Ground truth is present when any answerable turn declares expected chunks. Without it,
+// success-derived metrics are suppressed; with it, the success view is built.
+function hasGroundTruth(problems?: BenchmarkProblem[]): boolean {
+  return Boolean(
+    problems?.some((p) =>
+      p.turns.some(
+        (t) => t.answerable && ((t.expected_chunk_groups?.length ?? 0) > 0 || (t.expected_chunk_ids?.length ?? 0) > 0),
+      ),
+    ),
+  );
+}
+
+function outcomeStats(rs: TurnResult[]): OutcomeStats {
+  const n = rs.length;
+  const mean = (pick: (t: TurnResult) => number): number => (n === 0 ? 0 : rs.reduce((s, t) => s + pick(t), 0) / n);
+  return { turns: n, avgSteps: mean((t) => t.decision_steps), avgIn: mean((t) => t.tokens.input), avgOut: mean((t) => t.tokens.output) };
+}
+
+function buildSuccessView(report: BenchmarkReport): SuccessView {
+  const { aggregates, results, deltas } = report;
+  const rows: SuccessRow[] = aggregates.map((a) => {
+    const rs = results.filter((r) => r.variant === a.variant);
+    return {
+      variant: a.variant,
+      successRate: a.success_rate,
+      withinSuccess: a.within_doc_success_rate,
+      crossSuccess: a.cross_doc_success_rate,
+      success: outcomeStats(rs.filter((r) => r.success)),
+      failure: outcomeStats(rs.filter((r) => !r.success)),
+    };
+  });
+  return { columns: SUCCESS_COLUMNS, rows, perAxis: deltas.per_axis.map((d) => ({ variant: d.variant, successRateDelta: d.success_rate_delta })) };
+}
+
 // Pure display model: the single source of truth for what the report shows. It applies
 // the finite-ratio guard and realized totals; both renderers (text, DOM) consume it.
-export function reportView(report: BenchmarkReport): ReportView {
+// Pass the run's problems to unlock the pilot success view when ground truth is present.
+export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[]): ReportView {
   const { run, aggregates, deltas, results } = report;
+  const groundTruth = hasGroundTruth(problems);
 
   const rows: VariantRow[] = aggregates.map((a) => {
     const cc = classificationCounts(results, a.variant);
@@ -206,8 +283,8 @@ export function reportView(report: BenchmarkReport): ReportView {
       : null;
 
   return {
-    title: `Benchmark run ${run.run_id} — ground-truth-free metrics`,
-    disclaimer: DISCLAIMER,
+    title: `Benchmark run ${run.run_id} — ${groundTruth ? "pilot (hand-filled ground truth)" : "ground-truth-free metrics"}`,
+    disclaimer: groundTruth ? PILOT_DISCLAIMER : DISCLAIMER,
     meta:
       `model: ${run.model} · commit: ${run.knowdb_commit_sha} · tools: ${run.tool_set_version} · ` +
       `problem set: ${run.problem_set_id} · ${run.started_at} → ${run.ended_at}`,
@@ -221,6 +298,7 @@ export function reportView(report: BenchmarkReport): ReportView {
       ratio,
       perAxis: deltas.per_axis.map((d) => ({ variant: d.variant, stepsDelta: d.decision_steps_delta })),
     },
+    ...(groundTruth ? { success: buildSuccessView(report) } : {}),
   };
 }
 
@@ -240,9 +318,26 @@ export function variantRowCells(r: VariantRow): string[] {
   ];
 }
 
+// One success row's cells as display strings, in SUCCESS_COLUMNS order. An outcome
+// group with no turns renders "—" (no average to show), not 0.
+export function successRowCells(r: SuccessRow): string[] {
+  const split = (pick: (o: OutcomeStats) => number, fmt: (n: number) => string): string =>
+    `${r.success.turns ? fmt(pick(r.success)) : "—"}/${r.failure.turns ? fmt(pick(r.failure)) : "—"}`;
+  const round = (n: number): string => String(Math.round(n));
+  return [
+    r.variant,
+    pct(r.successRate),
+    pct(r.withinSuccess),
+    pct(r.crossSuccess),
+    split((o) => o.avgSteps, n2),
+    split((o) => o.avgIn, round),
+    split((o) => o.avgOut, round),
+  ];
+}
+
 // Markdown serialization of the view — used for the downloadable .md report.
-export function renderReportText(report: BenchmarkReport): string {
-  const v = reportView(report);
+export function renderReportText(report: BenchmarkReport, problems?: BenchmarkProblem[]): string {
+  const v = reportView(report, problems);
   const lines: string[] = [`# ${v.title}`, "", `> ${v.disclaimer}`, "", v.meta, ""];
 
   lines.push("## Per-variant (cost + behavior)", "");
@@ -250,6 +345,18 @@ export function renderReportText(report: BenchmarkReport): string {
   lines.push(`|${v.perVariant.columns.map(() => "---").join("|")}|`);
   for (const row of v.perVariant.rows) lines.push(`| ${variantRowCells(row).join(" | ")} |`);
   lines.push("");
+
+  if (v.success) {
+    lines.push("## Success (pilot — steps/tokens gated on reach)", "");
+    lines.push(`| ${v.success.columns.join(" | ")} |`);
+    lines.push(`|${v.success.columns.map(() => "---").join("|")}|`);
+    for (const row of v.success.rows) lines.push(`| ${successRowCells(row).join(" | ")} |`);
+    lines.push("");
+    lines.push("**Per-axis success-rate delta** (baseline minus axis-off; positive = the axis helps):", "");
+    lines.push("| axis-off variant | Δ success |", "|---|--:|");
+    for (const d of v.success.perAxis) lines.push(`| ${d.variant} | ${signed(d.successRateDelta)} |`);
+    lines.push("");
+  }
 
   lines.push("## Cost story", "");
   lines.push(
