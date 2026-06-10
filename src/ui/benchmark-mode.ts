@@ -1,8 +1,9 @@
-// Browser smoke-run harness, gated behind ?benchmark=1. With the flag it mounts an
-// overlay panel, reuses the page's static db/ index + manifest and the session API
-// key, runs the ablation matrix over a no-ground-truth question set, and renders only
-// success-independent metrics. Without the flag the module is inert — no DOM, no
-// fetch, no API call — so the normal chat page is unaffected.
+// Benchmark mode UI, gated behind ?benchmark=1. With the flag it mounts an overlay
+// panel, reuses the page's static db/ index + manifest and the session API key, runs
+// the ablation matrix over a question set, and renders the report. It currently drives
+// the no-ground-truth smoke set and shows only success-independent metrics; the same
+// shell carries forward as the question set evolves. Without the flag the module is
+// inert — no DOM, no fetch, no API call — so the normal chat page is unaffected.
 //
 // Safeguards (it spends real tokens): mounts only behind the flag; runs only on an
 // explicit button, never on load; a cost-preview confirm precedes the first request;
@@ -58,7 +59,7 @@ function download(filename: string, text: string, mime: string): void {
 const fmtUsd = (x: number): string => `$${x.toFixed(2)}`;
 const fmtTok = (x: number): string => (x >= 1000 ? `${(x / 1000).toFixed(0)}k` : String(x));
 
-export async function mountBenchmarkSmoke(): Promise<void> {
+export async function mountBenchmarkMode(): Promise<void> {
   const panel = elFromHtml(`
     <div id="knowdb-smoke" style="position:fixed;inset:0;z-index:9999;background:#fff;display:flex;flex-direction:column;font-family:-apple-system,Segoe UI,sans-serif;font-size:14px;color:#1f2328">
       <div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:#f6f8fa;border-bottom:1px solid #d0d7de">
@@ -227,5 +228,5 @@ function nowStamp(): string {
 
 // Inert unless the flag is set.
 if (typeof window !== "undefined" && isBenchmarkFlag()) {
-  void mountBenchmarkSmoke();
+  void mountBenchmarkMode();
 }

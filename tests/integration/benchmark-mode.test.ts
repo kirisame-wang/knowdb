@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-// The harness self-gates at import: it must be inert unless ?benchmark=1.
+// The module self-gates at import: it must be inert unless ?benchmark=1.
 // These tests exercise that gate by importing the module under two URL states.
 
 function setUrl(search: string): void {
   window.location.href = `https://localhost/${search}`;
 }
 
-describe("benchmark smoke harness — flag gating", () => {
+describe("benchmark mode UI — flag gating", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
     vi.resetModules();
@@ -21,7 +21,7 @@ describe("benchmark smoke harness — flag gating", () => {
     setUrl("");
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
-    await import("../../src/ui/benchmark-smoke.js");
+    await import("../../src/ui/benchmark-mode.js");
     expect(document.getElementById("knowdb-smoke")).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
@@ -34,7 +34,7 @@ describe("benchmark smoke harness — flag gating", () => {
       json: async () => (String(url).includes("smoke") ? [] : {}),
     }));
     vi.stubGlobal("fetch", fetchSpy);
-    await import("../../src/ui/benchmark-smoke.js");
+    await import("../../src/ui/benchmark-mode.js");
     // The panel is appended synchronously at mount start, before any await.
     expect(document.getElementById("knowdb-smoke")).not.toBeNull();
     // Mount loads index + manifest + smoke.json (all three fetches fire synchronously).
