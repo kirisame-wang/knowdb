@@ -166,8 +166,8 @@ describe("collectReport + renderReportText (end-to-end, no live API)", () => {
     expect(header.toLowerCase()).not.toContain("success");
     expect(header.toLowerCase()).not.toContain("recovery");
     expect(header.toLowerCase()).not.toContain("abstention");
-    // The doc-span column is turn-classification counts, not a success rate — label says so.
-    expect(header.toLowerCase()).toContain("within/cross");
+    // The doc-span column is a behavioural read count, not a success rate — label says so.
+    expect(header.toLowerCase()).toContain("docs read");
     // Realized usage is surfaced so the consent estimate can be reconciled.
     expect(md).toContain("Realized usage");
   });
@@ -263,7 +263,7 @@ describe("reportView (structured display data)", () => {
     expect(cols).not.toContain("success");
     expect(cols).not.toContain("recovery");
     expect(cols).not.toContain("abstention");
-    expect(cols).toContain("within/cross");
+    expect(cols).toContain("docs read");
   });
 
   it("ratio is null when the floor variant produced no turns", async () => {
@@ -284,7 +284,8 @@ describe("reportView (pilot — ground truth present)", () => {
 
   const result = (over: Partial<TurnResult>): TurnResult => ({
     problem_id: "t1", turn_index: 0, query_id: "q", variant: "full", is_followup: false,
-    turn_type: "symmetric", answerable: true, success: true, classification_actual: "within_doc",
+    turn_type: "symmetric", answerable: true, success: true,
+    expected_classification: "within_doc", classification_actual: "within_doc",
     explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 0,
     tokens: { input: 0, output: 0 }, ...over,
   });
@@ -351,6 +352,25 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(cells[0]).toBe("full (baseline)"); // role label
     expect(cells[1]).toBe("50% (1/2)");       // success k/n
     expect(cells[2]).toBe("50% (1/2)");       // within✓ k/n
+  });
+
+  it("partitions within/cross success by the question's designed type, not agent behaviour", () => {
+    const rep = {
+      run: report.run,
+      results: [
+        // designed cross-doc but the agent happened to read one doc → still counts as cross
+        result({ variant: "full", expected_classification: "cross_doc", classification_actual: "within_doc", success: true }),
+        // designed within-doc but the agent wandered across docs → still counts as within
+        result({ variant: "full", expected_classification: "within_doc", classification_actual: "cross_doc", success: false }),
+      ],
+      aggregates: [agg({ variant: "full", turn_count: 2 })],
+      deltas: { baseline_variant: "full", per_axis: [] },
+    } as unknown as BenchmarkReport;
+    const full = reportView(rep, gtProblems).success!.rows.find((r) => r.variant === "full")!;
+    expect(full.crossTurns).toBe(1);
+    expect(full.crossPass).toBe(1); // the cross-designed turn succeeded
+    expect(full.withinTurns).toBe(1);
+    expect(full.withinPass).toBe(0); // the within-designed turn failed
   });
 
   it("leads the meta line with model and sample size", () => {

@@ -73,7 +73,8 @@ export interface TurnResult {
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // ground truth; gap-correctness judgement
   success: boolean;                        // reach oracle (answerable: read expected chunks; unanswerable: reported gap); a human grade overrides if present
-  classification_actual: "within_doc" | "cross_doc";
+  expected_classification: "within_doc" | "cross_doc";  // the question's designed type (a stable invariant); success-by-class partitions on this
+  classification_actual: "within_doc" | "cross_doc";    // docs the agent actually read (1 vs >1) — a behavioural observation, varies with stochastic navigation
   explicit_gap_reported: boolean;          // agent terminally reported a coverage gap
   encountered_gap_signal: boolean;         // a search returned known_gap mid-turn (recovery denominator; ≠ terminal report)
   decision_steps: number;                  // from QueryTrace.tool_calls.length

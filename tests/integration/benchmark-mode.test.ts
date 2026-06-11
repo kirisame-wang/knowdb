@@ -66,7 +66,7 @@ describe("renderReport — DOM tables", () => {
         "pattern-use (of reads)",
         "read chars (pattern/plain)",
         "gap-signal",
-        "turns (within/cross)",
+        "docs read (1/>1)",
       ],
       rows: [
         {
@@ -100,7 +100,7 @@ describe("renderReport — DOM tables", () => {
 
     const header = (tables[0]!.querySelector("thead")?.textContent ?? "").toLowerCase();
     expect(header).toContain("avg steps");
-    expect(header).toContain("within/cross"); // classification counts, not a success rate
+    expect(header).toContain("docs read"); // behavioural read count, not a success rate
     expect(header).not.toContain("success");
     expect(header).not.toContain("recovery");
 

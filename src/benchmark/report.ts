@@ -118,11 +118,21 @@ function gapSignalRate(results: TurnResult[], variant: string): number {
   return rs.length === 0 ? 0 : rs.filter((r) => r.encountered_gap_signal).length / rs.length;
 }
 
+// Behavioural: how many turns the agent read within a single doc vs across docs.
 function classificationCounts(results: TurnResult[], variant: string): { within: number; cross: number } {
   const rs = results.filter((r) => r.variant === variant);
   return {
     within: rs.filter((r) => r.classification_actual === "within_doc").length,
     cross: rs.filter((r) => r.classification_actual === "cross_doc").length,
+  };
+}
+
+// By the question's designed type — the comparable partition for success-by-class.
+function expectedClassCounts(results: TurnResult[], variant: string): { within: number; cross: number } {
+  const rs = results.filter((r) => r.variant === variant);
+  return {
+    within: rs.filter((r) => r.expected_classification === "within_doc").length,
+    cross: rs.filter((r) => r.expected_classification === "cross_doc").length,
   };
 }
 
@@ -143,7 +153,7 @@ export const PER_VARIANT_COLUMNS = [
   "pattern-use (of reads)",
   "read chars (pattern/plain)",
   "gap-signal",
-  "turns (within/cross)",
+  "docs read (1/>1)",
 ] as const;
 
 // The injected baseline ("full") and cost-floor ("baseline_search_read") roles, shown
@@ -263,9 +273,11 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
   const { aggregates, results, deltas } = report;
   const rows: SuccessRow[] = aggregates.map((a) => {
     const rs = results.filter((r) => r.variant === a.variant);
-    const cc = classificationCounts(results, a.variant);
+    // within/cross success uses the designed question type (matches rollupVariant), so the
+    // partition is the same set of questions across variants — comparable, not behavioural.
+    const cc = expectedClassCounts(results, a.variant);
     const passIn = (cls: "within_doc" | "cross_doc"): number =>
-      rs.filter((r) => r.classification_actual === cls && r.success).length;
+      rs.filter((r) => r.expected_classification === cls && r.success).length;
     const role = roleOf(deltas, a.variant);
     return {
       variant: a.variant,

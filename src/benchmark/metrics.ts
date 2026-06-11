@@ -166,8 +166,11 @@ export function rollupVariant(
   const ts = traces.filter((t) => assignOf.get(t.query_id)?.variant === variant);
   const traceOf = new Map(ts.map((t) => [t.query_id, t]));
 
-  const within = rs.filter((r) => r.classification_actual === "within_doc");
-  const cross = rs.filter((r) => r.classification_actual === "cross_doc");
+  // Success-by-class partitions on the question's designed type (a stable invariant),
+  // not on how many docs the agent happened to read — that varies with stochastic
+  // navigation, making classification_actual non-comparable across variants/runs.
+  const within = rs.filter((r) => r.expected_classification === "within_doc");
+  const cross = rs.filter((r) => r.expected_classification === "cross_doc");
   const followups = rs.filter((r) => r.is_followup);
   const reportedGaps = rs.filter((r) => r.explicit_gap_reported);
   // Answerable turns whose search false-alarmed a gap — the recovery denominator.

@@ -52,6 +52,7 @@ export function computeReport(
         turn_type: turn.turn_type,
         answerable: turn.answerable,
         success,
+        expected_classification: turn.expected_classification,
         classification_actual: classifyQuery(t),
         explicit_gap_reported: terminalGapReported(turn, t, success),
         encountered_gap_signal: encounteredKnownGap(t),
