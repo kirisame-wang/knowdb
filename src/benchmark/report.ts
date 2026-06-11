@@ -455,7 +455,7 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
   if (v.cost.ratio) {
     lines.push(
       `**Token ratio** ${v.cost.ratio.baseline} vs ${v.cost.ratio.external} (floor): ` +
-        `input ×${n2(v.cost.ratio.input)}, output ×${n2(v.cost.ratio.output)} (>1 = full config costs more than the flat search+read floor).`,
+        `input ×${n2(v.cost.ratio.input)}, output ×${n2(v.cost.ratio.output)} (>1 = full config costs more than the search+read floor — that floor drops the navigation tools but keeps search-hit structure).`,
     );
   } else {
     lines.push("_No token ratio: the cost-floor variant produced no turns (partial or aborted run)._");

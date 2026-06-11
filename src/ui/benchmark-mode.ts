@@ -129,7 +129,7 @@ export function renderReport(view: ReportView): HTMLElement {
     c.ratio
       ? block(
           "p",
-          `Token ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): input ×${c.ratio.input.toFixed(2)}, output ×${c.ratio.output.toFixed(2)} (>1 = full config costs more than the flat search+read floor).`,
+          `Token ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): input ×${c.ratio.input.toFixed(2)}, output ×${c.ratio.output.toFixed(2)} (>1 = full config costs more than the search+read floor — that floor drops the navigation tools but keeps search-hit structure).`,
           "margin:4px 0",
         )
       : block("p", "No token ratio: the cost-floor variant produced no turns (partial or aborted run).", "margin:4px 0;color:#656d76"),

@@ -15,7 +15,9 @@ export const ABLATION_VARIANTS = new Set<string>([
 // Ablation by tool allowlist: a variant drops the tools its axis turns off.
 // Content axes and unknown variants keep the full set (they ablate via result transform).
 
-// The cost-floor variant keeps a flat search+read surface plus orientation tools.
+// The cost-floor variant exposes only search + read_chunk (plus orientation); it drops
+// the navigation tools but its search hits keep their structure enrichment (only
+// no_structure strips that), so it is not a structure-free baseline.
 const SEARCH_READ_FLOOR = new Set(["get_instructions", "list_docs", "search", "read_chunk"]);
 
 export function toolsFor(variant: string, tools: Tool[]): Tool[] {
