@@ -164,8 +164,8 @@ describe("collectReport + renderReportText (end-to-end, no live API)", () => {
     expect(header.toLowerCase()).not.toContain("success");
     expect(header.toLowerCase()).not.toContain("recovery");
     expect(header.toLowerCase()).not.toContain("abstention");
-    // The doc-span column is raw counts, not a success rate — label says so.
-    expect(header.toLowerCase()).toContain("count");
+    // The doc-span column is turn-classification counts, not a success rate — label says so.
+    expect(header.toLowerCase()).toContain("within/cross");
     // Realized usage is surfaced so the consent estimate can be reconciled.
     expect(md).toContain("Realized usage");
   });
@@ -261,7 +261,7 @@ describe("reportView (structured display data)", () => {
     expect(cols).not.toContain("success");
     expect(cols).not.toContain("recovery");
     expect(cols).not.toContain("abstention");
-    expect(cols).toContain("count");
+    expect(cols).toContain("within/cross");
   });
 
   it("ratio is null when the floor variant produced no turns", async () => {
@@ -340,6 +340,21 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(full.withinTurns).toBe(2); // both results are within_doc
     expect(full.crossTurns).toBe(0);  // no cross_doc turns → cross✓ should render —
     expect(successRowCells(full)[3]).toBe("—"); // cross✓ cell
+  });
+
+  it("carries k/n on every rate and labels the baseline role", () => {
+    const sv = reportView(report, gtProblems).success!;
+    const cells = successRowCells(sv.rows.find((r) => r.variant === "full")!);
+    expect(cells[0]).toBe("full (baseline)"); // role label
+    expect(cells[1]).toBe("50% (1/2)");       // success k/n
+    expect(cells[2]).toBe("50% (1/2)");       // within✓ k/n
+  });
+
+  it("leads the meta line with model and sample size", () => {
+    const meta = reportView(report, gtProblems).meta;
+    expect(meta.startsWith("m · 2 variants")).toBe(true); // model first, variant count next
+    expect(meta).toMatch(/turns/);                         // sample size surfaced
+    expect(meta).toContain("pilot");
   });
 
   it("renderReportText shows the success section, — for an absent outcome, and a pp-unit delta", () => {

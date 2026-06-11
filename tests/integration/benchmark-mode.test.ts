@@ -63,10 +63,10 @@ describe("renderReport — DOM tables", () => {
         "avg steps",
         "avg in-tok",
         "avg out-tok",
-        "pattern-use",
-        "read-chunk chars (pat/no-pat)",
+        "pattern-use (of reads)",
+        "read chars (pattern/plain)",
         "gap-signal",
-        "within/cross (count)",
+        "turns (within/cross)",
       ],
       rows: [
         {
@@ -100,7 +100,7 @@ describe("renderReport — DOM tables", () => {
 
     const header = (tables[0]!.querySelector("thead")?.textContent ?? "").toLowerCase();
     expect(header).toContain("avg steps");
-    expect(header).toContain("count");
+    expect(header).toContain("within/cross"); // classification counts, not a success rate
     expect(header).not.toContain("success");
     expect(header).not.toContain("recovery");
 
@@ -117,8 +117,8 @@ describe("renderReport — DOM tables", () => {
       success: {
         columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
         rows: [
-          { variant: "full", successRate: 0.5, withinSuccess: 0.5, withinTurns: 2, crossSuccess: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
-          { variant: "no_search", successRate: 0, withinSuccess: 0, withinTurns: 1, crossSuccess: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
+          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
+          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
         ],
         perAxis: [{ variant: "no_search", successRateDelta: 0.5 }],
       },
