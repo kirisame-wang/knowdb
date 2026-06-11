@@ -119,7 +119,7 @@ export function renderReport(view: ReportView): HTMLElement {
 
   const withSucc = view.success !== undefined;
   root.appendChild(block("h2", "Per-axis ablation deltas", "font-size:13px;margin:14px 0 4px"));
-  root.appendChild(block("p", "Positive = the axis is doing useful work (removing it lowers success and/or costs more steps).", "margin:4px 0;color:#656d76;font-size:12px"));
+  root.appendChild(block("p", "Δ = axis-off variant minus baseline (what happens when the axis is removed). A useful axis shows success down (−) and steps up (+).", "margin:4px 0;color:#656d76;font-size:12px"));
   root.appendChild(tableEl(axisDeltaColumns(withSucc), view.axisDeltas.map((d) => axisDeltaRowCells(d, withSucc))));
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));

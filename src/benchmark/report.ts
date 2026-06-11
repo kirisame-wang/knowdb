@@ -204,12 +204,13 @@ export interface SuccessView {
   rows: SuccessRow[];
 }
 
-// One axis's ablation contribution: what removing it costs in steps, and (under ground
-// truth) what it buys in success. Both sign so that positive = the axis is doing work.
+// One axis's ablation effect, both columns read the same way: ablated variant minus
+// baseline. Removing a useful axis lowers success (negative Δ) and raises steps
+// (positive Δ) — one consistent "what happens when you remove it" direction.
 export interface AxisDeltaRow {
   variant: string; // the axis-off variant, e.g. "no_search"
-  stepsDelta: number;
-  successDelta?: number; // present only under ground truth
+  stepsDelta: number; // axis-off − baseline avg steps
+  successDelta?: number; // axis-off − baseline success rate; present only under ground truth
 }
 
 export interface ReportView {
@@ -338,8 +339,10 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
     perVariant: { columns: PER_VARIANT_COLUMNS, rows },
     axisDeltas: deltas.per_axis.map((d) => ({
       variant: d.variant,
-      stepsDelta: d.decision_steps_delta,
-      ...(groundTruth ? { successDelta: d.success_rate_delta } : {}),
+      stepsDelta: d.decision_steps_delta, // already axis-off − baseline
+      // Re-sign the stored baseline−axis delta to axis-off − baseline, so both columns
+      // read the same way: the experimental (axis-off) result minus baseline.
+      ...(groundTruth ? { successDelta: -d.success_rate_delta } : {}),
     })),
     cost: {
       realized: {
@@ -402,7 +405,8 @@ export function axisDeltaRowCells(d: AxisDeltaRow, withSuccess: boolean): string
   return withSuccess ? [d.variant, signedPp(d.successDelta ?? 0), signed(d.stepsDelta)] : [d.variant, signed(d.stepsDelta)];
 }
 
-const AXIS_DELTA_NOTE = "Positive = the axis is doing useful work (removing it lowers success and/or costs more steps).";
+const AXIS_DELTA_NOTE =
+  "Δ = axis-off variant minus baseline (what happens when the axis is removed). A useful axis shows success down (−) and steps up (+).";
 
 // Markdown serialization of the view — used for the downloadable .md report.
 export function renderReportText(report: BenchmarkReport, problems?: BenchmarkProblem[]): string {

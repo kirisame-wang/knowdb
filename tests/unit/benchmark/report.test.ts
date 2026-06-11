@@ -333,7 +333,8 @@ describe("reportView (pilot — ground truth present)", () => {
     const ns = sv.rows.find((r) => r.variant === "no_search")!;
     expect(ns.success.turns).toBe(0);
     expect(ns.failure).toMatchObject({ turns: 1, avgSteps: 9 });
-    expect(reportView(report, gtProblems).axisDeltas).toEqual([{ variant: "no_search", stepsDelta: 1, successDelta: 0.5 }]);
+    // success delta is re-signed to axis-off − baseline: success_rate_delta 0.5 → −0.5.
+    expect(reportView(report, gtProblems).axisDeltas).toEqual([{ variant: "no_search", stepsDelta: 1, successDelta: -0.5 }]);
   });
 
   it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {
@@ -364,7 +365,7 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(md.toLowerCase()).toContain("pilot");
     expect(md).toMatch(/3\.00\/8\.00/);   // full: steps ✓/✗
     expect(md).toContain("—/9.00");        // no_search: no successes → — for the ✓ side
-    expect(md).toContain("+50pp");         // success-rate delta in percentage points
-    expect(md).not.toMatch(/\| no_search \| \+0\.50 \|/); // not a raw fraction
+    expect(md).toContain("-50pp");         // success delta, axis-off − baseline, in percentage points
+    expect(md).not.toMatch(/-0\.50/);      // pp, not a raw fraction
   });
 });

@@ -114,7 +114,7 @@ describe("renderReport — DOM tables", () => {
     const view: ReportView = {
       ...VIEW,
       title: "Benchmark run r1 — pilot (hand-filled ground truth)",
-      axisDeltas: [{ variant: "no_search", stepsDelta: 0.5, successDelta: 0.5 }],
+      axisDeltas: [{ variant: "no_search", stepsDelta: 0.5, successDelta: -0.5 }],
       success: {
         columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
         rows: [
@@ -129,7 +129,7 @@ describe("renderReport — DOM tables", () => {
     const allText = el.textContent ?? "";
     expect(allText).toContain("3.00/8.00"); // full: succeeded/failed steps
     expect(allText).toContain("—/9.00"); // no_search: no successes → — on the ✓ side
-    expect(allText).toContain("+50pp"); // success-rate delta in percentage points, not a raw fraction
+    expect(allText).toContain("-50pp"); // success delta (axis-off − baseline) in percentage points
   });
 
   it("renders no success table without ground truth (GT-free view)", async () => {
