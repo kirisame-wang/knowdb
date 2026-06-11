@@ -18,6 +18,8 @@ import {
   reportView,
   variantRowCells,
   successRowCells,
+  axisDeltaColumns,
+  axisDeltaRowCells,
 } from "../benchmark/report.js";
 import type { ReportView } from "../benchmark/report.js";
 import {
@@ -100,10 +102,6 @@ function block(tag: "h1" | "h2" | "p", text: string, css = ""): HTMLElement {
   return e;
 }
 
-const signedDelta = (x: number): string => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
-// A delta of two rates is in percentage points, not a raw fraction.
-const signedPp = (x: number): string => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(0)}pp`;
-
 // Build the report as DOM blocks (headings + real tables) from the pure view.
 export function renderReport(view: ReportView): HTMLElement {
   const root = document.createElement("div");
@@ -117,9 +115,12 @@ export function renderReport(view: ReportView): HTMLElement {
   if (view.success) {
     root.appendChild(block("h2", "Success (pilot — steps/tokens gated on reach)", "font-size:13px;margin:14px 0 4px"));
     root.appendChild(tableEl(view.success.columns, view.success.rows.map(successRowCells)));
-    root.appendChild(block("p", "Per-axis success-rate delta (baseline minus axis-off; positive = the axis helps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
-    root.appendChild(tableEl(["axis-off variant", "Δ success (pp)"], view.success.perAxis.map((d) => [d.variant, signedPp(d.successRateDelta)])));
   }
+
+  const withSucc = view.success !== undefined;
+  root.appendChild(block("h2", "Per-axis ablation deltas", "font-size:13px;margin:14px 0 4px"));
+  root.appendChild(block("p", "Positive = the axis is doing useful work (removing it lowers success and/or costs more steps).", "margin:4px 0;color:#656d76;font-size:12px"));
+  root.appendChild(tableEl(axisDeltaColumns(withSucc), view.axisDeltas.map((d) => axisDeltaRowCells(d, withSucc))));
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
   const c = view.cost;
@@ -133,8 +134,6 @@ export function renderReport(view: ReportView): HTMLElement {
         )
       : block("p", "No token ratio: the cost-floor variant produced no turns (partial or aborted run).", "margin:4px 0;color:#656d76"),
   );
-  root.appendChild(block("p", "Per-axis decision-steps delta (axis-off minus baseline; positive = removing the axis costs more steps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
-  root.appendChild(tableEl(["axis-off variant", "Δ avg steps"], c.perAxis.map((d) => [d.variant, signedDelta(d.stepsDelta)])));
   return root;
 }
 

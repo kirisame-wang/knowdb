@@ -157,7 +157,9 @@ describe("collectReport + renderReportText (end-to-end, no live API)", () => {
     const md = renderReportText(report);
     expect(md).toContain("ground-truth-free");
     expect(md).toContain("Token ratio");
-    expect(md).toContain("decision-steps delta");
+    expect(md).toContain("Per-axis ablation deltas");
+    expect(md).toContain("Δ avg steps");
+    expect(md).not.toContain("Δ success"); // no success column without ground truth
 
     // The per-variant table header must not expose any success-derived column.
     const header = md.split("\n").find((l) => l.includes("avg steps"))!;
@@ -331,7 +333,7 @@ describe("reportView (pilot — ground truth present)", () => {
     const ns = sv.rows.find((r) => r.variant === "no_search")!;
     expect(ns.success.turns).toBe(0);
     expect(ns.failure).toMatchObject({ turns: 1, avgSteps: 9 });
-    expect(sv.perAxis).toEqual([{ variant: "no_search", successRateDelta: 0.5 }]);
+    expect(reportView(report, gtProblems).axisDeltas).toEqual([{ variant: "no_search", stepsDelta: 1, successDelta: 0.5 }]);
   });
 
   it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {

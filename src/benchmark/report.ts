@@ -202,7 +202,14 @@ export const SUCCESS_COLUMNS = [
 export interface SuccessView {
   columns: readonly string[];
   rows: SuccessRow[];
-  perAxis: { variant: string; successRateDelta: number }[];
+}
+
+// One axis's ablation contribution: what removing it costs in steps, and (under ground
+// truth) what it buys in success. Both sign so that positive = the axis is doing work.
+export interface AxisDeltaRow {
+  variant: string; // the axis-off variant, e.g. "no_search"
+  stepsDelta: number;
+  successDelta?: number; // present only under ground truth
 }
 
 export interface ReportView {
@@ -210,10 +217,10 @@ export interface ReportView {
   disclaimer: string;
   meta: string;
   perVariant: { columns: readonly string[]; rows: VariantRow[] };
+  axisDeltas: AxisDeltaRow[]; // per-axis success (pp) + steps deltas, the ablation story in one table
   cost: {
     realized: { input: number; output: number; turns: number };
     ratio: { baseline: string; external: string; input: number; output: number } | null;
-    perAxis: { variant: string; stepsDelta: number }[];
   };
   success?: SuccessView; // present only under ground truth (success is noise without it)
 }
@@ -274,7 +281,7 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       failure: outcomeStats(rs.filter((r) => !r.success)),
     };
   });
-  return { columns: SUCCESS_COLUMNS, rows, perAxis: deltas.per_axis.map((d) => ({ variant: d.variant, successRateDelta: d.success_rate_delta })) };
+  return { columns: SUCCESS_COLUMNS, rows };
 }
 
 // Pure display model: the single source of truth for what the report shows. It applies
@@ -329,6 +336,11 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
       `${run.model} · ${sample} · ${groundTruth ? "pilot" : "no ground truth"} · ` +
       `commit ${run.knowdb_commit_sha} · tools ${run.tool_set_version} · set ${run.problem_set_id} · ${run.started_at} → ${run.ended_at}`,
     perVariant: { columns: PER_VARIANT_COLUMNS, rows },
+    axisDeltas: deltas.per_axis.map((d) => ({
+      variant: d.variant,
+      stepsDelta: d.decision_steps_delta,
+      ...(groundTruth ? { successDelta: d.success_rate_delta } : {}),
+    })),
     cost: {
       realized: {
         input: results.reduce((s, t) => s + t.tokens.input, 0),
@@ -336,7 +348,6 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
         turns: results.length,
       },
       ratio,
-      perAxis: deltas.per_axis.map((d) => ({ variant: d.variant, stepsDelta: d.decision_steps_delta })),
     },
     ...(groundTruth ? { success: buildSuccessView(report) } : {}),
   };
@@ -382,6 +393,17 @@ export function successRowCells(r: SuccessRow): string[] {
   ];
 }
 
+// Per-axis delta table, shared by both renderers. The success column is present only
+// under ground truth; both deltas are signed so positive = the axis is doing useful work.
+export const axisDeltaColumns = (withSuccess: boolean): readonly string[] =>
+  withSuccess ? ["axis-off variant", "Δ success (pp)", "Δ avg steps"] : ["axis-off variant", "Δ avg steps"];
+
+export function axisDeltaRowCells(d: AxisDeltaRow, withSuccess: boolean): string[] {
+  return withSuccess ? [d.variant, signedPp(d.successDelta ?? 0), signed(d.stepsDelta)] : [d.variant, signed(d.stepsDelta)];
+}
+
+const AXIS_DELTA_NOTE = "Positive = the axis is doing useful work (removing it lowers success and/or costs more steps).";
+
 // Markdown serialization of the view — used for the downloadable .md report.
 export function renderReportText(report: BenchmarkReport, problems?: BenchmarkProblem[]): string {
   const v = reportView(report, problems);
@@ -399,11 +421,15 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
     lines.push(`|${v.success.columns.map(() => "---").join("|")}|`);
     for (const row of v.success.rows) lines.push(`| ${successRowCells(row).join(" | ")} |`);
     lines.push("");
-    lines.push("**Per-axis success-rate delta** (baseline minus axis-off; positive = the axis helps):", "");
-    lines.push("| axis-off variant | Δ success (pp) |", "|---|--:|");
-    for (const d of v.success.perAxis) lines.push(`| ${d.variant} | ${signedPp(d.successRateDelta)} |`);
-    lines.push("");
   }
+
+  const withSucc = v.success !== undefined;
+  const adCols = axisDeltaColumns(withSucc);
+  lines.push("## Per-axis ablation deltas", "", AXIS_DELTA_NOTE, "");
+  lines.push(`| ${adCols.join(" | ")} |`);
+  lines.push(`|${adCols.map((_, i) => (i === 0 ? "---" : "--:")).join("|")}|`);
+  for (const d of v.axisDeltas) lines.push(`| ${axisDeltaRowCells(d, withSucc).join(" | ")} |`);
+  lines.push("");
 
   lines.push("## Cost story", "");
   lines.push(
@@ -418,10 +444,6 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
   } else {
     lines.push("_No token ratio: the cost-floor variant produced no turns (partial or aborted run)._");
   }
-  lines.push("");
-  lines.push("**Per-axis decision-steps delta** (axis-off minus baseline; positive = removing the axis costs more steps):", "");
-  lines.push("| axis-off variant | Δ avg steps |", "|---|--:|");
-  for (const d of v.cost.perAxis) lines.push(`| ${d.variant} | ${signed(d.stepsDelta)} |`);
   lines.push("");
   return lines.join("\n");
 }
