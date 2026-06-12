@@ -124,7 +124,7 @@ export function renderReport(view: ReportView): HTMLElement {
 
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
   const c = view.cost;
-  root.appendChild(block("p", `Realized usage (all variants): ${c.realized.input} in / ${c.realized.output} out tokens over ${c.realized.turns} turns.`, "margin:4px 0"));
+  root.appendChild(block("p", `Realized usage (all variants): ${c.realized.input} in / ${c.realized.output} out tokens and ${c.realized.steps} tool calls (rounds) over ${c.realized.turns} turns.`, "margin:4px 0"));
   root.appendChild(
     c.ratio
       ? block(
@@ -134,6 +134,9 @@ export function renderReport(view: ReportView): HTMLElement {
         )
       : block("p", "No token ratio: the cost-floor variant produced no turns (partial or aborted run).", "margin:4px 0;color:#656d76"),
   );
+  if (c.ratio?.steps !== undefined) {
+    root.appendChild(block("p", `Calls (rounds) ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): ×${c.ratio.steps.toFixed(2)} (>1 = full takes more tool-call rounds than the floor; rounds re-send input each turn — a cost axis tokens reflect only indirectly).`, "margin:4px 0"));
+  }
   return root;
 }
 

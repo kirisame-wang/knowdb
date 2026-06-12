@@ -168,8 +168,10 @@ describe("collectReport + renderReportText (end-to-end, no live API)", () => {
     expect(header.toLowerCase()).not.toContain("abstention");
     // The doc-span column is a behavioural read count, not a success rate — label says so.
     expect(header.toLowerCase()).toContain("docs read");
-    // Realized usage is surfaced so the consent estimate can be reconciled.
+    // Realized usage is surfaced so the consent estimate can be reconciled, with the
+    // call/round count promoted alongside tokens (a turn re-sends input each round).
     expect(md).toContain("Realized usage");
+    expect(md).toContain("tool calls (rounds)");
   });
 
   it("does not render a degenerate cost ratio when the floor variant produced no turns", async () => {
@@ -378,6 +380,56 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(meta.startsWith("m · 2 variants")).toBe(true); // model first, variant count next
     expect(meta).toMatch(/turns/);                         // sample size surfaced
     expect(meta).toContain("pilot");
+  });
+
+  it("promotes call/round into the cost story: realized total + baseline-vs-floor ratio", () => {
+    const costReport = {
+      run: report.run,
+      results: [
+        result({ variant: "full", decision_steps: 4, tokens: { input: 200, output: 20 } }),
+        result({ variant: "baseline_search_read", decision_steps: 8, tokens: { input: 100, output: 10 } }),
+      ],
+      aggregates: [
+        agg({ variant: "full", turn_count: 1, avg_decision_steps: 4, avg_tokens: { input: 200, output: 20 } }),
+        agg({ variant: "baseline_search_read", turn_count: 1, avg_decision_steps: 8, avg_tokens: { input: 100, output: 10 } }),
+      ],
+      deltas: {
+        baseline_variant: "full",
+        external_variant: "baseline_search_read",
+        per_axis: [],
+        external_token_ratio: { input: 2, output: 2 },
+      },
+    } as unknown as BenchmarkReport;
+
+    const v = reportView(costReport);
+    expect(v.cost.realized.steps).toBe(12); // 4 + 8 tool calls total
+    expect(v.cost.ratio!.steps).toBeCloseTo(0.5, 6); // full 4 rounds / floor 8 rounds
+
+    const md = renderReportText(costReport);
+    expect(md).toContain("tool calls (rounds)");
+    expect(md).toContain("Calls (rounds) ratio");
+    expect(md).toContain("×0.50");
+  });
+
+  it("omits the calls ratio when the floor produced no rounds (no divide-by-zero)", () => {
+    const noFloorSteps = {
+      run: report.run,
+      results: [result({ variant: "full", decision_steps: 4 })],
+      aggregates: [
+        agg({ variant: "full", turn_count: 1, avg_decision_steps: 4 }),
+        agg({ variant: "baseline_search_read", turn_count: 0, avg_decision_steps: 0 }),
+      ],
+      deltas: {
+        baseline_variant: "full",
+        external_variant: "baseline_search_read",
+        per_axis: [],
+        external_token_ratio: { input: 2, output: 2 },
+      },
+    } as unknown as BenchmarkReport;
+    const v = reportView(noFloorSteps);
+    expect(v.cost.ratio).not.toBeNull(); // token ratio still finite
+    expect(v.cost.ratio!.steps).toBeUndefined(); // but no calls ratio (floor took 0 rounds)
+    expect(renderReportText(noFloorSteps)).not.toContain("Calls (rounds) ratio");
   });
 
   it("renderReportText shows the success section, — for an absent outcome, and a pp-unit delta", () => {

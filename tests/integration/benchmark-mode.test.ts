@@ -85,8 +85,8 @@ describe("renderReport — DOM tables", () => {
     },
     axisDeltas: [{ variant: "no_search", stepsDelta: 0.5 }],
     cost: {
-      realized: { input: 200, output: 40, turns: 2 },
-      ratio: { baseline: "full", external: "baseline_search_read", input: 1.5, output: 1.2 },
+      realized: { input: 200, output: 40, steps: 9, turns: 2 },
+      ratio: { baseline: "full", external: "baseline_search_read", input: 1.5, output: 1.2, steps: 0.8 },
     },
   };
 

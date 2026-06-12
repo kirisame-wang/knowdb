@@ -230,8 +230,10 @@ export interface ReportView {
   perVariant: { columns: readonly string[]; rows: VariantRow[] };
   axisDeltas: AxisDeltaRow[]; // per-axis success (pp) + steps deltas, the ablation story in one table
   cost: {
-    realized: { input: number; output: number; turns: number };
-    ratio: { baseline: string; external: string; input: number; output: number } | null;
+    // call/round count is promoted alongside tokens: a turn is multi-round and input
+    // re-sends each round, so rounds are a direct cost axis tokens only reflect indirectly.
+    realized: { input: number; output: number; steps: number; turns: number };
+    ratio: { baseline: string; external: string; input: number; output: number; steps?: number } | null;
   };
   success?: SuccessView; // present only under ground truth (success is noise without it)
 }
@@ -327,10 +329,24 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
 
   // A partial / aborted run can leave the floor variant with zero turns, making the
   // ratio Infinity/NaN (mean of no tokens = 0 → divide-by-zero). Drop it to null then.
+  // The call/round ratio rides the same baseline-vs-floor comparison as tokens: how many
+  // more (or fewer) tool-call rounds the full config takes than the floor.
+  const baseAgg = aggregates.find((a) => a.variant === deltas.baseline_variant);
+  const floorAgg = aggregates.find((a) => a.variant === deltas.external_variant);
+  const stepsRatio =
+    baseAgg && floorAgg && floorAgg.avg_decision_steps > 0
+      ? baseAgg.avg_decision_steps / floorAgg.avg_decision_steps
+      : undefined;
   const r = deltas.external_token_ratio;
   const ratio =
     r && Number.isFinite(r.input) && Number.isFinite(r.output)
-      ? { baseline: deltas.baseline_variant ?? "", external: deltas.external_variant ?? "", input: r.input, output: r.output }
+      ? {
+          baseline: deltas.baseline_variant ?? "",
+          external: deltas.external_variant ?? "",
+          input: r.input,
+          output: r.output,
+          ...(stepsRatio !== undefined && Number.isFinite(stepsRatio) ? { steps: stepsRatio } : {}),
+        }
       : null;
 
   // Lead with model + sample size (small samples should be read as directional), then
@@ -360,6 +376,7 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
       realized: {
         input: results.reduce((s, t) => s + t.tokens.input, 0),
         output: results.reduce((s, t) => s + t.tokens.output, 0),
+        steps: results.reduce((s, t) => s + t.decision_steps, 0),
         turns: results.length,
       },
       ratio,
@@ -449,7 +466,8 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
 
   lines.push("## Cost story", "");
   lines.push(
-    `**Realized usage (all variants)**: ${v.cost.realized.input} in / ${v.cost.realized.output} out tokens over ${v.cost.realized.turns} turns.`,
+    `**Realized usage (all variants)**: ${v.cost.realized.input} in / ${v.cost.realized.output} out tokens ` +
+      `and ${v.cost.realized.steps} tool calls (rounds) over ${v.cost.realized.turns} turns.`,
     "",
   );
   if (v.cost.ratio) {
@@ -457,6 +475,12 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
       `**Token ratio** ${v.cost.ratio.baseline} vs ${v.cost.ratio.external} (floor): ` +
         `input ×${n2(v.cost.ratio.input)}, output ×${n2(v.cost.ratio.output)} (>1 = full config costs more than the search+read floor — that floor drops the navigation tools but keeps search-hit structure).`,
     );
+    if (v.cost.ratio.steps !== undefined) {
+      lines.push(
+        `**Calls (rounds) ratio** ${v.cost.ratio.baseline} vs ${v.cost.ratio.external} (floor): ` +
+          `×${n2(v.cost.ratio.steps)} (>1 = full takes more tool-call rounds than the floor; rounds re-send input each turn, a cost axis tokens reflect only indirectly).`,
+      );
+    }
   } else {
     lines.push("_No token ratio: the cost-floor variant produced no turns (partial or aborted run)._");
   }
