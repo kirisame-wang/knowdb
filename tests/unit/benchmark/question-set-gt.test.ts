@@ -40,11 +40,14 @@ describe("question-set ground truth vs corpus index", () => {
     }
   });
 
-  it("coverage set (expected_chunk_ids) is the union of the reach groups", () => {
+  it("coverage set (expected_chunk_ids) contains every reach-group chunk (coverage ⊇ reach)", () => {
+    // The reach rule is a subset of the answer-bearing coverage set; coverage may hold
+    // extra chunks that aren't part of the any-of success test, so superset, not equality.
     for (const { id, t } of turns.filter(({ t }) => t.answerable)) {
-      const fromGroups = new Set((t.expected_chunk_groups ?? []).flat());
       const coverage = new Set(t.expected_chunk_ids ?? []);
-      expect([...coverage].sort(), `${id}#${t.turn_index}: coverage ≠ union of groups`).toEqual([...fromGroups].sort());
+      for (const cid of (t.expected_chunk_groups ?? []).flat()) {
+        expect(coverage.has(cid), `${id}#${t.turn_index}: reach chunk ${cid} missing from coverage set`).toBe(true);
+      }
     }
   });
 
