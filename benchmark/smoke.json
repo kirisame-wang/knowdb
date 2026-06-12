@@ -199,7 +199,7 @@
     "turns": [
       {
         "turn_index": 0,
-        "question": "What is the consolidated revenue trend across the 2022, 2023, and 2024 annual reports?",
+        "question": "What is the operating-revenue trend across the 2022, 2023, and 2024 annual reports?",
         "is_followup": false,
         "turn_type": "structural",
         "answerable": true,
@@ -207,7 +207,7 @@
         "expected_chunk_ids": ["c22ee54c/01-01-01-01", "6621eecc/02-01", "3f0881f1/01-03-01"],
         "expected_chunk_groups": [["c22ee54c/01-01-01-01"], ["6621eecc/02-01"], ["3f0881f1/01-03-01"]],
         "expected_answer_keypoints": [
-          "FY2022 (111) consolidated revenue NT$1,497,478 thousand",
+          "FY2022 (111) revenue NT$1,497,478 thousand",
           "FY2023 (112) NT$1,150,689 thousand — down ~346,789 (~23%) from FY2022",
           "FY2024 (113) NT$1,152,170 thousand — roughly flat vs FY2023 (+1,481); so revenue fell sharply 2022→2023 then flattened 2023→2024"
         ],
