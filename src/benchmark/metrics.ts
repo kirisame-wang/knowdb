@@ -137,12 +137,17 @@ export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanG
   return reachSuccess(turn, trace);
 }
 
-// Ran out of context budget: the loop recorded a 400 "prompt is too long" on
-// trace.error. Both gates — overflow is that 400 subtype, not any echo of the
-// phrase. (successOf makes it a failure.)
+// Ran out of context budget: a 400 "prompt is too long". Both gates — overflow is
+// that 400 subtype, not any echo of the phrase. The string-level form matches the
+// raw onError message the error banner filters on; the trace form is the scorer's.
+// (successOf makes it a failure.)
+export function isContextOverflowError(error: string | undefined): boolean {
+  const e = error ?? "";
+  return /\b400\b/.test(e) && /prompt is too long/i.test(e);
+}
+
 export function isContextOverflow(trace: QueryTrace): boolean {
-  const error = trace.error ?? "";
-  return /\b400\b/.test(error) && /prompt is too long/i.test(error);
+  return isContextOverflowError(trace.error);
 }
 
 // Mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls that
