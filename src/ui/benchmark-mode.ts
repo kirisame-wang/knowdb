@@ -115,8 +115,6 @@ export function renderReport(view: ReportView): HTMLElement {
   if (view.success) {
     root.appendChild(block("h2", "Success (pilot — steps/tokens gated on reach)", "font-size:13px;margin:14px 0 4px"));
     root.appendChild(tableEl(view.success.columns, view.success.rows.map(successRowCells)));
-    if (view.success.overflowNote)
-      root.appendChild(block("p", view.success.overflowNote, "margin:4px 0;color:#656d76;font-size:12px"));
   }
 
   const withSucc = view.success !== undefined;

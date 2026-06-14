@@ -354,11 +354,14 @@ describe("reportView (pilot — ground truth present)", () => {
     const ns = sv.rows.find((x) => x.variant === "no_search")!;
     expect(ns.overflow).toBe(2);            // both failures hit the budget wall
     expect(ns.overflowAfterReach).toBe(1);  // one of them had already reached (over-search)
-    expect(sv.overflowNote).toContain("no_search 2 (1 over-search)");
+    expect(sv.columns).toContain("overflow ✗ (over-search/no-reach)");
+    expect(successRowCells(ns)[4]).toBe("1/1"); // over-search / never-reached, both subtypes explicit
   });
 
-  it("omits the overflow note when no variant overflowed", () => {
-    expect(reportView(report, gtProblems).success!.overflowNote).toBeUndefined();
+  it("renders the overflow cell as — when the variant did not overflow", () => {
+    const sv = reportView(report, gtProblems).success!;
+    const full = sv.rows.find((r) => r.variant === "full")!;
+    expect(successRowCells(full)[4]).toBe("—");
   });
 
   it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {

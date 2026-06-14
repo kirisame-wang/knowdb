@@ -204,6 +204,7 @@ export const SUCCESS_COLUMNS = [
   "success",
   "within✓",
   "cross✓",
+  "overflow ✗ (over-search/no-reach)",
   "steps ✓/✗",
   "in-tok ✓/✗",
   "out-tok ✓/✗",
@@ -212,7 +213,6 @@ export const SUCCESS_COLUMNS = [
 export interface SuccessView {
   columns: readonly string[];
   rows: SuccessRow[];
-  overflowNote?: string; // present when any variant had context-budget overflows, naming them as a failure subtype
 }
 
 // One axis's ablation effect, both columns read the same way: ablated variant minus
@@ -247,7 +247,8 @@ const DISCLAIMER =
 const PILOT_DISCLAIMER =
   "Pilot run with hand-filled ground truth over the dogfooding db/ — not a formal corpus (no designed taxonomy or vocabulary-mismatch probes), so read success rates as directional. " +
   "Success is judge-free reach: an answerable turn succeeds when it reads a sufficient chunk (any-of within each expected group); a gap turn, when it reports the gap. " +
-  "Steps and tokens are split by outcome (✓ succeeded / ✗ failed) so a variant that fails fast isn't mistaken for a cheap one.";
+  "Steps and tokens are split by outcome (✓ succeeded / ✗ failed) so a variant that fails fast isn't mistaken for a cheap one. " +
+  "Overflow counts the failures that hit the model's context-budget wall, split over-search/no-reach (over-search = had already reached the chunks then ran out before answering; no-reach = never reached).";
 
 // Ground truth is present when any answerable turn declares expected chunks. Without it,
 // success-derived metrics are suppressed; with it, the success view is built.
@@ -298,15 +299,7 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       overflowAfterReach: a.overflow_after_reach_count,
     };
   });
-  // Name overflow failures, flagging the over-search ones (reached the answer,
-  // then ran out before delivering) — a different deficiency than never reaching.
-  const overflows = rows
-    .filter((r) => r.overflow > 0)
-    .map((r) => `${r.variant} ${r.overflow}${r.overflowAfterReach > 0 ? ` (${r.overflowAfterReach} over-search)` : ""}`);
-  const overflowNote = overflows.length
-    ? `Context overflows (failures — no answer delivered in budget; over-search = reached then ran out): ${overflows.join(", ")}.`
-    : undefined;
-  return { columns: SUCCESS_COLUMNS, rows, ...(overflowNote ? { overflowNote } : {}) };
+  return { columns: SUCCESS_COLUMNS, rows };
 }
 
 // Pure display model: the single source of truth for what the report shows. It applies
@@ -420,11 +413,15 @@ export function successRowCells(r: SuccessRow): string[] {
   // Rates carry their k/n so a 100% over one turn doesn't read like a 100% over many.
   const rate = (p: number, n: number, frac: number): string => (n === 0 ? "—" : `${pct(frac)} (${p}/${n})`);
   const total = r.success.turns + r.failure.turns;
+  // overflow is a failure subset; "—" when none, else the two navigation subtypes
+  // side by side: over-search (reached, then over-searched) / no-reach (never reached).
+  const overflow = r.overflow === 0 ? "—" : `${r.overflowAfterReach}/${r.overflow - r.overflowAfterReach}`;
   return [
     variantLabel(r.variant, r.role),
     rate(r.successPass, total, r.successRate),
     rate(r.withinPass, r.withinTurns, r.withinSuccess),
     rate(r.crossPass, r.crossTurns, r.crossSuccess),
+    overflow,
     split((o) => o.avgSteps, n2),
     split((o) => o.avgIn, round),
     split((o) => o.avgOut, round),
@@ -459,7 +456,6 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
     lines.push(`| ${v.success.columns.join(" | ")} |`);
     lines.push(`|${v.success.columns.map(() => "---").join("|")}|`);
     for (const row of v.success.rows) lines.push(`| ${successRowCells(row).join(" | ")} |`);
-    if (v.success.overflowNote) lines.push("", v.success.overflowNote);
     lines.push("");
   }
 
