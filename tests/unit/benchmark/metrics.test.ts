@@ -239,6 +239,18 @@ describe("isContextOverflow", () => {
     ).toBe(false);
   });
 
+  it("false for a 400 that is not an overflow (status gate alone is not enough — the message must match too)", () => {
+    expect(isContextOverflow(withError('400 {"type":"error","error":{"message":"messages: at least one message is required"}}'))).toBe(false);
+  });
+
+  it("false for the overflow message without the status (the 400 gate is load-bearing, not just the phrase)", () => {
+    expect(isContextOverflow(withError("prompt is too long: 207358 tokens > 200000 maximum"))).toBe(false);
+  });
+
+  it("false when 400 is embedded in a larger number, not the status (e.g. a 5400ms latency note)", () => {
+    expect(isContextOverflow(withError("503 service error after 5400ms; prompt is too long"))).toBe(false);
+  });
+
   it("false for a completed turn with no error", () => {
     expect(isContextOverflow(trace([]))).toBe(false);
   });
