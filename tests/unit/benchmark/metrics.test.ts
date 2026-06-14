@@ -233,6 +233,12 @@ describe("isContextOverflow", () => {
     expect(isContextOverflow(withError("network error"))).toBe(false);
   });
 
+  it("false when the phrase appears outside a 400 (overflow is the 400 subtype, not any echo of the words)", () => {
+    expect(
+      isContextOverflow(withError('529 {"type":"error","error":{"message":"overloaded; prompt is too long to retry"}}')),
+    ).toBe(false);
+  });
+
   it("false for a completed turn with no error", () => {
     expect(isContextOverflow(trace([]))).toBe(false);
   });
