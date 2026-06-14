@@ -110,8 +110,6 @@ export function collectReport(
 }
 
 // ── Rendering ────────────────────────────────────────────────────────────────
-// Without ground truth the view shows only success-independent metrics (success-derived
-// fields are noise; DISCLAIMER spells out which). With it, the pilot success view is added.
 
 function gapSignalRate(results: TurnResult[], variant: string): number {
   const rs = results.filter((r) => r.variant === variant);
@@ -275,8 +273,7 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
   const { aggregates, results, deltas } = report;
   const rows: SuccessRow[] = aggregates.map((a) => {
     const rs = results.filter((r) => r.variant === a.variant);
-    // within/cross success uses the designed question type (matches rollupVariant), so the
-    // partition is the same set of questions across variants — comparable, not behavioural.
+    // within/cross by designed question type (expectedClassCounts), matching rollupVariant.
     const cc = expectedClassCounts(results, a.variant);
     const passIn = (cls: "within_doc" | "cross_doc"): number =>
       rs.filter((r) => r.expected_classification === cls && r.success).length;
@@ -329,8 +326,7 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
 
   // A partial / aborted run can leave the floor variant with zero turns, making the
   // ratio Infinity/NaN (mean of no tokens = 0 → divide-by-zero). Drop it to null then.
-  // The call/round ratio rides the same baseline-vs-floor comparison as tokens: how many
-  // more (or fewer) tool-call rounds the full config takes than the floor.
+  // Same baseline-vs-floor framing as the token ratio, on tool-call rounds (decision_steps).
   const baseAgg = aggregates.find((a) => a.variant === deltas.baseline_variant);
   const floorAgg = aggregates.find((a) => a.variant === deltas.external_variant);
   const stepsRatio =
@@ -368,8 +364,7 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
     axisDeltas: deltas.per_axis.map((d) => ({
       variant: d.variant,
       stepsDelta: d.decision_steps_delta, // already axis-off − baseline
-      // Re-sign the stored baseline−axis delta to axis-off − baseline, so both columns
-      // read the same way: the experimental (axis-off) result minus baseline.
+      // success_rate_delta is stored baseline−axis; negate to match stepsDelta's axis-off − baseline.
       ...(groundTruth ? { successDelta: -d.success_rate_delta } : {}),
     })),
     cost: {
@@ -385,8 +380,7 @@ export function reportView(report: BenchmarkReport, problems?: BenchmarkProblem[
   };
 }
 
-// Variant cell with its baseline/floor role appended, so the two reference rows are
-// identifiable in every table without remembering which is which.
+// Variant cell with its baseline/floor role appended, so reference rows are labelled in every table.
 const variantLabel = (variant: string, role?: VariantRole): string => (role ? `${variant} (${role})` : variant);
 
 // One row's cells as display strings, in PER_VARIANT_COLUMNS order. Shared so the text
@@ -405,8 +399,7 @@ export function variantRowCells(r: VariantRow): string[] {
   ];
 }
 
-// One success row's cells as display strings, in SUCCESS_COLUMNS order. An outcome
-// group with no turns renders "—" (no average to show), not 0.
+// One success row's cells as display strings, in SUCCESS_COLUMNS order.
 export function successRowCells(r: SuccessRow): string[] {
   const split = (pick: (o: OutcomeStats) => number, fmt: (n: number) => string): string =>
     `${r.success.turns ? fmt(pick(r.success)) : "—"}/${r.failure.turns ? fmt(pick(r.failure)) : "—"}`;
@@ -426,7 +419,7 @@ export function successRowCells(r: SuccessRow): string[] {
 }
 
 // Per-axis delta table, shared by both renderers. The success column is present only
-// under ground truth; both deltas are signed so positive = the axis is doing useful work.
+// under ground truth; both read axis-off − baseline (a useful axis: success −, steps +).
 export const axisDeltaColumns = (withSuccess: boolean): readonly string[] =>
   withSuccess ? ["axis-off variant", "Δ success (pp)", "Δ avg steps"] : ["axis-off variant", "Δ avg steps"];
 

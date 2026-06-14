@@ -3,11 +3,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BenchmarkProblem } from "../../../src/benchmark/types.js";
 
-// Guards the hand-filled ground truth in the shipped question set against the live
-// corpus index: every expected chunk id must still resolve to a real chunk. A re-ingest
-// that drops or renames a chunk fails here loudly, instead of the reach oracle silently
-// scoring those turns 0. Also enforces the GT shape (answerable ⇒ groups + doc ids;
-// unanswerable ⇒ none; groups stay consistent with the coverage set).
+// Guards the hand-filled ground truth against the live corpus index: a re-ingest that drops
+// or renames a chunk fails here loudly, instead of the reach oracle silently scoring those turns 0.
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const problems = JSON.parse(readFileSync(root + "benchmark/smoke.json", "utf8")) as BenchmarkProblem[];
