@@ -286,14 +286,14 @@ describe("reportView (pilot — ground truth present)", () => {
 
   const result = (over: Partial<TurnResult>): TurnResult => ({
     problem_id: "t1", turn_index: 0, query_id: "q", variant: "full", is_followup: false,
-    turn_type: "symmetric", answerable: true, success: true,
+    turn_type: "symmetric", answerable: true, success: true, context_overflow: false,
     expected_classification: "within_doc", classification_actual: "within_doc",
     explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 0,
     tokens: { input: 0, output: 0 }, ...over,
   });
   const agg = (over: Partial<VariantAggregate>): VariantAggregate => ({
     variant: "full", turn_count: 0, thread_count: 0, success_rate: 0, within_doc_success_rate: 0,
-    cross_doc_success_rate: 0, explicit_gap_rate: 0, abstention_precision: null, recovery_rate: null,
+    cross_doc_success_rate: 0, context_overflow_count: 0, explicit_gap_rate: 0, abstention_precision: null, recovery_rate: null,
     recovery_avg_decision_steps: null, avg_decision_steps: 0, avg_tokens: { input: 0, output: 0 },
     read_chunk_pattern_usage_rate: null, avg_read_chunk_output_chars: { with_pattern: 0, without_pattern: 0 },
     followup_success_rate: 0, turn_degradation_slope: 0, cumulative_passage_coverage: 0, ...over,
@@ -338,6 +338,25 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(ns.failure).toMatchObject({ turns: 1, avgSteps: 9 });
     // success delta is re-signed to axis-off − baseline: success_rate_delta 0.5 → −0.5.
     expect(reportView(report, gtProblems).axisDeltas).toEqual([{ variant: "no_search", stepsDelta: 1, successDelta: -0.5 }]);
+  });
+
+  it("names context overflows as a distinct failure subtype in the success view", () => {
+    const r = {
+      ...report,
+      results: [
+        result({ variant: "no_search", success: false, context_overflow: true }),
+        result({ variant: "no_search", success: false, context_overflow: false }),
+      ],
+      aggregates: [agg({ variant: "no_search", turn_count: 2, success_rate: 0, context_overflow_count: 1 })],
+      deltas: { per_axis: [] },
+    } as unknown as BenchmarkReport;
+    const sv = reportView(r, gtProblems).success!;
+    expect(sv.rows.find((x) => x.variant === "no_search")!.overflow).toBe(1); // 1 of 2 failures hit the budget wall
+    expect(sv.overflowNote).toContain("no_search 1");
+  });
+
+  it("omits the overflow note when no variant overflowed", () => {
+    expect(reportView(report, gtProblems).success!.overflowNote).toBeUndefined();
   });
 
   it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {

@@ -194,6 +194,7 @@ export interface SuccessRow {
   crossTurns: number;
   success: OutcomeStats;
   failure: OutcomeStats;
+  overflow: number; // of the failed turns, how many hit the context-budget wall (vs within-budget reach-miss)
 }
 
 // Column labels for the pilot success table (rendered only under ground truth).
@@ -210,6 +211,7 @@ export const SUCCESS_COLUMNS = [
 export interface SuccessView {
   columns: readonly string[];
   rows: SuccessRow[];
+  overflowNote?: string; // present when any variant had context-budget overflows, naming them as a failure subtype
 }
 
 // One axis's ablation effect, both columns read the same way: ablated variant minus
@@ -291,9 +293,16 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       crossTurns: cc.cross,
       success: outcomeStats(rs.filter((r) => r.success)),
       failure: outcomeStats(rs.filter((r) => !r.success)),
+      overflow: a.context_overflow_count,
     };
   });
-  return { columns: SUCCESS_COLUMNS, rows };
+  // Name overflows as a distinct failure subtype so a budget wall isn't read as a
+  // within-budget reach-miss (they carry different diagnostic meaning).
+  const overflows = rows.filter((r) => r.overflow > 0).map((r) => `${r.variant} ${r.overflow}`);
+  const overflowNote = overflows.length
+    ? `Context overflows (counted as failures, distinct from within-budget reach-miss): ${overflows.join(", ")}.`
+    : undefined;
+  return { columns: SUCCESS_COLUMNS, rows, ...(overflowNote ? { overflowNote } : {}) };
 }
 
 // Pure display model: the single source of truth for what the report shows. It applies
@@ -446,6 +455,7 @@ export function renderReportText(report: BenchmarkReport, problems?: BenchmarkPr
     lines.push(`| ${v.success.columns.join(" | ")} |`);
     lines.push(`|${v.success.columns.map(() => "---").join("|")}|`);
     for (const row of v.success.rows) lines.push(`| ${successRowCells(row).join(" | ")} |`);
+    if (v.success.overflowNote) lines.push("", v.success.overflowNote);
     lines.push("");
   }
 

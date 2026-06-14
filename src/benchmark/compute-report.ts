@@ -2,6 +2,7 @@ import type { GapEvent, QueryTrace } from "../types.js";
 import {
   classifyQuery,
   encounteredKnownGap,
+  isContextOverflow,
   rollupVariant,
   successOf,
   terminalGapReported,
@@ -52,6 +53,7 @@ export function computeReport(
         turn_type: turn.turn_type,
         answerable: turn.answerable,
         success,
+        context_overflow: isContextOverflow(t),
         expected_classification: turn.expected_classification,
         classification_actual: classifyQuery(t),
         explicit_gap_reported: terminalGapReported(turn, t, success),

@@ -135,6 +135,14 @@ export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanG
   return reachSuccess(turn, trace);
 }
 
+// The turn ran out of context budget: messages.create returned a 400 "prompt is
+// too long" and the loop recorded it on trace.error. It's a navigation-failure
+// subtype — the agent couldn't reach the answer within the model's context,
+// distinct from a within-budget reach-miss — not excluded, just labelled.
+export function isContextOverflow(trace: QueryTrace): boolean {
+  return /prompt is too long/i.test(trace.error ?? "");
+}
+
 // Mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls that
 // engaged the `pattern` filter. null when there are no read_chunk calls.
 function patternUsageRate(traces: QueryTrace[]): number | null {
@@ -215,6 +223,10 @@ export function rollupVariant(
     success_rate: rate(rs.filter((r) => r.success).length, rs.length),
     within_doc_success_rate: rate(within.filter((r) => r.success).length, within.length),
     cross_doc_success_rate: rate(cross.filter((r) => r.success).length, cross.length),
+    // of the non-success turns, how many failed by exhausting the context budget
+    // (a navigation-failure subtype) vs a within-budget reach-miss. A turn that
+    // reached its chunks before overflowing is a success, so it is not counted.
+    context_overflow_count: rs.filter((r) => !r.success && r.context_overflow).length,
     explicit_gap_rate: rate(reportedGaps.length, rs.length),
     // null when no gaps reported; 0 already means "every reported gap was false".
     abstention_precision:

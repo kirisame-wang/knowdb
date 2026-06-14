@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, encounteredKnownGap, reachSuccess, terminalGapReported } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, isContextOverflow, reachSuccess, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
@@ -217,5 +217,23 @@ describe("reachSuccess — chunk groups (any-of within a group, all groups requi
     const t = turn({ answerable: false, expected_chunk_groups: [["a"]] });
     expect(reachSuccess(t, trace([searchCall(KNOWN_GAP)]))).toBe(true);
     expect(reachSuccess(t, read("a"))).toBe(false);
+  });
+});
+
+describe("isContextOverflow", () => {
+  const withError = (error: string): QueryTrace => ({ ...trace([]), error });
+
+  it("true when the turn ended on a 'prompt is too long' 400", () => {
+    expect(
+      isContextOverflow(withError('400 {"type":"error","error":{"message":"prompt is too long: 207358 tokens > 200000 maximum"}}')),
+    ).toBe(true);
+  });
+
+  it("false for an unrelated error (a real reach-miss / other failure)", () => {
+    expect(isContextOverflow(withError("network error"))).toBe(false);
+  });
+
+  it("false for a completed turn with no error", () => {
+    expect(isContextOverflow(trace([]))).toBe(false);
   });
 });

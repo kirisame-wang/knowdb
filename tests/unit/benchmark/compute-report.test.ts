@@ -379,7 +379,7 @@ describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, expected_classification: "within_doc", classification_actual: "within_doc",
+      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
@@ -477,7 +477,7 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, expected_classification: "within_doc", classification_actual: "within_doc",
+      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
@@ -507,5 +507,30 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
       tr({ answerable: false, encountered_gap_signal: true }), // real gap, not a false-alarm to recover from
       tr({ answerable: true, encountered_gap_signal: false }), // never hit a gap signal
     ])).toEqual({ rate: null, steps: null });
+  });
+});
+
+// A turn can reach its expected chunks in an early round and then overflow on a
+// later round (success AND context_overflow). The count is a failure subtype, so
+// such a turn — a success — must not be counted.
+describe("rollupVariant context_overflow_count (failure-subtype split)", () => {
+  function tr(over: Partial<TurnResult>): TurnResult {
+    return {
+      problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
+      is_followup: false, turn_type: "symmetric", answerable: true,
+      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
+      explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
+      tokens: { input: 0, output: 0 }, ...over,
+    };
+  }
+  const overflowCount = (rs: TurnResult[]) =>
+    rollupVariant("V", rs, [], new Map(), new Map()).context_overflow_count;
+
+  it("counts only failed overflows; a reached-then-overflowed turn is a success, not counted", () => {
+    expect(overflowCount([
+      tr({ success: false, context_overflow: true }),  // failed by the budget wall → counted
+      tr({ success: true, context_overflow: true }),   // reached its chunks, then overflowed → success, not a failure subtype
+      tr({ success: false, context_overflow: false }), // within-budget reach-miss → not an overflow
+    ])).toBe(1);
   });
 });
