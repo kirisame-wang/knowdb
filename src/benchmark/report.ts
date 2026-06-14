@@ -194,6 +194,8 @@ export interface SuccessRow {
   crossTurns: number;
   success: OutcomeStats;
   failure: OutcomeStats;
+  overflow: number; // of the failed turns, how many hit the context-budget wall (vs within-budget reach-miss)
+  overflowAfterReach: number; // of those overflows, how many had already reached (the over-search subtype)
 }
 
 // Column labels for the pilot success table (rendered only under ground truth).
@@ -202,6 +204,7 @@ export const SUCCESS_COLUMNS = [
   "success",
   "within✓",
   "cross✓",
+  "overflow ✗ (over-search/no-reach)",
   "steps ✓/✗",
   "in-tok ✓/✗",
   "out-tok ✓/✗",
@@ -244,7 +247,8 @@ const DISCLAIMER =
 const PILOT_DISCLAIMER =
   "Pilot run with hand-filled ground truth over the dogfooding db/ — not a formal corpus (no designed taxonomy or vocabulary-mismatch probes), so read success rates as directional. " +
   "Success is judge-free reach: an answerable turn succeeds when it reads a sufficient chunk (any-of within each expected group); a gap turn, when it reports the gap. " +
-  "Steps and tokens are split by outcome (✓ succeeded / ✗ failed) so a variant that fails fast isn't mistaken for a cheap one.";
+  "Steps and tokens are split by outcome (✓ succeeded / ✗ failed) so a variant that fails fast isn't mistaken for a cheap one. " +
+  "Overflow counts the failures that hit the model's context-budget wall, split over-search/no-reach (over-search = had already reached the chunks then ran out before answering; no-reach = never reached).";
 
 // Ground truth is present when any answerable turn declares expected chunks. Without it,
 // success-derived metrics are suppressed; with it, the success view is built.
@@ -291,6 +295,8 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       crossTurns: cc.cross,
       success: outcomeStats(rs.filter((r) => r.success)),
       failure: outcomeStats(rs.filter((r) => !r.success)),
+      overflow: a.context_overflow_count,
+      overflowAfterReach: a.overflow_after_reach_count,
     };
   });
   return { columns: SUCCESS_COLUMNS, rows };
@@ -407,11 +413,14 @@ export function successRowCells(r: SuccessRow): string[] {
   // Rates carry their k/n so a 100% over one turn doesn't read like a 100% over many.
   const rate = (p: number, n: number, frac: number): string => (n === 0 ? "—" : `${pct(frac)} (${p}/${n})`);
   const total = r.success.turns + r.failure.turns;
+  // overflow failures: over-search / no-reach side by side, "—" when none.
+  const overflow = r.overflow === 0 ? "—" : `${r.overflowAfterReach}/${r.overflow - r.overflowAfterReach}`;
   return [
     variantLabel(r.variant, r.role),
     rate(r.successPass, total, r.successRate),
     rate(r.withinPass, r.withinTurns, r.withinSuccess),
     rate(r.crossPass, r.crossTurns, r.crossSuccess),
+    overflow,
     split((o) => o.avgSteps, n2),
     split((o) => o.avgIn, round),
     split((o) => o.avgOut, round),

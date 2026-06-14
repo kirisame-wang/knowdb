@@ -286,14 +286,14 @@ describe("reportView (pilot — ground truth present)", () => {
 
   const result = (over: Partial<TurnResult>): TurnResult => ({
     problem_id: "t1", turn_index: 0, query_id: "q", variant: "full", is_followup: false,
-    turn_type: "symmetric", answerable: true, success: true,
+    turn_type: "symmetric", answerable: true, success: true, context_overflow: false, overflow_after_reach: false,
     expected_classification: "within_doc", classification_actual: "within_doc",
     explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 0,
     tokens: { input: 0, output: 0 }, ...over,
   });
   const agg = (over: Partial<VariantAggregate>): VariantAggregate => ({
     variant: "full", turn_count: 0, thread_count: 0, success_rate: 0, within_doc_success_rate: 0,
-    cross_doc_success_rate: 0, explicit_gap_rate: 0, abstention_precision: null, recovery_rate: null,
+    cross_doc_success_rate: 0, context_overflow_count: 0, overflow_after_reach_count: 0, explicit_gap_rate: 0, abstention_precision: null, recovery_rate: null,
     recovery_avg_decision_steps: null, avg_decision_steps: 0, avg_tokens: { input: 0, output: 0 },
     read_chunk_pattern_usage_rate: null, avg_read_chunk_output_chars: { with_pattern: 0, without_pattern: 0 },
     followup_success_rate: 0, turn_degradation_slope: 0, cumulative_passage_coverage: 0, ...over,
@@ -338,6 +338,30 @@ describe("reportView (pilot — ground truth present)", () => {
     expect(ns.failure).toMatchObject({ turns: 1, avgSteps: 9 });
     // success delta is re-signed to axis-off − baseline: success_rate_delta 0.5 → −0.5.
     expect(reportView(report, gtProblems).axisDeltas).toEqual([{ variant: "no_search", stepsDelta: 1, successDelta: -0.5 }]);
+  });
+
+  it("names context overflows and flags the over-search ones in the success view", () => {
+    const r = {
+      ...report,
+      results: [
+        result({ variant: "no_search", success: false, context_overflow: true, overflow_after_reach: true }),  // over-search
+        result({ variant: "no_search", success: false, context_overflow: true, overflow_after_reach: false }), // never reached
+      ],
+      aggregates: [agg({ variant: "no_search", turn_count: 2, success_rate: 0, context_overflow_count: 2, overflow_after_reach_count: 1 })],
+      deltas: { per_axis: [] },
+    } as unknown as BenchmarkReport;
+    const sv = reportView(r, gtProblems).success!;
+    const ns = sv.rows.find((x) => x.variant === "no_search")!;
+    expect(ns.overflow).toBe(2);            // both failures hit the budget wall
+    expect(ns.overflowAfterReach).toBe(1);  // one of them had already reached (over-search)
+    expect(sv.columns).toContain("overflow ✗ (over-search/no-reach)");
+    expect(successRowCells(ns)[4]).toBe("1/1"); // over-search / never-reached, both subtypes explicit
+  });
+
+  it("renders the overflow cell as — when the variant did not overflow", () => {
+    const sv = reportView(report, gtProblems).success!;
+    const full = sv.rows.find((r) => r.variant === "full")!;
+    expect(successRowCells(full)[4]).toBe("—");
   });
 
   it("renders within✓/cross✓ as — when the variant had no such-classification turns", () => {

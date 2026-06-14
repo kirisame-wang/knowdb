@@ -73,6 +73,8 @@ export interface TurnResult {
   turn_type: "symmetric" | "structural" | "lexical_gap";
   answerable: boolean;                     // ground truth; gap-correctness judgement
   success: boolean;                        // reach oracle (answerable: read expected chunks; unanswerable: reported gap); a human grade overrides if present
+  context_overflow: boolean;               // turn ended on a 400 "prompt is too long" — ran out of context budget, delivered no answer; always a failure (successOf overrides reach)
+  overflow_after_reach: boolean;           // an overflow that had already read its expected chunks: the over-search failure (found it, but couldn't stop/deliver in budget) vs an overflow that never reached
   expected_classification: "within_doc" | "cross_doc";  // the question's designed type (a stable invariant); success-by-class partitions on this
   classification_actual: "within_doc" | "cross_doc";    // docs the agent actually read (1 vs >1) — a behavioural observation, varies with stochastic navigation
   explicit_gap_reported: boolean;          // agent terminally reported a coverage gap
@@ -88,6 +90,8 @@ export interface VariantAggregate {
   success_rate: number;                    // over all turns
   within_doc_success_rate: number;
   cross_doc_success_rate: number;
+  context_overflow_count: number;          // failures that hit the context-budget wall (reach-miss is the other failure subtype)
+  overflow_after_reach_count: number;      // of those overflows, how many had already reached (the over-search subtype)
   explicit_gap_rate: number;
   abstention_precision: number | null;     // of reported-gap turns, share truly unanswerable; null when none reported
   recovery_rate: number | null;            // of answerable turns that hit a gap signal, share that still succeeded; null when none qualify

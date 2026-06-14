@@ -116,10 +116,10 @@ describe("renderReport — DOM tables", () => {
       title: "Benchmark run r1 — pilot (hand-filled ground truth)",
       axisDeltas: [{ variant: "no_search", stepsDelta: 0.5, successDelta: -0.5 }],
       success: {
-        columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
+        columns: ["variant", "success", "within✓", "cross✓", "overflow ✗ (over-search/no-reach)", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
         rows: [
-          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
-          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
+          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 }, overflow: 0, overflowAfterReach: 0 },
+          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 2, avgSteps: 9, avgIn: 500, avgOut: 60 }, overflow: 2, overflowAfterReach: 1 },
         ],
       },
     };
@@ -129,6 +129,7 @@ describe("renderReport — DOM tables", () => {
     const allText = el.textContent ?? "";
     expect(allText).toContain("3.00/8.00"); // full: succeeded/failed steps
     expect(allText).toContain("—/9.00"); // no_search: no successes → — on the ✓ side
+    expect(allText).toContain("1/1"); // no_search overflow cell: over-search/no-reach reaches a rendered td
     expect(allText).toContain("-50pp"); // success delta (axis-off − baseline) in percentage points
   });
 

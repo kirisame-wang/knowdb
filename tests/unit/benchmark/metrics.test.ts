@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, encounteredKnownGap, reachSuccess, terminalGapReported } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, isContextOverflow, isContextOverflowError, reachSuccess, successOf, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
@@ -217,5 +217,70 @@ describe("reachSuccess — chunk groups (any-of within a group, all groups requi
     const t = turn({ answerable: false, expected_chunk_groups: [["a"]] });
     expect(reachSuccess(t, trace([searchCall(KNOWN_GAP)]))).toBe(true);
     expect(reachSuccess(t, read("a"))).toBe(false);
+  });
+});
+
+describe("isContextOverflow", () => {
+  const withError = (error: string): QueryTrace => ({ ...trace([]), error });
+
+  it("true when the turn ended on a 'prompt is too long' 400", () => {
+    expect(
+      isContextOverflow(withError('400 {"type":"error","error":{"message":"prompt is too long: 207358 tokens > 200000 maximum"}}')),
+    ).toBe(true);
+  });
+
+  it("false for an unrelated error (a real reach-miss / other failure)", () => {
+    expect(isContextOverflow(withError("network error"))).toBe(false);
+  });
+
+  it("false when the phrase appears outside a 400 (overflow is the 400 subtype, not any echo of the words)", () => {
+    expect(
+      isContextOverflow(withError('529 {"type":"error","error":{"message":"overloaded; prompt is too long to retry"}}')),
+    ).toBe(false);
+  });
+
+  it("false for a 400 that is not an overflow (status gate alone is not enough — the message must match too)", () => {
+    expect(isContextOverflow(withError('400 {"type":"error","error":{"message":"messages: at least one message is required"}}'))).toBe(false);
+  });
+
+  it("false for the overflow message without the status (the 400 gate is load-bearing, not just the phrase)", () => {
+    expect(isContextOverflow(withError("prompt is too long: 207358 tokens > 200000 maximum"))).toBe(false);
+  });
+
+  it("false when 400 is embedded in a larger number, not the status (e.g. a 5400ms latency note)", () => {
+    expect(isContextOverflow(withError("503 service error after 5400ms; prompt is too long"))).toBe(false);
+  });
+
+  it("false for a completed turn with no error", () => {
+    expect(isContextOverflow(trace([]))).toBe(false);
+  });
+
+  it("isContextOverflowError matches the same raw message the error banner sees", () => {
+    expect(isContextOverflowError('400 {"error":{"message":"prompt is too long: 204050 tokens > 200000 maximum"}}')).toBe(true);
+    expect(isContextOverflowError("401 invalid x-api-key")).toBe(false);
+    expect(isContextOverflowError(undefined)).toBe(false);
+  });
+});
+
+describe("successOf — an overflowed turn delivered no answer, so reach is overridden", () => {
+  const answerable = (): BenchmarkTurn => ({
+    turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric",
+    answerable: true, expected_doc_ids: ["d"], expected_chunk_groups: [["d/01"]],
+    expected_answer_keypoints: [], expected_classification: "within_doc",
+  });
+  const reached = (error?: string): QueryTrace => ({
+    ...trace([call("read_chunk", { id: "d/01" })]),
+    ...(error ? { error } : {}),
+  });
+  const OVERFLOW = "400 prompt is too long: 207358 tokens > 200000 maximum";
+
+  it("reached its chunks but overflowed → not a success (over-search / no delivery)", () => {
+    const t = answerable();
+    expect(reachSuccess(t, reached())).toBe(true);        // navigation did reach
+    expect(successOf(t, reached(OVERFLOW))).toBe(false);  // but no answer delivered in budget
+  });
+
+  it("reached and terminated within budget → success", () => {
+    expect(successOf(answerable(), reached())).toBe(true);
   });
 });

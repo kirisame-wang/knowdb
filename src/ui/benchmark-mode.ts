@@ -22,6 +22,7 @@ import {
   axisDeltaRowCells,
 } from "../benchmark/report.js";
 import type { ReportView } from "../benchmark/report.js";
+import { isContextOverflowError } from "../benchmark/metrics.js";
 import {
   benchmarkTraceKey,
   benchmarkGapKey,
@@ -295,7 +296,11 @@ export async function mountBenchmarkMode(): Promise<void> {
         concurrency: RUN_CONCURRENCY,
         signal: ac.signal,
         onProgress: (done, total, label) => setStatus(`${done}/${total} — ${label}`),
-        onError: (err, label) => errors.push(`${label}: ${err instanceof Error ? err.message : String(err)}`),
+        onError: (err, label) => {
+          // Overflow is a scored failure (overflow column), not a run-invalidating error — not banner-worthy.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!isContextOverflowError(msg)) errors.push(`${label}: ${msg}`);
+        },
       });
 
       const run = buildRun({

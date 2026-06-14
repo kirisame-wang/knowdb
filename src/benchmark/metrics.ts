@@ -131,8 +131,21 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
 // Defaults to the reach oracle; an optional human grade overrides it per-turn,
 // so graded and reach-scored turns coexist.
 export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
+  // An overflow delivered no answer (reading a chunk ≠ answering), so never a success.
+  if (isContextOverflow(trace)) return false;
   if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
   return reachSuccess(turn, trace);
+}
+
+// A 400 "prompt is too long" — context overflow. Two gates (status + phrase) so a
+// stray echo of the phrase isn't matched. String form takes a raw message; trace form delegates.
+export function isContextOverflowError(error: string | undefined): boolean {
+  const e = error ?? "";
+  return /\b400\b/.test(e) && /prompt is too long/i.test(e);
+}
+
+export function isContextOverflow(trace: QueryTrace): boolean {
+  return isContextOverflowError(trace.error);
 }
 
 // Mirrors src/traces.ts aggregateMetrics: fraction of read_chunk calls that
@@ -215,6 +228,8 @@ export function rollupVariant(
     success_rate: rate(rs.filter((r) => r.success).length, rs.length),
     within_doc_success_rate: rate(within.filter((r) => r.success).length, within.length),
     cross_doc_success_rate: rate(cross.filter((r) => r.success).length, cross.length),
+    context_overflow_count: rs.filter((r) => r.context_overflow).length,
+    overflow_after_reach_count: rs.filter((r) => r.overflow_after_reach).length,
     explicit_gap_rate: rate(reportedGaps.length, rs.length),
     // null when no gaps reported; 0 already means "every reported gap was false".
     abstention_precision:
