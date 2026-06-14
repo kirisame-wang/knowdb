@@ -17,6 +17,9 @@ import {
   renderReportText,
   reportView,
   variantRowCells,
+  successRowCells,
+  axisDeltaColumns,
+  axisDeltaRowCells,
 } from "../benchmark/report.js";
 import type { ReportView } from "../benchmark/report.js";
 import {
@@ -34,7 +37,7 @@ const SYSTEM_PROMPT =
   "You are a helpful assistant with access to a knowledge base via tools. " +
   "Call get_instructions first to learn how to use the tools. Be concise in your final answer.";
 
-const QUESTION_SET_PATH = "benchmark/smoke.json";
+const QUESTION_SET_PATH = "benchmark/pilot.json";
 
 // (variant × problem) threads in flight — a modest cap to cut wall-clock while
 // staying well under the API rate limit.
@@ -99,8 +102,6 @@ function block(tag: "h1" | "h2" | "p", text: string, css = ""): HTMLElement {
   return e;
 }
 
-const signedDelta = (x: number): string => `${x >= 0 ? "+" : ""}${x.toFixed(2)}`;
-
 // Build the report as DOM blocks (headings + real tables) from the pure view.
 export function renderReport(view: ReportView): HTMLElement {
   const root = document.createElement("div");
@@ -111,20 +112,31 @@ export function renderReport(view: ReportView): HTMLElement {
   root.appendChild(block("h2", "Per-variant (cost + behavior)", "font-size:13px;margin:14px 0 4px"));
   root.appendChild(tableEl(view.perVariant.columns, view.perVariant.rows.map(variantRowCells)));
 
+  if (view.success) {
+    root.appendChild(block("h2", "Success (pilot — steps/tokens gated on reach)", "font-size:13px;margin:14px 0 4px"));
+    root.appendChild(tableEl(view.success.columns, view.success.rows.map(successRowCells)));
+  }
+
+  const withSucc = view.success !== undefined;
+  root.appendChild(block("h2", "Per-axis ablation deltas", "font-size:13px;margin:14px 0 4px"));
+  root.appendChild(block("p", "Δ = axis-off variant minus baseline (what happens when the axis is removed). A useful axis shows success down (−) and steps up (+).", "margin:4px 0;color:#656d76;font-size:12px"));
+  root.appendChild(tableEl(axisDeltaColumns(withSucc), view.axisDeltas.map((d) => axisDeltaRowCells(d, withSucc))));
+
   root.appendChild(block("h2", "Cost story", "font-size:13px;margin:14px 0 4px"));
   const c = view.cost;
-  root.appendChild(block("p", `Realized usage (all variants): ${c.realized.input} in / ${c.realized.output} out tokens over ${c.realized.turns} turns.`, "margin:4px 0"));
+  root.appendChild(block("p", `Realized usage (all variants): ${c.realized.input} in / ${c.realized.output} out tokens and ${c.realized.steps} tool calls (rounds) over ${c.realized.turns} turns.`, "margin:4px 0"));
   root.appendChild(
     c.ratio
       ? block(
           "p",
-          `Token ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): input ×${c.ratio.input.toFixed(2)}, output ×${c.ratio.output.toFixed(2)} (>1 = full config costs more than the flat search+read floor).`,
+          `Token ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): input ×${c.ratio.input.toFixed(2)}, output ×${c.ratio.output.toFixed(2)} (>1 = full config costs more than the search+read floor — that floor drops the navigation tools but keeps search-hit structure).`,
           "margin:4px 0",
         )
       : block("p", "No token ratio: the cost-floor variant produced no turns (partial or aborted run).", "margin:4px 0;color:#656d76"),
   );
-  root.appendChild(block("p", "Per-axis decision-steps delta (axis-off minus baseline; positive = removing the axis costs more steps):", "margin:8px 0 0;color:#656d76;font-size:12px"));
-  root.appendChild(tableEl(["axis-off variant", "Δ avg steps"], c.perAxis.map((d) => [d.variant, signedDelta(d.stepsDelta)])));
+  if (c.ratio?.steps !== undefined) {
+    root.appendChild(block("p", `Calls (rounds) ratio ${c.ratio.baseline} vs ${c.ratio.external} (floor): ×${c.ratio.steps.toFixed(2)} (>1 = full takes more tool-call rounds than the floor; rounds re-send input each turn — a cost axis tokens reflect only indirectly).`, "margin:4px 0"));
+  }
   return root;
 }
 
@@ -290,13 +302,13 @@ export async function mountBenchmarkMode(): Promise<void> {
         runId,
         knowdbCommitSha: "unknown (browser)",
         tools: KNOWDB_TOOLS,
-        problemSetId: "smoke",
+        problemSetId: "pilot",
         startedAt,
         endedAt: new Date().toISOString(),
         reviewer: "",
       });
       const report = collectReport(window.localStorage, runId, problems, run);
-      const view = reportView(report);
+      const view = reportView(report, problems);
       reportEl.textContent = "";
       // Loud failure: no tokens means no API call succeeded — don't dress it up as Done.
       const noWork = view.cost.realized.input + view.cost.realized.output === 0;
@@ -336,7 +348,7 @@ export async function mountBenchmarkMode(): Promise<void> {
     add("⤓ variant-assignments.jsonl", () => ({ name: `${runId}-variant-assignments.jsonl`, text: ls.getItem(benchmarkVariantKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ gaps.jsonl", () => ({ name: `${runId}-gaps.jsonl`, text: ls.getItem(benchmarkGapKey(runId)) ?? "", mime: "application/x-ndjson" }));
     add("⤓ report.json", () => ({ name: `${runId}-report.json`, text: JSON.stringify(report, null, 2), mime: "application/json" }));
-    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderReportText(report), mime: "text/markdown" }));
+    add("⤓ report.md", () => ({ name: `${runId}-report.md`, text: renderReportText(report, problems), mime: "text/markdown" }));
     downloadsEl.style.display = "flex";
   }
 

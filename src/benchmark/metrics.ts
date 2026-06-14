@@ -110,13 +110,19 @@ export function readChunkIds(trace: QueryTrace): string[] {
   return ids;
 }
 
-// Success oracle, judge-free: an answerable turn succeeds when it reads its
-// minimal sufficient chunk set (⊇); an unanswerable turn, when it reports the gap.
+// Success oracle, judge-free. Answerable turn: reads ≥1 chunk from each expected
+// group (any-of within a group, all groups required), so multi-candidate answers
+// don't false-fail; falls back to ⊇-all over expected_chunk_ids when no groups.
+// Unanswerable turn: reports the gap.
 export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
   if (turn.answerable) {
+    const read = new Set(readChunkIds(trace));
+    const groups = turn.expected_chunk_groups;
+    if (groups && groups.length > 0) {
+      return groups.every((g) => g.some((id) => read.has(id)));
+    }
     const expected = turn.expected_chunk_ids ?? [];
     if (expected.length === 0) return false;
-    const read = new Set(readChunkIds(trace));
     return expected.every((id) => read.has(id));
   }
   return encounteredKnownGap(trace);
@@ -160,8 +166,11 @@ export function rollupVariant(
   const ts = traces.filter((t) => assignOf.get(t.query_id)?.variant === variant);
   const traceOf = new Map(ts.map((t) => [t.query_id, t]));
 
-  const within = rs.filter((r) => r.classification_actual === "within_doc");
-  const cross = rs.filter((r) => r.classification_actual === "cross_doc");
+  // Success-by-class partitions on the question's designed type (a stable invariant),
+  // not on how many docs the agent happened to read — that varies with stochastic
+  // navigation, making classification_actual non-comparable across variants/runs.
+  const within = rs.filter((r) => r.expected_classification === "within_doc");
+  const cross = rs.filter((r) => r.expected_classification === "cross_doc");
   const followups = rs.filter((r) => r.is_followup);
   const reportedGaps = rs.filter((r) => r.explicit_gap_reported);
   // Answerable turns whose search false-alarmed a gap — the recovery denominator.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, encounteredKnownGap, terminalGapReported } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, reachSuccess, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
@@ -163,5 +163,59 @@ describe("terminalGapReported — terminal abstention signal", () => {
 
   it("answerable without a gap signal → false", () => {
     expect(terminalGapReported(aTurn(true), noGap, true)).toBe(false);
+  });
+});
+
+describe("reachSuccess — chunk groups (any-of within a group, all groups required)", () => {
+  const turn = (over: Partial<BenchmarkTurn> = {}): BenchmarkTurn => ({
+    turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric",
+    answerable: true, expected_doc_ids: [], expected_answer_keypoints: [], expected_classification: "within_doc",
+    ...over,
+  });
+  const read = (...ids: string[]): QueryTrace => trace(ids.map((id) => call("read_chunk", { id })));
+
+  it("each group satisfied by ≥1 read → success", () => {
+    const t = turn({ expected_chunk_groups: [["a", "b"], ["c"]] });
+    expect(reachSuccess(t, read("b", "c"))).toBe(true);
+  });
+
+  it("a group with nothing read → failure", () => {
+    const t = turn({ expected_chunk_groups: [["a", "b"], ["c"]] });
+    expect(reachSuccess(t, read("a"))).toBe(false);
+  });
+
+  it("multi-element group is any-of: either candidate satisfies it", () => {
+    const t = turn({ expected_chunk_groups: [["a", "b"]] });
+    expect(reachSuccess(t, read("a"))).toBe(true);
+    expect(reachSuccess(t, read("b"))).toBe(true);
+    expect(reachSuccess(t, read("d"))).toBe(false);
+  });
+
+  it("singleton group is a required chunk", () => {
+    const t = turn({ expected_chunk_groups: [["a"]] });
+    expect(reachSuccess(t, read("a"))).toBe(true);
+    expect(reachSuccess(t, read("b"))).toBe(false);
+  });
+
+  it("no groups → legacy ⊇-all over expected_chunk_ids", () => {
+    const t = turn({ expected_chunk_ids: ["a", "b"] });
+    expect(reachSuccess(t, read("a"))).toBe(false);
+    expect(reachSuccess(t, read("a", "b"))).toBe(true);
+  });
+
+  it("groups take precedence over expected_chunk_ids when both present", () => {
+    const t = turn({ expected_chunk_ids: ["a", "b", "c"], expected_chunk_groups: [["a", "b"]] });
+    expect(reachSuccess(t, read("b"))).toBe(true); // legacy ⊇-all would need a,b,c
+  });
+
+  it("an empty group is unsatisfiable → failure (malformed GT fails rather than free-passes)", () => {
+    expect(reachSuccess(turn({ expected_chunk_groups: [[]] }), read("a"))).toBe(false);
+    expect(reachSuccess(turn({ expected_chunk_groups: [["a"], []] }), read("a"))).toBe(false);
+  });
+
+  it("unanswerable turns ignore chunk groups; success = reported gap", () => {
+    const t = turn({ answerable: false, expected_chunk_groups: [["a"]] });
+    expect(reachSuccess(t, trace([searchCall(KNOWN_GAP)]))).toBe(true);
+    expect(reachSuccess(t, read("a"))).toBe(false);
   });
 });

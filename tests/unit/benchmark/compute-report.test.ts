@@ -379,7 +379,7 @@ describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, classification_actual: "within_doc",
+      success: true, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
@@ -477,7 +477,7 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, classification_actual: "within_doc",
+      success: true, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,

@@ -32,7 +32,7 @@ describe("benchmark mode UI — flag gating", () => {
     const fetchSpy = vi.fn(async (url: unknown) => ({
       ok: true,
       status: 200,
-      json: async () => (String(url).includes("smoke.json") ? [] : {}),
+      json: async () => (String(url).includes("pilot.json") ? [] : {}),
     }));
     vi.stubGlobal("fetch", fetchSpy);
     await import("../../src/ui/benchmark-mode.js");
@@ -40,9 +40,9 @@ describe("benchmark mode UI — flag gating", () => {
     expect(document.getElementById("knowdb-benchmark")).not.toBeNull();
     // The inline API-key input is present (no prompt popup).
     expect(document.getElementById("benchmark-api-key")).not.toBeNull();
-    // Mount loads index + manifest + smoke.json (all three fetches fire synchronously).
+    // Mount loads index + manifest + pilot.json (all three fetches fire synchronously).
     expect(fetchSpy).toHaveBeenCalledTimes(3);
-    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("smoke.json"))).toBe(true);
+    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("pilot.json"))).toBe(true);
   });
 });
 
@@ -63,10 +63,10 @@ describe("renderReport — DOM tables", () => {
         "avg steps",
         "avg in-tok",
         "avg out-tok",
-        "pattern-use",
-        "read-chunk chars (pat/no-pat)",
+        "pattern-use (of reads)",
+        "read chars (pattern/plain)",
         "gap-signal",
-        "within/cross (count)",
+        "docs read (1/>1)",
       ],
       rows: [
         {
@@ -83,10 +83,10 @@ describe("renderReport — DOM tables", () => {
         },
       ],
     },
+    axisDeltas: [{ variant: "no_search", stepsDelta: 0.5 }],
     cost: {
-      realized: { input: 200, output: 40, turns: 2 },
-      ratio: { baseline: "full", external: "baseline_search_read", input: 1.5, output: 1.2 },
-      perAxis: [{ variant: "no_search", stepsDelta: 0.5 }],
+      realized: { input: 200, output: 40, steps: 9, turns: 2 },
+      ratio: { baseline: "full", external: "baseline_search_read", input: 1.5, output: 1.2, steps: 0.8 },
     },
   };
 
@@ -100,12 +100,43 @@ describe("renderReport — DOM tables", () => {
 
     const header = (tables[0]!.querySelector("thead")?.textContent ?? "").toLowerCase();
     expect(header).toContain("avg steps");
-    expect(header).toContain("count");
+    expect(header).toContain("docs read"); // behavioural read count, not a success rate
     expect(header).not.toContain("success");
     expect(header).not.toContain("recovery");
 
     expect(tables[0]!.querySelector("tbody")?.textContent).toContain("full"); // a variant row
     expect(el.textContent).toContain("Realized usage"); // cost story present
+  });
+
+  it("renders a success table with the outcome split when ground truth is present", async () => {
+    setUrl("");
+    const { renderReport } = await import("../../src/ui/benchmark-mode.js");
+    const view: ReportView = {
+      ...VIEW,
+      title: "Benchmark run r1 — pilot (hand-filled ground truth)",
+      axisDeltas: [{ variant: "no_search", stepsDelta: 0.5, successDelta: -0.5 }],
+      success: {
+        columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
+        rows: [
+          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 } },
+          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 } },
+        ],
+      },
+    };
+    const el = renderReport(view);
+    const headers = Array.from(el.querySelectorAll("table thead")).map((h) => h.textContent ?? "");
+    expect(headers.some((h) => h.includes("within✓") && h.includes("steps ✓/✗"))).toBe(true);
+    const allText = el.textContent ?? "";
+    expect(allText).toContain("3.00/8.00"); // full: succeeded/failed steps
+    expect(allText).toContain("—/9.00"); // no_search: no successes → — on the ✓ side
+    expect(allText).toContain("-50pp"); // success delta (axis-off − baseline) in percentage points
+  });
+
+  it("renders no success table without ground truth (GT-free view)", async () => {
+    setUrl("");
+    const { renderReport } = await import("../../src/ui/benchmark-mode.js");
+    const headers = Array.from(renderReport(VIEW).querySelectorAll("table thead")).map((h) => (h.textContent ?? "").toLowerCase());
+    expect(headers.some((h) => h.includes("success"))).toBe(false);
   });
 
   it("renders a loud banner when a run did no work (0 tokens)", async () => {
