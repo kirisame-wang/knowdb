@@ -131,10 +131,8 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
 // Defaults to the reach oracle; an optional human grade overrides it per-turn,
 // so graded and reach-scored turns coexist.
 export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
-  // An overflowed turn delivered no answer within budget — direct evidence (no
-  // final answer, the loop threw) overrides the reach proxy (reading a chunk ≠
-  // answering). So a turn that read its chunks then over-searched into the wall
-  // is not a success; it is the over-search failure subtype (overflow_after_reach).
+  // An overflow (the recorded 400) delivered no answer in budget, so it is never
+  // a success — overriding the reach proxy (reading a chunk ≠ answering).
   if (isContextOverflow(trace)) return false;
   if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
   return reachSuccess(turn, trace);
