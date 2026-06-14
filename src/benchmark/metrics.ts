@@ -137,10 +137,8 @@ export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanG
   return reachSuccess(turn, trace);
 }
 
-// Ran out of context budget: a 400 "prompt is too long". Both gates — overflow is
-// that 400 subtype, not any echo of the phrase. The string-level form matches the
-// raw onError message the error banner filters on; the trace form is the scorer's.
-// (successOf makes it a failure.)
+// A 400 "prompt is too long" — context overflow. Two gates (status + phrase) so a
+// stray echo of the phrase isn't matched. String form takes a raw message; trace form delegates.
 export function isContextOverflowError(error: string | undefined): boolean {
   const e = error ?? "";
   return /\b400\b/.test(e) && /prompt is too long/i.test(e);

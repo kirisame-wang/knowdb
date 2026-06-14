@@ -255,7 +255,6 @@ describe("isContextOverflow", () => {
     expect(isContextOverflow(trace([]))).toBe(false);
   });
 
-  // The banner filter inspects the raw onError message (no trace), so the predicate is exposed at the string level.
   it("isContextOverflowError matches the same raw message the error banner sees", () => {
     expect(isContextOverflowError('400 {"error":{"message":"prompt is too long: 204050 tokens > 200000 maximum"}}')).toBe(true);
     expect(isContextOverflowError("401 invalid x-api-key")).toBe(false);

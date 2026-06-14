@@ -297,8 +297,7 @@ export async function mountBenchmarkMode(): Promise<void> {
         signal: ac.signal,
         onProgress: (done, total, label) => setStatus(`${done}/${total} — ${label}`),
         onError: (err, label) => {
-          // Context overflow is a scored navigation failure (success table's overflow column),
-          // not a run-invalidating error — keep it out of the "Some turns errored" banner.
+          // Overflow is a scored failure (overflow column), not a run-invalidating error — not banner-worthy.
           const msg = err instanceof Error ? err.message : String(err);
           if (!isContextOverflowError(msg)) errors.push(`${label}: ${msg}`);
         },

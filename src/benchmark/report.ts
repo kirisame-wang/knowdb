@@ -413,8 +413,7 @@ export function successRowCells(r: SuccessRow): string[] {
   // Rates carry their k/n so a 100% over one turn doesn't read like a 100% over many.
   const rate = (p: number, n: number, frac: number): string => (n === 0 ? "—" : `${pct(frac)} (${p}/${n})`);
   const total = r.success.turns + r.failure.turns;
-  // overflow is a failure subset; "—" when none, else the two navigation subtypes
-  // side by side: over-search (reached, then over-searched) / no-reach (never reached).
+  // overflow failures: over-search / no-reach side by side, "—" when none.
   const overflow = r.overflow === 0 ? "—" : `${r.overflowAfterReach}/${r.overflow - r.overflowAfterReach}`;
   return [
     variantLabel(r.variant, r.role),
