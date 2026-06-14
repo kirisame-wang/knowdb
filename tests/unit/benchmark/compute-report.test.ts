@@ -379,7 +379,7 @@ describe("rollupVariant abstention_precision (gap-axis anti-gaming)", () => {
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
+      success: true, context_overflow: false, overflow_after_reach: false, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
@@ -477,7 +477,7 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
+      success: true, context_overflow: false, overflow_after_reach: false, expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 },
       ...over,
@@ -510,27 +510,67 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
   });
 });
 
-// A turn can reach its expected chunks in an early round and then overflow on a
-// later round (success AND context_overflow). The count is a failure subtype, so
-// such a turn — a success — must not be counted.
-describe("rollupVariant context_overflow_count (failure-subtype split)", () => {
+// An overflow is always a failure (successOf overrides reach — no answer was
+// delivered in budget). The count splits by navigation: over-search (reached its
+// chunks, then ran out) vs never-reached.
+describe("rollupVariant overflow counts (over-search vs never-reached)", () => {
   function tr(over: Partial<TurnResult>): TurnResult {
     return {
       problem_id: "p", turn_index: 0, query_id: "q", variant: "V",
       is_followup: false, turn_type: "symmetric", answerable: true,
-      success: true, context_overflow: false, expected_classification: "within_doc", classification_actual: "within_doc",
+      success: false, context_overflow: false, overflow_after_reach: false,
+      expected_classification: "within_doc", classification_actual: "within_doc",
       explicit_gap_reported: false, encountered_gap_signal: false, decision_steps: 1,
       tokens: { input: 0, output: 0 }, ...over,
     };
   }
-  const overflowCount = (rs: TurnResult[]) =>
-    rollupVariant("V", rs, [], new Map(), new Map()).context_overflow_count;
+  const counts = (rs: TurnResult[]) => {
+    const a = rollupVariant("V", rs, [], new Map(), new Map());
+    return { total: a.context_overflow_count, afterReach: a.overflow_after_reach_count };
+  };
 
-  it("counts only failed overflows; a reached-then-overflowed turn is a success, not counted", () => {
-    expect(overflowCount([
-      tr({ success: false, context_overflow: true }),  // failed by the budget wall → counted
-      tr({ success: true, context_overflow: true }),   // reached its chunks, then overflowed → success, not a failure subtype
-      tr({ success: false, context_overflow: false }), // within-budget reach-miss → not an overflow
-    ])).toBe(1);
+  it("counts every overflow as a failure and splits the over-search ones out", () => {
+    expect(counts([
+      tr({ context_overflow: true, overflow_after_reach: true }),   // reached, then over-searched into the wall
+      tr({ context_overflow: true, overflow_after_reach: false }),  // never reached, ran out of budget
+      tr({ context_overflow: false }),                              // within-budget reach-miss → not an overflow
+    ])).toEqual({ total: 2, afterReach: 1 });
+  });
+});
+
+// Wiring: computeReport derives the overflow fields straight from QueryTrace.error
+// (+ reachSuccess for the over-search split). No agent-loop change — the loop
+// already records the 400 on the trace.
+describe("computeReport wires the overflow fields from the trace", () => {
+  const prob: BenchmarkProblem = {
+    id: "t1", domain: "mcp", thread_type: "symmetric",
+    turns: [{ turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric", answerable: true,
+      expected_doc_ids: ["abc"], expected_chunk_groups: [["abc/01"]], expected_answer_keypoints: ["k"], expected_classification: "within_doc" }],
+  };
+  const miniRun: BenchmarkRun = {
+    run_id: "r", model: "m", temperature: 0, max_tokens: 4096, knowdb_commit_sha: "x",
+    tool_set_version: "v", problem_set_id: "p", variants: ["full"], started_at: "s", ended_at: "e", reviewer: "t",
+  };
+  const overflowTrace = (readId: string): QueryTrace => ({
+    source: "browser", query_id: "q", user_question: "q", started_at: "s", ended_at: "e",
+    tool_calls: [call("read_chunk", { id: readId })],
+    api_rounds: [{ ordinal: 1, input_tokens: 0, output_tokens: 0, duration_ms: 0 }],
+    error: "400 prompt is too long: 207358 tokens > 200000 maximum",
+  });
+  const assign: VariantAssignment = { query_id: "q", variant: "full", problem_id: "t1", turn_index: 0, assigned_at: "a" };
+  const resultOf = (readId: string) =>
+    computeReport([overflowTrace(readId)], [], [assign], [prob], [], miniRun).results[0]!;
+
+  it("read the expected chunk then overflowed → not a success, overflow + over-search", () => {
+    const r = resultOf("abc/01");
+    expect(r.success).toBe(false);
+    expect(r.context_overflow).toBe(true);
+    expect(r.overflow_after_reach).toBe(true);
+  });
+
+  it("overflowed without reaching the expected chunk → overflow, not over-search", () => {
+    const r = resultOf("abc/99");
+    expect(r.context_overflow).toBe(true);
+    expect(r.overflow_after_reach).toBe(false);
   });
 });

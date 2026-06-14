@@ -3,6 +3,7 @@ import {
   classifyQuery,
   encounteredKnownGap,
   isContextOverflow,
+  reachSuccess,
   rollupVariant,
   successOf,
   terminalGapReported,
@@ -44,6 +45,7 @@ export function computeReport(
       if (!turn) throw new Error(`Unknown turn ${a.problem_id}#${a.turn_index}`);
       const grade = gradeOf.get(t.query_id); // optional: present → answer-quality override; absent → reach oracle
       const success = successOf(turn, t, grade);
+      const overflowed = isContextOverflow(t);
       return {
         problem_id: a.problem_id,
         turn_index: a.turn_index,
@@ -53,7 +55,8 @@ export function computeReport(
         turn_type: turn.turn_type,
         answerable: turn.answerable,
         success,
-        context_overflow: isContextOverflow(t),
+        context_overflow: overflowed,
+        overflow_after_reach: overflowed && reachSuccess(turn, t), // reached its chunks, then over-searched into the wall
         expected_classification: turn.expected_classification,
         classification_actual: classifyQuery(t),
         explicit_gap_reported: terminalGapReported(turn, t, success),

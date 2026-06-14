@@ -131,14 +131,18 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
 // Defaults to the reach oracle; an optional human grade overrides it per-turn,
 // so graded and reach-scored turns coexist.
 export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
+  // An overflowed turn delivered no answer within budget — direct evidence (no
+  // final answer, the loop threw) overrides the reach proxy (reading a chunk ≠
+  // answering). So a turn that read its chunks then over-searched into the wall
+  // is not a success; it is the over-search failure subtype (overflow_after_reach).
+  if (isContextOverflow(trace)) return false;
   if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
   return reachSuccess(turn, trace);
 }
 
 // The turn ran out of context budget: messages.create returned a 400 "prompt is
-// too long" and the loop recorded it on trace.error. It's a navigation-failure
-// subtype — the agent couldn't reach the answer within the model's context,
-// distinct from a within-budget reach-miss — not excluded, just labelled.
+// too long" and the loop recorded it on trace.error. The user got no answer in
+// budget, so it is a navigation failure (never a success — see successOf).
 export function isContextOverflow(trace: QueryTrace): boolean {
   return /prompt is too long/i.test(trace.error ?? "");
 }
@@ -223,10 +227,11 @@ export function rollupVariant(
     success_rate: rate(rs.filter((r) => r.success).length, rs.length),
     within_doc_success_rate: rate(within.filter((r) => r.success).length, within.length),
     cross_doc_success_rate: rate(cross.filter((r) => r.success).length, cross.length),
-    // of the non-success turns, how many failed by exhausting the context budget
-    // (a navigation-failure subtype) vs a within-budget reach-miss. A turn that
-    // reached its chunks before overflowing is a success, so it is not counted.
-    context_overflow_count: rs.filter((r) => !r.success && r.context_overflow).length,
+    // Overflow failures (successOf makes every overflow a non-success, so no
+    // !success guard needed), split by navigation: overflow_after_reach = found
+    // the chunks then over-searched into the wall; the rest never reached.
+    context_overflow_count: rs.filter((r) => r.context_overflow).length,
+    overflow_after_reach_count: rs.filter((r) => r.overflow_after_reach).length,
     explicit_gap_rate: rate(reportedGaps.length, rs.length),
     // null when no gaps reported; 0 already means "every reported gap was false".
     abstention_precision:

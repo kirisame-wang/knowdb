@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, encounteredKnownGap, isContextOverflow, reachSuccess, terminalGapReported } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, isContextOverflow, reachSuccess, successOf, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
@@ -235,5 +235,28 @@ describe("isContextOverflow", () => {
 
   it("false for a completed turn with no error", () => {
     expect(isContextOverflow(trace([]))).toBe(false);
+  });
+});
+
+describe("successOf — an overflowed turn delivered no answer, so reach is overridden", () => {
+  const answerable = (): BenchmarkTurn => ({
+    turn_index: 0, question: "q", is_followup: false, turn_type: "symmetric",
+    answerable: true, expected_doc_ids: ["d"], expected_chunk_groups: [["d/01"]],
+    expected_answer_keypoints: [], expected_classification: "within_doc",
+  });
+  const reached = (error?: string): QueryTrace => ({
+    ...trace([call("read_chunk", { id: "d/01" })]),
+    ...(error ? { error } : {}),
+  });
+  const OVERFLOW = "400 prompt is too long: 207358 tokens > 200000 maximum";
+
+  it("reached its chunks but overflowed → not a success (over-search / no delivery)", () => {
+    const t = answerable();
+    expect(reachSuccess(t, reached())).toBe(true);        // navigation did reach
+    expect(successOf(t, reached(OVERFLOW))).toBe(false);  // but no answer delivered in budget
+  });
+
+  it("reached and terminated within budget → success", () => {
+    expect(successOf(answerable(), reached())).toBe(true);
   });
 });

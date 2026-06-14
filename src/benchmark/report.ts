@@ -195,6 +195,7 @@ export interface SuccessRow {
   success: OutcomeStats;
   failure: OutcomeStats;
   overflow: number; // of the failed turns, how many hit the context-budget wall (vs within-budget reach-miss)
+  overflowAfterReach: number; // of those overflows, how many had already reached (the over-search subtype)
 }
 
 // Column labels for the pilot success table (rendered only under ground truth).
@@ -294,13 +295,17 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       success: outcomeStats(rs.filter((r) => r.success)),
       failure: outcomeStats(rs.filter((r) => !r.success)),
       overflow: a.context_overflow_count,
+      overflowAfterReach: a.overflow_after_reach_count,
     };
   });
-  // Name overflows as a distinct failure subtype so a budget wall isn't read as a
-  // within-budget reach-miss (they carry different diagnostic meaning).
-  const overflows = rows.filter((r) => r.overflow > 0).map((r) => `${r.variant} ${r.overflow}`);
+  // Name overflows as a distinct failure subtype (a budget wall ≠ a within-budget
+  // reach-miss), and flag the over-search ones — reached the answer, then failed to
+  // stop/deliver before the wall — since that is a different navigation deficiency.
+  const overflows = rows
+    .filter((r) => r.overflow > 0)
+    .map((r) => `${r.variant} ${r.overflow}${r.overflowAfterReach > 0 ? ` (${r.overflowAfterReach} over-search)` : ""}`);
   const overflowNote = overflows.length
-    ? `Context overflows (counted as failures, distinct from within-budget reach-miss): ${overflows.join(", ")}.`
+    ? `Context overflows (failures — no answer delivered in budget; over-search = reached then ran out): ${overflows.join(", ")}.`
     : undefined;
   return { columns: SUCCESS_COLUMNS, rows, ...(overflowNote ? { overflowNote } : {}) };
 }

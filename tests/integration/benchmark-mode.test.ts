@@ -118,8 +118,8 @@ describe("renderReport — DOM tables", () => {
       success: {
         columns: ["variant", "success", "within✓", "cross✓", "steps ✓/✗", "in-tok ✓/✗", "out-tok ✓/✗"],
         rows: [
-          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 }, overflow: 0 },
-          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 }, overflow: 0 },
+          { variant: "full", role: "baseline", successRate: 0.5, successPass: 1, withinSuccess: 0.5, withinPass: 1, withinTurns: 2, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 1, avgSteps: 3, avgIn: 100, avgOut: 20 }, failure: { turns: 1, avgSteps: 8, avgIn: 300, avgOut: 40 }, overflow: 0, overflowAfterReach: 0 },
+          { variant: "no_search", successRate: 0, successPass: 0, withinSuccess: 0, withinPass: 0, withinTurns: 1, crossSuccess: 0, crossPass: 0, crossTurns: 0, success: { turns: 0, avgSteps: 0, avgIn: 0, avgOut: 0 }, failure: { turns: 1, avgSteps: 9, avgIn: 500, avgOut: 60 }, overflow: 0, overflowAfterReach: 0 },
         ],
       },
     };
