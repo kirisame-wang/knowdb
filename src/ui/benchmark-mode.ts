@@ -37,7 +37,7 @@ const SYSTEM_PROMPT =
   "You are a helpful assistant with access to a knowledge base via tools. " +
   "Call get_instructions first to learn how to use the tools. Be concise in your final answer.";
 
-const QUESTION_SET_PATH = "benchmark/smoke.json";
+const QUESTION_SET_PATH = "benchmark/pilot.json";
 
 // (variant × problem) threads in flight — a modest cap to cut wall-clock while
 // staying well under the API rate limit.

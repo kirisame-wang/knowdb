@@ -3,13 +3,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { BenchmarkProblem } from "../../../src/benchmark/types.js";
 
-// Data-contract test for the shipped question set (benchmark/smoke.json): the fixture's own
+// Data-contract test for the shipped question set (benchmark/pilot.json): the fixture's own
 // structural invariants, and its hand-filled ground truth against the live corpus index — a
 // re-ingest that drops or renames a chunk fails here loudly, instead of the reach oracle
 // silently scoring those turns 0.
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const problems = JSON.parse(readFileSync(root + "benchmark/smoke.json", "utf8")) as BenchmarkProblem[];
+const problems = JSON.parse(readFileSync(root + "benchmark/pilot.json", "utf8")) as BenchmarkProblem[];
 const index = JSON.parse(readFileSync(root + "db/_search_index.json", "utf8")) as Record<string, unknown>;
 const chunkExists = (id: string): boolean => Object.prototype.hasOwnProperty.call(index, id);
 

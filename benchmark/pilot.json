@@ -1,6 +1,6 @@
 [
   {
-    "id": "t-smoke-01",
+    "id": "t-pilot-01",
     "domain": "annual_report",
     "thread_type": "lexical_gap",
     "turns": [
@@ -19,7 +19,7 @@
     ]
   },
   {
-    "id": "t-smoke-02",
+    "id": "t-pilot-02",
     "domain": "annual_report",
     "thread_type": "lexical_gap",
     "turns": [
@@ -41,7 +41,7 @@
     ]
   },
   {
-    "id": "t-smoke-03",
+    "id": "t-pilot-03",
     "domain": "annual_report",
     "thread_type": "lexical_gap",
     "turns": [
@@ -63,7 +63,7 @@
     ]
   },
   {
-    "id": "t-smoke-04",
+    "id": "t-pilot-04",
     "domain": "annual_report",
     "thread_type": "symmetric",
     "turns": [
@@ -98,7 +98,7 @@
     ]
   },
   {
-    "id": "t-smoke-05",
+    "id": "t-pilot-05",
     "domain": "annual_report",
     "thread_type": "symmetric",
     "turns": [
@@ -128,7 +128,7 @@
     ]
   },
   {
-    "id": "t-smoke-06",
+    "id": "t-pilot-06",
     "domain": "annual_report",
     "thread_type": "lexical_gap",
     "turns": [
@@ -147,7 +147,7 @@
     ]
   },
   {
-    "id": "t-smoke-07",
+    "id": "t-pilot-07",
     "domain": "annual_report",
     "thread_type": "structural",
     "turns": [
@@ -170,7 +170,7 @@
     ]
   },
   {
-    "id": "t-smoke-08",
+    "id": "t-pilot-08",
     "domain": "annual_report",
     "thread_type": "structural",
     "turns": [
@@ -193,7 +193,7 @@
     ]
   },
   {
-    "id": "t-smoke-09",
+    "id": "t-pilot-09",
     "domain": "annual_report",
     "thread_type": "structural",
     "turns": [
@@ -216,7 +216,7 @@
     ]
   },
   {
-    "id": "t-smoke-10",
+    "id": "t-pilot-10",
     "domain": "annual_report",
     "thread_type": "lexical_gap",
     "turns": [

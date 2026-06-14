@@ -32,7 +32,7 @@ describe("benchmark mode UI — flag gating", () => {
     const fetchSpy = vi.fn(async (url: unknown) => ({
       ok: true,
       status: 200,
-      json: async () => (String(url).includes("smoke.json") ? [] : {}),
+      json: async () => (String(url).includes("pilot.json") ? [] : {}),
     }));
     vi.stubGlobal("fetch", fetchSpy);
     await import("../../src/ui/benchmark-mode.js");
@@ -40,9 +40,9 @@ describe("benchmark mode UI — flag gating", () => {
     expect(document.getElementById("knowdb-benchmark")).not.toBeNull();
     // The inline API-key input is present (no prompt popup).
     expect(document.getElementById("benchmark-api-key")).not.toBeNull();
-    // Mount loads index + manifest + smoke.json (all three fetches fire synchronously).
+    // Mount loads index + manifest + pilot.json (all three fetches fire synchronously).
     expect(fetchSpy).toHaveBeenCalledTimes(3);
-    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("smoke.json"))).toBe(true);
+    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes("pilot.json"))).toBe(true);
   });
 });
 
