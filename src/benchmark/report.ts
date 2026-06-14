@@ -298,9 +298,8 @@ function buildSuccessView(report: BenchmarkReport): SuccessView {
       overflowAfterReach: a.overflow_after_reach_count,
     };
   });
-  // Name overflows as a distinct failure subtype (a budget wall ≠ a within-budget
-  // reach-miss), and flag the over-search ones — reached the answer, then failed to
-  // stop/deliver before the wall — since that is a different navigation deficiency.
+  // Name overflow failures, flagging the over-search ones (reached the answer,
+  // then ran out before delivering) — a different deficiency than never reaching.
   const overflows = rows
     .filter((r) => r.overflow > 0)
     .map((r) => `${r.variant} ${r.overflow}${r.overflowAfterReach > 0 ? ` (${r.overflowAfterReach} over-search)` : ""}`);

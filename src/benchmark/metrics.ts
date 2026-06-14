@@ -131,16 +131,14 @@ export function reachSuccess(turn: BenchmarkTurn, trace: QueryTrace): boolean {
 // Defaults to the reach oracle; an optional human grade overrides it per-turn,
 // so graded and reach-scored turns coexist.
 export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanGrade): boolean {
-  // An overflow (the recorded 400) delivered no answer in budget, so it is never
-  // a success — overriding the reach proxy (reading a chunk ≠ answering).
+  // An overflow delivered no answer (reading a chunk ≠ answering), so never a success.
   if (isContextOverflow(trace)) return false;
   if (grade) return grade.rubric_1_covers_keypoints && grade.rubric_2_citations_valid;
   return reachSuccess(turn, trace);
 }
 
-// The turn ran out of context budget: messages.create returned a 400 "prompt is
-// too long" and the loop recorded it on trace.error. The user got no answer in
-// budget, so it is a navigation failure (never a success — see successOf).
+// The turn ran out of context budget: a 400 "prompt is too long" the loop
+// recorded on trace.error. (successOf makes it a failure.)
 export function isContextOverflow(trace: QueryTrace): boolean {
   return /prompt is too long/i.test(trace.error ?? "");
 }
@@ -225,9 +223,6 @@ export function rollupVariant(
     success_rate: rate(rs.filter((r) => r.success).length, rs.length),
     within_doc_success_rate: rate(within.filter((r) => r.success).length, within.length),
     cross_doc_success_rate: rate(cross.filter((r) => r.success).length, cross.length),
-    // Overflow failures (successOf makes every overflow a non-success, so no
-    // !success guard needed), split by navigation: overflow_after_reach = found
-    // the chunks then over-searched into the wall; the rest never reached.
     context_overflow_count: rs.filter((r) => r.context_overflow).length,
     overflow_after_reach_count: rs.filter((r) => r.overflow_after_reach).length,
     explicit_gap_rate: rate(reportedGaps.length, rs.length),

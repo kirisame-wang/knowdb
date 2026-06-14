@@ -510,9 +510,8 @@ describe("rollupVariant recovery_rate (retry-scaffold axis: false-gap recovery)"
   });
 });
 
-// An overflow is always a failure (successOf overrides reach — no answer was
-// delivered in budget). The count splits by navigation: over-search (reached its
-// chunks, then ran out) vs never-reached.
+// Overflow is always a failure; the count splits by navigation: over-search
+// (reached its chunks, then ran out) vs never-reached.
 describe("rollupVariant overflow counts (over-search vs never-reached)", () => {
   function tr(over: Partial<TurnResult>): TurnResult {
     return {
@@ -538,9 +537,8 @@ describe("rollupVariant overflow counts (over-search vs never-reached)", () => {
   });
 });
 
-// Wiring: computeReport derives the overflow fields straight from QueryTrace.error
-// (+ reachSuccess for the over-search split). No agent-loop change — the loop
-// already records the 400 on the trace.
+// Wiring: computeReport derives the overflow fields from QueryTrace.error (+
+// reachSuccess for the over-search split) — no agent-loop change needed.
 describe("computeReport wires the overflow fields from the trace", () => {
   const prob: BenchmarkProblem = {
     id: "t1", domain: "mcp", thread_type: "symmetric",
