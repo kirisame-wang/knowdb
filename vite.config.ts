@@ -8,10 +8,14 @@ export default defineConfig({
   },
   plugins: [
     {
-      name: "copy-db",
+      // Runtime-fetched static dirs (outside the module graph, so Vite won't
+      // bundle them) — copy into dist so the built app can fetch them too.
+      name: "copy-static",
       closeBundle() {
-        if (existsSync("db")) {
-          cpSync("db", "dist/db", { recursive: true });
+        for (const dir of ["db", "benchmark"]) {
+          if (existsSync(dir)) {
+            cpSync(dir, `dist/${dir}`, { recursive: true });
+          }
         }
       },
     },
