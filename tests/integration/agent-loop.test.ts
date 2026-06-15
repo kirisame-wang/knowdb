@@ -514,6 +514,37 @@ describe("runAgentTurn — context-budget warning", () => {
     expect(warns).toEqual([[850, 1000]]);
   });
 
+  it("warns at exactly the threshold (>=, not >)", async () => {
+    const client = scriptedClient([msg([text("Done.")], 800)]); // exactly 80% of 1000
+    const deps = makeDeps(client);
+    deps.contextBudget = budget;
+    const warns: Array<[number, number]> = [];
+    deps.hooks = { onContextWarning: (input, window) => warns.push([input, window]) };
+
+    await runAgentTurn(deps, "Q");
+    expect(warns).toEqual([[800, 1000]]);
+  });
+
+  // chatHistory persists across turns, so the window keeps filling; a later turn
+  // still over the band must nudge again — one reminder per send, not once ever.
+  it("nudges again on a later turn that is still over the band", async () => {
+    const client = scriptedClient([
+      msg([text("Turn 1.")], 850),
+      msg([text("Turn 2.")], 900),
+    ]);
+    const deps = makeDeps(client);
+    deps.contextBudget = budget;
+    const warns: Array<[number, number]> = [];
+    deps.hooks = { onContextWarning: (input, window) => warns.push([input, window]) };
+
+    await runAgentTurn(deps, "Q1");
+    await runAgentTurn(deps, "Q2"); // same deps → same chatHistory
+    expect(warns).toEqual([
+      [850, 1000],
+      [900, 1000],
+    ]);
+  });
+
   it("stays silent while input is below the threshold", async () => {
     const client = scriptedClient([
       msg([toolUse("tu_1", "search", { keyword: "BM25" })], 100),

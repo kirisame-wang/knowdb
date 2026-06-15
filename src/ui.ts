@@ -434,7 +434,7 @@ async function sendMessage() {
             const pct = Math.round((inputTokens / windowTokens) * 100);
             appendStatus(
               `This conversation is using ~${pct}% of the model's context window. ` +
-                "Start a new conversation (reload the page) to keep answers fast and accurate."
+                "Start a new conversation (reload the page) before it runs out of room."
             );
           },
           onError: (err) => {

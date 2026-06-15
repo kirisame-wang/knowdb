@@ -72,8 +72,10 @@ export async function runAgentTurn(
   deps.hooks?.onThinkingStart?.();
 
   let trace: QueryTrace | undefined;
-  // One context-budget nudge per turn: input only grows across rounds, so warn
-  // on the first crossing and stay quiet after.
+  // At most one context-budget nudge per turn: input only grows across the
+  // rounds of a single turn, so warn on the first crossing and stay quiet for
+  // the rest of it. A later turn still over the band nudges again — chatHistory
+  // persists across turns, so each send is a fresh reminder until the user acts.
   let contextWarned = false;
   try {
     // Tool-use agentic loop.
