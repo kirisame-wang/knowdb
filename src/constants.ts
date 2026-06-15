@@ -4,8 +4,14 @@
 export const MODEL = {
   id: "claude-haiku-4-5-20251001",
   pricing: { inputPerMTok: 1, outputPerMTok: 5 }, // USD per 1M tokens
+  contextWindowTokens: 200_000,
 } as const;
 
 // Per-request output cap the demo chooses for each turn — our setting, not a
 // property of the model.
 export const MAX_OUTPUT_TOKENS = 2048;
+
+// Fraction of the context window at which the UI nudges the user to start a
+// fresh conversation — our setting, leaving headroom for the reply and the
+// next round before the window actually fills.
+export const CONTEXT_WARN_RATIO = 0.8;

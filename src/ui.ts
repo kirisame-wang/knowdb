@@ -5,7 +5,7 @@ import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
-import { MODEL, MAX_OUTPUT_TOKENS } from "./constants.js";
+import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO } from "./constants.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -415,6 +415,7 @@ async function sendMessage() {
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         chatHistory,
+        contextBudget: { windowTokens: MODEL.contextWindowTokens, warnRatio: CONTEXT_WARN_RATIO },
         signal: ac.signal,
         hooks: {
           onUserMessage: (t) => appendBubble("user", t),
@@ -428,6 +429,13 @@ async function sendMessage() {
           onAssistantMessage: (t) => {
             if (thinkingBubble) thinkingBubble.remove();
             appendBubble("assistant", t || "(no response)");
+          },
+          onContextWarning: (inputTokens, windowTokens) => {
+            const pct = Math.round((inputTokens / windowTokens) * 100);
+            appendStatus(
+              `This conversation is using ~${pct}% of the model's context window. ` +
+                "Start a new conversation (reload the page) to keep answers fast and accurate."
+            );
           },
           onError: (err) => {
             const msg = `Error: ${err instanceof Error ? err.message : String(err)}`;
