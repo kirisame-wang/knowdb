@@ -337,6 +337,7 @@ describe("ingest", () => {
       expect(body).toContain("~~~");
       expect(body).toContain("# fenced hash");
       expect(await readFile(join(DB, mismatchId, "01-01.md"), "utf-8")).toContain("sub body");
+      expect(await readFile(join(DB, mismatchId, "_index.md"), "utf-8")).not.toContain("fenced hash");
       expect(existsSync(join(DB, mismatchId, "02.md"))).toBe(false);
     });
 
@@ -344,6 +345,7 @@ describe("ingest", () => {
       const body = await readFile(join(DB, lengthId, "01.md"), "utf-8");
       expect(body).toContain("# still fenced");
       expect(await readFile(join(DB, lengthId, "01-01.md"), "utf-8")).toContain("after body");
+      expect(await readFile(join(DB, lengthId, "_index.md"), "utf-8")).not.toContain("still fenced");
       expect(existsSync(join(DB, lengthId, "02.md"))).toBe(false);
     });
   });
