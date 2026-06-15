@@ -232,6 +232,8 @@ describe("ingest", () => {
     let tmp: string;
     let fenceId: string;
     let preId: string;
+    let mismatchId: string;
+    let lengthId: string;
 
     beforeAll(async () => {
       await mkdir(DB, { recursive: true });
@@ -268,6 +270,20 @@ describe("ingest", () => {
         ["```", "# not a heading", "```", "", "preamble prose", "", "# Real H1", "h1 body", ""].join("\n"),
         "utf-8"
       );
+      // Marker-mismatch: a `~~~` line inside a backtick fence must not close it,
+      // so the `# ` line after it stays content (pins the marker-char check).
+      await fsWriteFile(
+        join(tmp, "mismatch-doc.md"),
+        ["# Heading One", "intro", "```text", "~~~", "# fenced hash", "```", "## Sub After", "sub body", ""].join("\n"),
+        "utf-8"
+      );
+      // Length rule: a 3-backtick line inside a 4-backtick fence is too short to
+      // close it (close len must be >= open len), so the `# ` stays content.
+      await fsWriteFile(
+        join(tmp, "length-doc.md"),
+        ["# Length Heading", "intro", "````", "```", "# still fenced", "````", "## After Length", "after body", ""].join("\n"),
+        "utf-8"
+      );
       const r = runIngest([tmp], DB);
       expect(r.status, r.stderr).toBe(0);
       const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
@@ -277,6 +293,8 @@ describe("ingest", () => {
       const idOf = (f: string) => Object.keys(manifest).find((k) => manifest[k]!.originalFilename === f)!;
       fenceId = idOf("fence-doc.md");
       preId = idOf("pre-doc.md");
+      mismatchId = idOf("mismatch-doc.md");
+      lengthId = idOf("length-doc.md");
     });
 
     afterAll(async () => {
@@ -312,6 +330,21 @@ describe("ingest", () => {
       expect(pre).toContain("preamble prose");
       // The real heading after the fence still starts the first section.
       expect(await readFile(join(DB, preId, "01.md"), "utf-8")).toContain("h1 body");
+    });
+
+    it("a different fence marker does not close the fence (marker-char check)", async () => {
+      const body = await readFile(join(DB, mismatchId, "01.md"), "utf-8");
+      expect(body).toContain("~~~");
+      expect(body).toContain("# fenced hash");
+      expect(await readFile(join(DB, mismatchId, "01-01.md"), "utf-8")).toContain("sub body");
+      expect(existsSync(join(DB, mismatchId, "02.md"))).toBe(false);
+    });
+
+    it("a shorter closing fence does not close a longer one (length rule)", async () => {
+      const body = await readFile(join(DB, lengthId, "01.md"), "utf-8");
+      expect(body).toContain("# still fenced");
+      expect(await readFile(join(DB, lengthId, "01-01.md"), "utf-8")).toContain("after body");
+      expect(existsSync(join(DB, lengthId, "02.md"))).toBe(false);
     });
   });
 });
