@@ -223,4 +223,95 @@ describe("ingest", () => {
       expect(await readFile(join(DB, rootId, "02.md"), "utf-8")).toContain("h1-body");
     });
   });
+
+  // A `# ` line inside a fenced code block is content, not a heading. Without a
+  // fence state machine it splits the block into a fake section and truncates
+  // the preamble — corrupting the chunk tree the map is built from.
+  describe("fenced code blocks: `# ` lines inside fences are not headings", () => {
+    const DB = dbDir("db-test-fence");
+    let tmp: string;
+    let fenceId: string;
+    let preId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-fence-"));
+      // Fence inside a section: a shell comment and a markdown-example heading,
+      // both inside ```bash / ~~~ fences, must stay in the section body.
+      await fsWriteFile(
+        join(tmp, "fence-doc.md"),
+        [
+          "# Real Heading",
+          "intro body",
+          "",
+          "```bash",
+          "# install deps",
+          "npm install",
+          "```",
+          "",
+          "~~~",
+          "### Step 3 example",
+          "~~~",
+          "",
+          "after the fence",
+          "",
+          "## Real Subsection",
+          "sub body",
+          "",
+        ].join("\n"),
+        "utf-8"
+      );
+      // Fence in the preamble: a `# ` line inside a leading fence must not cut
+      // the preamble short before the first real heading.
+      await fsWriteFile(
+        join(tmp, "pre-doc.md"),
+        ["```", "# not a heading", "```", "", "preamble prose", "", "# Real H1", "h1 body", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      const idOf = (f: string) => Object.keys(manifest).find((k) => manifest[k]!.originalFilename === f)!;
+      fenceId = idOf("fence-doc.md");
+      preId = idOf("pre-doc.md");
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("keeps fenced `# ` / `### ` lines in the section body, not as new chunks", async () => {
+      const body = await readFile(join(DB, fenceId, "01.md"), "utf-8");
+      expect(body).toContain("# install deps");
+      expect(body).toContain("npm install");
+      expect(body).toContain("### Step 3 example");
+      expect(body).toContain("after the fence");
+    });
+
+    it("does not create a fake section from a fenced heading-looking line", async () => {
+      const idx = await readFile(join(DB, fenceId, "_index.md"), "utf-8");
+      expect(idx).not.toContain("install deps");
+      expect(idx).not.toContain("Step 3 example");
+      // Only the two real headings exist as top-level/nested chunks.
+      expect(existsSync(join(DB, fenceId, "01.md"))).toBe(true);
+      expect(existsSync(join(DB, fenceId, "01-01.md"))).toBe(true);
+      expect(existsSync(join(DB, fenceId, "02.md"))).toBe(false);
+    });
+
+    it("nests the real subsection under the real heading", async () => {
+      expect(await readFile(join(DB, fenceId, "01-01.md"), "utf-8")).toContain("sub body");
+    });
+
+    it("does not truncate the preamble at a fenced `# ` line", async () => {
+      const pre = await readFile(join(DB, preId, "00.md"), "utf-8");
+      expect(pre).toContain("# not a heading");
+      expect(pre).toContain("preamble prose");
+      // The real heading after the fence still starts the first section.
+      expect(await readFile(join(DB, preId, "01.md"), "utf-8")).toContain("h1 body");
+    });
+  });
 });
