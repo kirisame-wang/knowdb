@@ -29,6 +29,10 @@ export interface AgentLoopDeps {
   maxTokens: number;
   /** Mutable conversation history; the loop pushes user/assistant turns. */
   chatHistory: Anthropic.Messages.MessageParam[];
+  /** When set, the loop fires onContextWarning once per turn the first round the
+   *  response's input_tokens reaches warnRatio of windowTokens — a proactive
+   *  nudge to start a fresh conversation before the context window fills. */
+  contextBudget?: { windowTokens: number; warnRatio: number };
   hooks?: AgentLoopHooks;
   /** Injectable clock for deterministic tests. Defaults to Date.now/new Date. */
   now?: () => Date;
@@ -47,6 +51,9 @@ export interface AgentLoopHooks {
   onAssistantMessage?(text: string): void;
   onError?(err: unknown): void;
   onAbort?(): void;
+  /** Input usage has reached the context-budget warn band; inputTokens is the
+   *  last round's actual input, windowTokens the model's context window. */
+  onContextWarning?(inputTokens: number, windowTokens: number): void;
 }
 
 /** Drive one user→final-answer turn: stamp the trace, run the tool-use loop,
@@ -65,6 +72,9 @@ export async function runAgentTurn(
   deps.hooks?.onThinkingStart?.();
 
   let trace: QueryTrace | undefined;
+  // One context-budget nudge per turn: input only grows across rounds, so warn
+  // on the first crossing and stay quiet after.
+  let contextWarned = false;
   try {
     // Tool-use agentic loop.
     // eslint-disable-next-line no-constant-condition
@@ -92,6 +102,15 @@ export async function runAgentTurn(
         output_tokens: response.usage.output_tokens,
         duration_ms: Date.now() - apiT0,
       });
+
+      if (
+        !contextWarned &&
+        deps.contextBudget &&
+        response.usage.input_tokens >= deps.contextBudget.windowTokens * deps.contextBudget.warnRatio
+      ) {
+        contextWarned = true;
+        deps.hooks?.onContextWarning?.(response.usage.input_tokens, deps.contextBudget.windowTokens);
+      }
 
       const toolUseBlocks = response.content.filter(
         (b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use"

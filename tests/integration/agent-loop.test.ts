@@ -489,6 +489,56 @@ describe("runAgentTurn — integration", () => {
   });
 });
 
+// The proactive context-budget warning: when contextBudget is set, the loop
+// fires onContextWarning the first round the input reaches warnRatio of the
+// window — a "start a fresh conversation" nudge before the context fills.
+describe("runAgentTurn — context-budget warning", () => {
+  // window 1000, warnRatio 0.8 → warn once input_tokens reaches 800.
+  const budget = { windowTokens: 1000, warnRatio: 0.8 };
+
+  it("fires onContextWarning once the first round input reaches the threshold", async () => {
+    const client = scriptedClient([
+      msg([toolUse("tu_1", "search", { keyword: "BM25" })], 100), // below: no warn
+      msg([toolUse("tu_2", "parent", { id: "aaa00001/01" })], 850), // crosses 800: warn
+      msg([text("Done.")], 900), // already warned: stays quiet
+    ]);
+    const deps = makeDeps(client);
+    deps.contextBudget = budget;
+    const warns: Array<[number, number]> = [];
+    deps.hooks = { onContextWarning: (input, window) => warns.push([input, window]) };
+
+    await runAgentTurn(deps, "Q");
+
+    // One nudge per turn, fired on the first crossing, carrying the live input
+    // and the window so the UI can render a percentage.
+    expect(warns).toEqual([[850, 1000]]);
+  });
+
+  it("stays silent while input is below the threshold", async () => {
+    const client = scriptedClient([
+      msg([toolUse("tu_1", "search", { keyword: "BM25" })], 100),
+      msg([text("Done.")], 700), // 70% < 80%
+    ]);
+    const deps = makeDeps(client);
+    deps.contextBudget = budget;
+    let warned = false;
+    deps.hooks = { onContextWarning: () => (warned = true) };
+
+    await runAgentTurn(deps, "Q");
+    expect(warned).toBe(false);
+  });
+
+  it("never fires without a contextBudget dep (benchmark / default path unaffected)", async () => {
+    const client = scriptedClient([msg([text("Done.")], 999_999)]);
+    const deps = makeDeps(client); // no deps.contextBudget
+    let warned = false;
+    deps.hooks = { onContextWarning: () => (warned = true) };
+
+    await runAgentTurn(deps, "Q");
+    expect(warned).toBe(false);
+  });
+});
+
 // The benchmark ablation hook: an injected deps.ablation transforms a tool result
 // before it is recorded and before it reaches the agent; absent in normal use.
 describe("runAgentTurn — ablation hook", () => {
