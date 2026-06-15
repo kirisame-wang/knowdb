@@ -18,10 +18,8 @@ interface Section {
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
 
-// Fence tracking so a `# ` line inside a ``` / ~~~ code block is read as content,
-// not a heading — otherwise it splits the block into a fake section. A close must
-// match the opener's char and be at least as long; info strings (```bash) are
-// tolerated on open only. Not full CommonMark — enough for demo-scale sources.
+// A `# ` line inside a ``` / ~~~ fence is content, not a heading; track fence
+// state so heading detection skips it.
 interface FenceState {
   open: boolean;
   marker: string;

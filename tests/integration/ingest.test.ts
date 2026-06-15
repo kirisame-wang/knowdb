@@ -224,9 +224,6 @@ describe("ingest", () => {
     });
   });
 
-  // A `# ` line inside a fenced code block is content, not a heading. Without a
-  // fence state machine it splits the block into a fake section and truncates
-  // the preamble — corrupting the chunk tree the map is built from.
   describe("fenced code blocks: `# ` lines inside fences are not headings", () => {
     const DB = dbDir("db-test-fence");
     let tmp: string;
@@ -238,8 +235,7 @@ describe("ingest", () => {
     beforeAll(async () => {
       await mkdir(DB, { recursive: true });
       tmp = await mkdtemp(join(tmpdir(), "knowdb-fence-"));
-      // Fence inside a section: a shell comment and a markdown-example heading,
-      // both inside ```bash / ~~~ fences, must stay in the section body.
+      // Fenced `# ` / `### ` lines inside a section stay in the body.
       await fsWriteFile(
         join(tmp, "fence-doc.md"),
         [
@@ -263,22 +259,19 @@ describe("ingest", () => {
         ].join("\n"),
         "utf-8"
       );
-      // Fence in the preamble: a `# ` line inside a leading fence must not cut
-      // the preamble short before the first real heading.
+      // A fenced `# ` in the preamble must not cut it short.
       await fsWriteFile(
         join(tmp, "pre-doc.md"),
         ["```", "# not a heading", "```", "", "preamble prose", "", "# Real H1", "h1 body", ""].join("\n"),
         "utf-8"
       );
-      // Marker-mismatch: a `~~~` line inside a backtick fence must not close it,
-      // so the `# ` line after it stays content (pins the marker-char check).
+      // A `~~~` line must not close a backtick fence (marker-char rule).
       await fsWriteFile(
         join(tmp, "mismatch-doc.md"),
         ["# Heading One", "intro", "```text", "~~~", "# fenced hash", "```", "## Sub After", "sub body", ""].join("\n"),
         "utf-8"
       );
-      // Length rule: a 3-backtick line inside a 4-backtick fence is too short to
-      // close it (close len must be >= open len), so the `# ` stays content.
+      // A shorter close fence must not close a longer one (length rule).
       await fsWriteFile(
         join(tmp, "length-doc.md"),
         ["# Length Heading", "intro", "````", "```", "# still fenced", "````", "## After Length", "after body", ""].join("\n"),
