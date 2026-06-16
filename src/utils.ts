@@ -32,11 +32,8 @@ export function truncateOutput(s: string, n = 600): string {
   return s.length <= n ? s : s.slice(0, n) + "\n… (truncated)";
 }
 
-/**
- * A 400 "prompt is too long" — context overflow. Two gates (status + phrase) so
- * a stray echo of the phrase isn't matched. Shared by the benchmark (on a
- * recorded trace error) and the main UI (on the live error the banner sees).
- */
+/** A 400 "prompt is too long" — context overflow. Two gates (status + phrase)
+ *  so a stray echo of the phrase isn't matched. Shared by benchmark and UI. */
 export function isContextOverflowError(error: string | undefined): boolean {
   const e = error ?? "";
   return /\b400\b/.test(e) && /prompt is too long/i.test(e);

@@ -448,9 +448,8 @@ async function sendMessage() {
           },
           onError: (err) => {
             const raw = err instanceof Error ? err.message : String(err);
-            // A "prompt is too long" 400 means the window filled faster than the
-            // proactive warning could catch (a big jump in one round). Surface it
-            // in the banner instead of a raw error bubble, and clear the spinner.
+            // Window filled faster than the warning could catch — surface the
+            // "prompt is too long" 400 in the banner, not a raw error bubble.
             if (isContextOverflowError(raw)) {
               showContextBanner(
                 "This conversation has reached the model's context window and can't continue. " +
