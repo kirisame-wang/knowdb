@@ -223,4 +223,123 @@ describe("ingest", () => {
       expect(await readFile(join(DB, rootId, "02.md"), "utf-8")).toContain("h1-body");
     });
   });
+
+  describe("fenced code blocks: `# ` lines inside fences are not headings", () => {
+    const DB = dbDir("db-test-fence");
+    let tmp: string;
+    let fenceId: string;
+    let preId: string;
+    let mismatchId: string;
+    let lengthId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-fence-"));
+      // Fenced `# ` / `### ` lines inside a section stay in the body.
+      await fsWriteFile(
+        join(tmp, "fence-doc.md"),
+        [
+          "# Real Heading",
+          "intro body",
+          "",
+          "```bash",
+          "# install deps",
+          "npm install",
+          "```",
+          "",
+          "~~~",
+          "### Step 3 example",
+          "~~~",
+          "",
+          "after the fence",
+          "",
+          "## Real Subsection",
+          "sub body",
+          "",
+        ].join("\n"),
+        "utf-8"
+      );
+      // A fenced `# ` in the preamble must not cut it short.
+      await fsWriteFile(
+        join(tmp, "pre-doc.md"),
+        ["```", "# not a heading", "```", "", "preamble prose", "", "# Real H1", "h1 body", ""].join("\n"),
+        "utf-8"
+      );
+      // A `~~~` line must not close a backtick fence (marker-char rule).
+      await fsWriteFile(
+        join(tmp, "mismatch-doc.md"),
+        ["# Heading One", "intro", "```text", "~~~", "# fenced hash", "```", "## Sub After", "sub body", ""].join("\n"),
+        "utf-8"
+      );
+      // A shorter close fence must not close a longer one (length rule).
+      await fsWriteFile(
+        join(tmp, "length-doc.md"),
+        ["# Length Heading", "intro", "````", "```", "# still fenced", "````", "## After Length", "after body", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      const idOf = (f: string) => Object.keys(manifest).find((k) => manifest[k]!.originalFilename === f)!;
+      fenceId = idOf("fence-doc.md");
+      preId = idOf("pre-doc.md");
+      mismatchId = idOf("mismatch-doc.md");
+      lengthId = idOf("length-doc.md");
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("keeps fenced `# ` / `### ` lines in the section body, not as new chunks", async () => {
+      const body = await readFile(join(DB, fenceId, "01.md"), "utf-8");
+      expect(body).toContain("# install deps");
+      expect(body).toContain("npm install");
+      expect(body).toContain("### Step 3 example");
+      expect(body).toContain("after the fence");
+    });
+
+    it("does not create a fake section from a fenced heading-looking line", async () => {
+      const idx = await readFile(join(DB, fenceId, "_index.md"), "utf-8");
+      expect(idx).not.toContain("install deps");
+      expect(idx).not.toContain("Step 3 example");
+      // Only the two real headings exist as top-level/nested chunks.
+      expect(existsSync(join(DB, fenceId, "01.md"))).toBe(true);
+      expect(existsSync(join(DB, fenceId, "01-01.md"))).toBe(true);
+      expect(existsSync(join(DB, fenceId, "02.md"))).toBe(false);
+    });
+
+    it("nests the real subsection under the real heading", async () => {
+      expect(await readFile(join(DB, fenceId, "01-01.md"), "utf-8")).toContain("sub body");
+    });
+
+    it("does not truncate the preamble at a fenced `# ` line", async () => {
+      const pre = await readFile(join(DB, preId, "00.md"), "utf-8");
+      expect(pre).toContain("# not a heading");
+      expect(pre).toContain("preamble prose");
+      // The real heading after the fence still starts the first section.
+      expect(await readFile(join(DB, preId, "01.md"), "utf-8")).toContain("h1 body");
+    });
+
+    it("a different fence marker does not close the fence (marker-char check)", async () => {
+      const body = await readFile(join(DB, mismatchId, "01.md"), "utf-8");
+      expect(body).toContain("~~~");
+      expect(body).toContain("# fenced hash");
+      expect(await readFile(join(DB, mismatchId, "01-01.md"), "utf-8")).toContain("sub body");
+      expect(await readFile(join(DB, mismatchId, "_index.md"), "utf-8")).not.toContain("fenced hash");
+      expect(existsSync(join(DB, mismatchId, "02.md"))).toBe(false);
+    });
+
+    it("a shorter closing fence does not close a longer one (length rule)", async () => {
+      const body = await readFile(join(DB, lengthId, "01.md"), "utf-8");
+      expect(body).toContain("# still fenced");
+      expect(await readFile(join(DB, lengthId, "01-01.md"), "utf-8")).toContain("after body");
+      expect(await readFile(join(DB, lengthId, "_index.md"), "utf-8")).not.toContain("still fenced");
+      expect(existsSync(join(DB, lengthId, "02.md"))).toBe(false);
+    });
+  });
 });

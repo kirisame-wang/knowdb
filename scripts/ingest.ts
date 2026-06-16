@@ -18,6 +18,29 @@ interface Section {
 
 // ── Parsing ──────────────────────────────────────────────────────────────────
 
+// A `# ` line inside a ``` / ~~~ fence is content, not a heading; track fence
+// state so heading detection skips it.
+interface FenceState {
+  open: boolean;
+  marker: string;
+  len: number;
+}
+
+const FENCE_CLOSED: FenceState = { open: false, marker: "", len: 0 };
+
+function stepFence(state: FenceState, line: string): FenceState {
+  if (state.open) {
+    const close = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
+    if (close && close[1]![0] === state.marker && close[1]!.length >= state.len) {
+      return FENCE_CLOSED;
+    }
+    return state;
+  }
+  const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+  if (open) return { open: true, marker: open[1]![0]!, len: open[1]!.length };
+  return state;
+}
+
 function parseSections(text: string): Section[] {
   const lines = text.split("\n");
   const root: Section = { id: "root", title: "", depth: 0, content: "", children: [] };
@@ -25,13 +48,15 @@ function parseSections(text: string): Section[] {
   let preambleLines: string[] = [];
   let currentLines: string[] = [];
   let inSection = false;
+  let fence = FENCE_CLOSED;
 
   const flush = (section: Section, bodyLines: string[]) => {
     section.content = bodyLines.join("\n").trim();
   };
 
   for (const line of lines) {
-    const headingMatch = /^(#{1,6}) (.+)$/.exec(line);
+    fence = stepFence(fence, line);
+    const headingMatch = fence.open ? null : /^(#{1,6}) (.+)$/.exec(line);
     if (!headingMatch) {
       (inSection ? currentLines : preambleLines).push(line);
       continue;
@@ -161,8 +186,10 @@ async function ingestFile(filePath: string): Promise<void> {
 function extractPreamble(text: string): string {
   const lines = text.split("\n");
   const result: string[] = [];
+  let fence = FENCE_CLOSED;
   for (const line of lines) {
-    if (/^#{1,6} /.test(line)) break;
+    fence = stepFence(fence, line);
+    if (!fence.open && /^#{1,6} /.test(line)) break;
     result.push(line);
   }
   return result.join("\n");
