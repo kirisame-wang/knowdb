@@ -342,4 +342,89 @@ describe("ingest", () => {
       expect(existsSync(join(DB, lengthId, "02.md"))).toBe(false);
     });
   });
+
+  describe("title-less heading (`## ` with no title) stays content, not a break", () => {
+    const DB = dbDir("db-test-titleless");
+    let tmp: string;
+    let titlelessId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-titleless-"));
+      // `## ` has a marker and a space but no title, so it is content: it stays in
+      // the preamble along with the text after it, up to the first real heading.
+      await fsWriteFile(
+        join(tmp, "titleless.md"),
+        ["intro prose", "## ", "trailing after empty heading", "# Real H1", "h1 body", "### ", "still h1 body", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      titlelessId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "titleless.md")!;
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("keeps the title-less line and the text after it in the preamble", async () => {
+      const pre = await readFile(join(DB, titlelessId, "00.md"), "utf-8");
+      expect(pre).toContain("intro prose");
+      expect(pre).toContain("trailing after empty heading");
+    });
+
+    it("creates no section for the title-less heading", async () => {
+      expect(await readFile(join(DB, titlelessId, "01.md"), "utf-8")).toContain("h1 body");
+      expect(existsSync(join(DB, titlelessId, "02.md"))).toBe(false);
+      expect(await readFile(join(DB, titlelessId, "_index.md"), "utf-8")).toContain("Real H1");
+    });
+
+    it("keeps a title-less heading inside a section in the body, spawning no subsection", async () => {
+      const body = await readFile(join(DB, titlelessId, "01.md"), "utf-8");
+      expect(body).toContain("still h1 body");
+      expect(existsSync(join(DB, titlelessId, "01-01.md"))).toBe(false);
+    });
+  });
+
+  describe("heading-less document: all text becomes the preamble", () => {
+    const DB = dbDir("db-test-noheading");
+    let tmp: string;
+    let noHeadingId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-noheading-"));
+      // No heading anywhere: the single pass opens no section and flushes the
+      // whole document to the preamble in the tail branch.
+      await fsWriteFile(
+        join(tmp, "noheading.md"),
+        ["just prose", "no headings here", "at all", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      noHeadingId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "noheading.md")!;
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("writes the whole document to 00.md and creates no section", async () => {
+      const pre = await readFile(join(DB, noHeadingId, "00.md"), "utf-8");
+      expect(pre).toContain("just prose");
+      expect(pre).toContain("at all");
+      expect(existsSync(join(DB, noHeadingId, "01.md"))).toBe(false);
+    });
+  });
 });

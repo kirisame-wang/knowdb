@@ -41,7 +41,7 @@ function stepFence(state: FenceState, line: string): FenceState {
   return state;
 }
 
-function parseSections(text: string): Section[] {
+function parseSections(text: string): { sections: Section[]; preamble: string } {
   const lines = text.split("\n");
   const root: Section = { id: "root", title: "", depth: 0, content: "", children: [] };
   const stack: Section[] = [root];
@@ -56,6 +56,7 @@ function parseSections(text: string): Section[] {
 
   for (const line of lines) {
     fence = stepFence(fence, line);
+    // `(.+)` requires a non-empty title, so a bare `## ` is content, not a heading.
     const headingMatch = fence.open ? null : /^(#{1,6}) (.+)$/.exec(line);
     if (!headingMatch) {
       (inSection ? currentLines : preambleLines).push(line);
@@ -98,7 +99,9 @@ function parseSections(text: string): Section[] {
     flush(root, preambleLines);
   }
 
-  return collectSections(root);
+  // root.content already holds the trimmed preamble — flush(root, …) sets it at the
+  // first heading, or in the tail below for a heading-less doc.
+  return { sections: collectSections(root), preamble: root.content };
 }
 
 function collectSections(node: Section): Section[] {
@@ -157,12 +160,11 @@ async function ingestFile(filePath: string): Promise<void> {
   await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
 
-  const sections = parseSections(text);
+  const { sections, preamble } = parseSections(text);
 
-  // write preamble (root content)
-  const preamble = extractPreamble(text);
-  if (preamble.trim()) {
-    await writeFile(join(outDir, "00.md"), preamble.trim() + "\n", "utf-8");
+  // write preamble as 00.md (already trimmed by parseSections)
+  if (preamble) {
+    await writeFile(join(outDir, "00.md"), preamble + "\n", "utf-8");
   }
 
   // Every section gets a file, content-less containers as an empty stub, so every _index node resolves.
@@ -181,18 +183,6 @@ async function ingestFile(filePath: string): Promise<void> {
 
   // rebuild _search_index.json
   await rebuildSearchIndex();
-}
-
-function extractPreamble(text: string): string {
-  const lines = text.split("\n");
-  const result: string[] = [];
-  let fence = FENCE_CLOSED;
-  for (const line of lines) {
-    fence = stepFence(fence, line);
-    if (!fence.open && /^#{1,6} /.test(line)) break;
-    result.push(line);
-  }
-  return result.join("\n");
 }
 
 async function rebuildSearchIndex(): Promise<void> {
