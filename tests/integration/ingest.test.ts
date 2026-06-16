@@ -356,7 +356,7 @@ describe("ingest", () => {
       // heading — in the preamble; the old two-scan path dropped that text.
       await fsWriteFile(
         join(tmp, "titleless.md"),
-        ["intro prose", "## ", "trailing after empty heading", "# Real H1", "h1 body", ""].join("\n"),
+        ["intro prose", "## ", "trailing after empty heading", "# Real H1", "h1 body", "### ", "still h1 body", ""].join("\n"),
         "utf-8"
       );
       const r = runIngest([tmp], DB);
@@ -383,6 +383,49 @@ describe("ingest", () => {
       expect(await readFile(join(DB, titlelessId, "01.md"), "utf-8")).toContain("h1 body");
       expect(existsSync(join(DB, titlelessId, "02.md"))).toBe(false);
       expect(await readFile(join(DB, titlelessId, "_index.md"), "utf-8")).toContain("Real H1");
+    });
+
+    it("keeps a title-less heading inside a section in the body, spawning no subsection", async () => {
+      const body = await readFile(join(DB, titlelessId, "01.md"), "utf-8");
+      expect(body).toContain("still h1 body");
+      expect(existsSync(join(DB, titlelessId, "01-01.md"))).toBe(false);
+    });
+  });
+
+  describe("heading-less document: all text becomes the preamble", () => {
+    const DB = dbDir("db-test-noheading");
+    let tmp: string;
+    let noHeadingId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-noheading-"));
+      // No heading anywhere: the single pass opens no section and flushes the
+      // whole document to the preamble in the tail branch.
+      await fsWriteFile(
+        join(tmp, "noheading.md"),
+        ["just prose", "no headings here", "at all", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      noHeadingId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "noheading.md")!;
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("writes the whole document to 00.md and creates no section", async () => {
+      const pre = await readFile(join(DB, noHeadingId, "00.md"), "utf-8");
+      expect(pre).toContain("just prose");
+      expect(pre).toContain("at all");
+      expect(existsSync(join(DB, noHeadingId, "01.md"))).toBe(false);
     });
   });
 });
