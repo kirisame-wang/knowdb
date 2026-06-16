@@ -22,7 +22,7 @@ import {
   axisDeltaRowCells,
 } from "../benchmark/report.js";
 import type { ReportView } from "../benchmark/report.js";
-import { isContextOverflowError } from "../benchmark/metrics.js";
+import { isContextOverflowError } from "../utils.js";
 import {
   benchmarkTraceKey,
   benchmarkGapKey,

@@ -6,8 +6,7 @@ import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
 import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO } from "./constants.js";
-import { isContextOverflowError } from "./benchmark/metrics.js";
-import { SessionContext, truncateOutput } from "./utils.js";
+import { SessionContext, truncateOutput, isContextOverflowError } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────

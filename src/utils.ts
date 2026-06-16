@@ -1,5 +1,5 @@
-// General utilities: UTC dates, ephemeral ids, generic JSONL (de)serialization.
-// Domain-pure — must not import any domain model.
+// General utilities: UTC dates, ephemeral ids, generic JSONL (de)serialization,
+// API-error classification. Domain-pure — must not import any domain model.
 
 /** UTC yyyymmdd. */
 export function utcYmd(date: Date): string {
@@ -30,6 +30,16 @@ export class SessionContext {
  */
 export function truncateOutput(s: string, n = 600): string {
   return s.length <= n ? s : s.slice(0, n) + "\n… (truncated)";
+}
+
+/**
+ * A 400 "prompt is too long" — context overflow. Two gates (status + phrase) so
+ * a stray echo of the phrase isn't matched. Shared by the benchmark (on a
+ * recorded trace error) and the main UI (on the live error the banner sees).
+ */
+export function isContextOverflowError(error: string | undefined): boolean {
+  const e = error ?? "";
+  return /\b400\b/.test(e) && /prompt is too long/i.test(e);
 }
 
 /** One JSON value per line (the "L" in JSONL). */

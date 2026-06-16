@@ -7,6 +7,7 @@ import {
   truncateOutput,
   SessionContext,
   nextDailySeq,
+  isContextOverflowError,
 } from "../../src/utils.js";
 
 describe("utcYmd", () => {
@@ -120,5 +121,28 @@ describe("nextDailySeq (generic timestamped counter)", () => {
       { query_id: "q2", started_at: "2026-05-16T02:00:00Z", timestamp: "2026-05-16T02:00:00Z" },
     ];
     expect(nextDailySeq(traces, day)).toBe(3);
+  });
+});
+
+describe("isContextOverflowError", () => {
+  it("true for a 'prompt is too long' 400 — both gates (status + phrase) match", () => {
+    expect(isContextOverflowError('400 {"error":{"message":"prompt is too long: 204050 tokens > 200000 maximum"}}')).toBe(true);
+    // The full SDK shape the main-UI banner classifies (status + invalid_request_error + request_id).
+    expect(
+      isContextOverflowError(
+        '400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 213638 tokens > 200000 maximum"},"request_id":"req_011Cc7mUwU4bgF7UrgfPcwvo"}'
+      )
+    ).toBe(true);
+  });
+
+  it("false when the phrase appears outside a 400 (overflow is the 400 subtype, not any echo)", () => {
+    expect(isContextOverflowError('529 {"error":{"message":"overloaded; prompt is too long to retry"}}')).toBe(false);
+    expect(isContextOverflowError("503 service error after 5400ms; prompt is too long")).toBe(false);
+  });
+
+  it("false for a 400 that is not an overflow, and for missing input", () => {
+    expect(isContextOverflowError('400 {"error":{"message":"messages: at least one message is required"}}')).toBe(false);
+    expect(isContextOverflowError("401 invalid x-api-key")).toBe(false);
+    expect(isContextOverflowError(undefined)).toBe(false);
   });
 });

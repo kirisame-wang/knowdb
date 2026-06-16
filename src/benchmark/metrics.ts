@@ -1,4 +1,5 @@
 import type { QueryTrace, ToolCallEvent } from "../types.js";
+import { isContextOverflowError } from "../utils.js";
 import type {
   BenchmarkProblem,
   BenchmarkTurn,
@@ -137,13 +138,7 @@ export function successOf(turn: BenchmarkTurn, trace: QueryTrace, grade?: HumanG
   return reachSuccess(turn, trace);
 }
 
-// A 400 "prompt is too long" — context overflow. Two gates (status + phrase) so a
-// stray echo of the phrase isn't matched. String form takes a raw message; trace form delegates.
-export function isContextOverflowError(error: string | undefined): boolean {
-  const e = error ?? "";
-  return /\b400\b/.test(e) && /prompt is too long/i.test(e);
-}
-
+// Context overflow on a recorded trace; the string-level gate lives in utils.
 export function isContextOverflow(trace: QueryTrace): boolean {
   return isContextOverflowError(trace.error);
 }
