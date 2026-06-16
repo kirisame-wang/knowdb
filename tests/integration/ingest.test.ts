@@ -351,9 +351,8 @@ describe("ingest", () => {
     beforeAll(async () => {
       await mkdir(DB, { recursive: true });
       tmp = await mkdtemp(join(tmpdir(), "knowdb-titleless-"));
-      // `## ` has a marker and a space but no title. The unified parse treats it
-      // as content and keeps it — and the text after it, up to the first real
-      // heading — in the preamble; the old two-scan path dropped that text.
+      // `## ` has a marker and a space but no title, so it is content: it stays in
+      // the preamble along with the text after it, up to the first real heading.
       await fsWriteFile(
         join(tmp, "titleless.md"),
         ["intro prose", "## ", "trailing after empty heading", "# Real H1", "h1 body", "### ", "still h1 body", ""].join("\n"),

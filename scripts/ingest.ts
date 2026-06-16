@@ -99,9 +99,8 @@ function parseSections(text: string): { sections: Section[]; preamble: string } 
     flush(root, preambleLines);
   }
 
-  // root.content holds the trimmed preamble — flush(root, …) sets it at the first
-  // heading, or in the tail below for a heading-less doc — so one pass yields both
-  // the section tree and the preamble.
+  // root.content already holds the trimmed preamble — flush(root, …) sets it at the
+  // first heading, or in the tail below for a heading-less doc.
   return { sections: collectSections(root), preamble: root.content };
 }
 
