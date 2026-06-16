@@ -524,9 +524,9 @@ describe("runAgentTurn — context-budget warning", () => {
     expect(warns).toEqual([[800, 1000]]);
   });
 
-  // chatHistory persists across turns, so the window keeps filling; a later turn
-  // still over the band must nudge again — one reminder per send, not once ever.
-  it("nudges again on a later turn that is still over the band", async () => {
+  // chatHistory persists across turns, so the loop reports the over-band
+  // condition on each turn it occurs; deduping to one pinned banner is the UI's job.
+  it("fires on each turn that is over the band (per-turn signal)", async () => {
     const client = scriptedClient([
       msg([text("Turn 1.")], 850),
       msg([text("Turn 2.")], 900),

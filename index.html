@@ -268,6 +268,17 @@
 
       .btn-small:hover { background: var(--c-surface); }
 
+      /* ── Context-budget banner (pinned above the scrolling chat log) ── */
+      .context-banner {
+        flex-shrink: 0;
+        padding: 7px 12px;
+        background: #fff8c5;
+        border-bottom: 1px solid #d4a72c;
+        color: #6b5900;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+
       /* ── Chat messages ── */
       .chat-messages {
         flex: 1;
@@ -445,6 +456,7 @@
             <button class="btn-small" id="btn-export-traces" title="Download recorded query traces as JSONL">⤓ Traces</button>
           </div>
         </div>
+        <div class="context-banner" id="context-banner" role="status" style="display:none"></div>
         <div class="chat-messages" id="chat-messages">
           <div class="status-text">Enter your Anthropic API key, then ask a question about the knowledge base.</div>
         </div>
