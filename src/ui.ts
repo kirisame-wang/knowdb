@@ -17,9 +17,6 @@ let selectedId: string | null = null;
 // Non-null while a turn runs; the Send button doubles as Stop and aborts it.
 let activeAbort: AbortController | null = null;
 const chatHistory: Anthropic.Messages.MessageParam[] = [];
-// The context-budget banner shows once per session, then stays pinned — set
-// after the first crossing so later turns don't restate it.
-let contextWarned = false;
 // One session for the page load: both sinks share it so trace x gap join
 // on session_id holds within a conversation.
 const session = new SessionContext();
@@ -434,8 +431,7 @@ async function sendMessage() {
             appendBubble("assistant", t || "(no response)");
           },
           onContextWarning: (inputTokens, windowTokens) => {
-            if (contextWarned) return; // one pinned banner per session, not one line per send
-            contextWarned = true;
+            // One pinned banner, refreshed in place to the latest % each over-band turn.
             const pct = Math.round((inputTokens / windowTokens) * 100);
             const banner = el("context-banner");
             banner.textContent =
