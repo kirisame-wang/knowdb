@@ -342,4 +342,47 @@ describe("ingest", () => {
       expect(existsSync(join(DB, lengthId, "02.md"))).toBe(false);
     });
   });
+
+  describe("title-less heading (`## ` with no title) stays content, not a break", () => {
+    const DB = dbDir("db-test-titleless");
+    let tmp: string;
+    let titlelessId: string;
+
+    beforeAll(async () => {
+      await mkdir(DB, { recursive: true });
+      tmp = await mkdtemp(join(tmpdir(), "knowdb-titleless-"));
+      // `## ` has a marker and a space but no title. The unified parse treats it
+      // as content and keeps it — and the text after it, up to the first real
+      // heading — in the preamble; the old two-scan path dropped that text.
+      await fsWriteFile(
+        join(tmp, "titleless.md"),
+        ["intro prose", "## ", "trailing after empty heading", "# Real H1", "h1 body", ""].join("\n"),
+        "utf-8"
+      );
+      const r = runIngest([tmp], DB);
+      expect(r.status, r.stderr).toBe(0);
+      const manifest = JSON.parse(await readFile(join(DB, "_manifest.json"), "utf-8")) as Record<
+        string,
+        { originalFilename: string }
+      >;
+      titlelessId = Object.keys(manifest).find((k) => manifest[k]!.originalFilename === "titleless.md")!;
+    });
+
+    afterAll(async () => {
+      await rm(DB, { recursive: true, force: true });
+      if (tmp) await rm(tmp, { recursive: true, force: true });
+    });
+
+    it("keeps the title-less line and the text after it in the preamble", async () => {
+      const pre = await readFile(join(DB, titlelessId, "00.md"), "utf-8");
+      expect(pre).toContain("intro prose");
+      expect(pre).toContain("trailing after empty heading");
+    });
+
+    it("creates no section for the title-less heading", async () => {
+      expect(await readFile(join(DB, titlelessId, "01.md"), "utf-8")).toContain("h1 body");
+      expect(existsSync(join(DB, titlelessId, "02.md"))).toBe(false);
+      expect(await readFile(join(DB, titlelessId, "_index.md"), "utf-8")).toContain("Real H1");
+    });
+  });
 });
