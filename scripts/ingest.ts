@@ -56,6 +56,7 @@ function parseSections(text: string): { sections: Section[]; preamble: string } 
 
   for (const line of lines) {
     fence = stepFence(fence, line);
+    // `(.+)` requires a non-empty title, so a bare `## ` is content, not a heading.
     const headingMatch = fence.open ? null : /^(#{1,6}) (.+)$/.exec(line);
     if (!headingMatch) {
       (inSection ? currentLines : preambleLines).push(line);
@@ -98,8 +99,9 @@ function parseSections(text: string): { sections: Section[]; preamble: string } 
     flush(root, preambleLines);
   }
 
-  // root.content already holds the trimmed preamble (set by flush(root, …) above),
-  // so one pass yields both the section tree and the preamble.
+  // root.content holds the trimmed preamble — flush(root, …) sets it at the first
+  // heading, or in the tail below for a heading-less doc — so one pass yields both
+  // the section tree and the preamble.
   return { sections: collectSections(root), preamble: root.content };
 }
 
