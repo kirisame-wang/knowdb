@@ -257,6 +257,12 @@ describe("isContextOverflow", () => {
 
   it("isContextOverflowError matches the same raw message the error banner sees", () => {
     expect(isContextOverflowError('400 {"error":{"message":"prompt is too long: 204050 tokens > 200000 maximum"}}')).toBe(true);
+    // The full SDK shape the main-UI banner classifies (status + invalid_request_error + request_id).
+    expect(
+      isContextOverflowError(
+        '400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 213638 tokens > 200000 maximum"},"request_id":"req_011Cc7mUwU4bgF7UrgfPcwvo"}'
+      )
+    ).toBe(true);
     expect(isContextOverflowError("401 invalid x-api-key")).toBe(false);
     expect(isContextOverflowError(undefined)).toBe(false);
   });

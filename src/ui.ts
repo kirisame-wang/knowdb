@@ -6,6 +6,7 @@ import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
 import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO } from "./constants.js";
+import { isContextOverflowError } from "./benchmark/metrics.js";
 import { SessionContext, truncateOutput } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -359,6 +360,14 @@ function appendStatus(msg: string) {
   container.scrollTop = container.scrollHeight;
 }
 
+// The pinned context banner above the chat log: one element, refreshed in place
+// — approaching the window (a %) or already over it (the overflow message).
+function showContextBanner(msg: string) {
+  const banner = el("context-banner");
+  banner.textContent = msg;
+  banner.style.display = "";
+}
+
 function appendToolTrace(toolName: string, input: unknown, result: string) {
   const container = el("chat-messages");
 
@@ -431,16 +440,30 @@ async function sendMessage() {
             appendBubble("assistant", t || "(no response)");
           },
           onContextWarning: (inputTokens, windowTokens) => {
-            // One pinned banner, refreshed in place to the latest % each over-band turn.
+            // Refreshed in place to the latest % each over-band turn.
             const pct = Math.round((inputTokens / windowTokens) * 100);
-            const banner = el("context-banner");
-            banner.textContent =
+            showContextBanner(
               `This conversation is using ~${pct}% of the model's context window. ` +
-              "Start a new conversation (reload the page) before it runs out of room.";
-            banner.style.display = "";
+                "Start a new conversation (reload the page) before it runs out of room."
+            );
           },
           onError: (err) => {
-            const msg = `Error: ${err instanceof Error ? err.message : String(err)}`;
+            const raw = err instanceof Error ? err.message : String(err);
+            // A "prompt is too long" 400 means the window filled faster than the
+            // proactive warning could catch (a big jump in one round). Surface it
+            // in the banner instead of a raw error bubble, and clear the spinner.
+            if (isContextOverflowError(raw)) {
+              showContextBanner(
+                "This conversation has reached the model's context window and can't continue. " +
+                  "Start a new conversation (reload the page) to keep going."
+              );
+              if (thinkingBubble) {
+                thinkingBubble.remove();
+                thinkingBubble = null;
+              }
+              return;
+            }
+            const msg = `Error: ${raw}`;
             if (thinkingBubble) thinkingBubble.textContent = msg;
             else appendStatus(msg);
           },
