@@ -11,7 +11,6 @@ export const MODEL = {
 // property of the model.
 export const MAX_OUTPUT_TOKENS = 2048;
 
-// Fraction of the context window at which the UI nudges the user to start a
-// fresh conversation — our setting, leaving headroom for the reply and the
-// next round before the window actually fills.
+// Fraction of the context window at which the UI nudges the user to start fresh
+// — our setting, leaving headroom for the reply and the next round.
 export const CONTEXT_WARN_RATIO = 0.8;

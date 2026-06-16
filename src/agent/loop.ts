@@ -29,9 +29,8 @@ export interface AgentLoopDeps {
   maxTokens: number;
   /** Mutable conversation history; the loop pushes user/assistant turns. */
   chatHistory: Anthropic.Messages.MessageParam[];
-  /** When set, the loop fires onContextWarning once per turn the first round the
-   *  response's input_tokens reaches warnRatio of windowTokens — a proactive
-   *  nudge to start a fresh conversation before the context window fills. */
+  /** When set, the loop warns once per turn the first round input_tokens reaches
+   *  warnRatio of windowTokens — a nudge to start fresh before the window fills. */
   contextBudget?: { windowTokens: number; warnRatio: number };
   hooks?: AgentLoopHooks;
   /** Injectable clock for deterministic tests. Defaults to Date.now/new Date. */
@@ -72,10 +71,8 @@ export async function runAgentTurn(
   deps.hooks?.onThinkingStart?.();
 
   let trace: QueryTrace | undefined;
-  // At most one context-budget nudge per turn: input only grows across the
-  // rounds of a single turn, so warn on the first crossing and stay quiet for
-  // the rest of it. A later turn still over the band nudges again — chatHistory
-  // persists across turns, so each send is a fresh reminder until the user acts.
+  // One nudge per turn: input only grows within a turn, so warn on the first
+  // crossing; a later turn still over the band (chatHistory persists) warns again.
   let contextWarned = false;
   try {
     // Tool-use agentic loop.

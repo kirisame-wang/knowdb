@@ -489,9 +489,8 @@ describe("runAgentTurn — integration", () => {
   });
 });
 
-// The proactive context-budget warning: when contextBudget is set, the loop
-// fires onContextWarning the first round the input reaches warnRatio of the
-// window — a "start a fresh conversation" nudge before the context fills.
+// With contextBudget set, the loop fires onContextWarning the first round input
+// reaches warnRatio of the window — a "start fresh" nudge before it fills.
 describe("runAgentTurn — context-budget warning", () => {
   // window 1000, warnRatio 0.8 → warn once input_tokens reaches 800.
   const budget = { windowTokens: 1000, warnRatio: 0.8 };
