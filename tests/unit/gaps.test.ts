@@ -9,6 +9,7 @@ import {
   BrowserGapSink,
 } from "../../src/gaps.js";
 import { SessionContext } from "../../src/utils.js";
+import { BrowserTraceCollector } from "../../src/traces.js";
 import type { GapEvent } from "../../src/types.js";
 
 const ev = (over: Partial<GapEvent> & Pick<GapEvent, "keyword" | "timestamp">): GapEvent => ({
@@ -246,6 +247,36 @@ describe("BrowserGapSink", () => {
     expect(all[0]!.session_id).toBe("before");
     expect(all[1]!.session_id).not.toBe("before");
     expect(all[1]!.session_id).toBe(ctx.id);
+  });
+
+  // The point of the shared holder: one SessionContext feeding both a gap sink
+  // and a trace collector. A rotate (New session) must move BOTH streams to the
+  // same new id, so trace × gap join stays consistent across the rotation.
+  it("a shared SessionContext rotates gap sink and trace collector to the same id", () => {
+    const ctx = new SessionContext("s0");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);
+    const collector = new BrowserTraceCollector(ctx);
+
+    sink.record(ev({ keyword: "a", timestamp: "2026-05-16T10:00:00Z" }));
+    const t0 = collector.endQuery(
+      collector.startQuery("Q0", new Date("2026-05-16T10:00:00Z")),
+      "A0", undefined, new Date("2026-05-16T10:00:01Z"),
+    );
+    expect(sink.readAll()[0]!.session_id).toBe("s0");
+    expect(t0.session_id).toBe("s0");
+
+    ctx.rotate();
+
+    sink.record(ev({ keyword: "b", timestamp: "2026-05-16T11:00:00Z" }));
+    const t1 = collector.endQuery(
+      collector.startQuery("Q1", new Date("2026-05-16T11:00:00Z")),
+      "A1", undefined, new Date("2026-05-16T11:00:01Z"),
+    );
+    const gaps = sink.readAll();
+    // Pre-rotate records keep s0; post-rotate records share the one new id.
+    expect(gaps[1]!.session_id).not.toBe("s0");
+    expect(gaps[1]!.session_id).toBe(t1.session_id);
+    expect(t1.session_id).toBe(ctx.id);
   });
 
   // The third arg must be a SessionContext; a bare-string id would silently

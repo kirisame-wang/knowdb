@@ -463,7 +463,7 @@ async function sendMessage() {
             const pct = Math.round((inputTokens / windowTokens) * 100);
             showContextBanner(
               `This conversation is using ~${pct}% of the model's context window. ` +
-                "Start a new conversation (reload the page) before it runs out of room."
+                "Use the New session button to start fresh before it runs out of room."
             );
           },
           onError: (err) => {
@@ -473,7 +473,7 @@ async function sendMessage() {
             if (isContextOverflowError(raw)) {
               showContextBanner(
                 "This conversation has reached the model's context window and can't continue. " +
-                  "Start a new conversation (reload the page) to keep going."
+                  "Use the New session button to start fresh."
               );
               if (thinkingBubble) {
                 thinkingBubble.remove();
