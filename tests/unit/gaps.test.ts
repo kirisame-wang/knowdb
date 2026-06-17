@@ -234,9 +234,6 @@ describe("BrowserGapSink", () => {
     expect(all[1]!.session_id).toBe("shared-ctx-1");
   });
 
-  // session_id is read live from the holder at record() time, so rotating the
-  // shared SessionContext (New session) groups subsequent gaps under the new id
-  // while earlier gaps keep the old one.
   it("reads the session id live: a rotate splits gaps into old/new groups", () => {
     const ctx = new SessionContext("before");
     const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);

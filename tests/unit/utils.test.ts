@@ -103,7 +103,7 @@ describe("SessionContext", () => {
     expect(ctx.id.length).toBeGreaterThan(0);
     const after = ctx.id;
     ctx.rotate();
-    expect(ctx.id).not.toBe(after); // each rotate is a new group
+    expect(ctx.id).not.toBe(after);
   });
 });
 

@@ -181,9 +181,6 @@ describe("BrowserTraceCollector lifecycle", () => {
     expect(t.session_id).toBe("ctx-1");
   });
 
-  // session_id is read live at finalize, so rotating the shared holder (New
-  // session) stamps later queries with the new id — the same holder the gap
-  // sink reads, keeping trace × gap join consistent across the rotation.
   it("a query after rotate() carries the new session_id", () => {
     const ctx = new SessionContext("before");
     const collector = new BrowserTraceCollector(ctx);

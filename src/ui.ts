@@ -317,8 +317,8 @@ const setupTraceExport = () =>
 
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
-// Single owner of turn-active state: controller, Send/Stop button, and search
-// lock move together.
+// Single owner of turn-active state: controller, Send/Stop button, search lock,
+// and New session move together.
 function setActiveAbort(ac: AbortController | null) {
   activeAbort = ac;
   const btn = el("btn-send");
@@ -326,8 +326,6 @@ function setActiveAbort(ac: AbortController | null) {
   btn.classList.toggle("btn-stop", ac !== null);
   if (ac) el("search-input").setAttribute("disabled", "");
   else el("search-input").removeAttribute("disabled");
-  // Disable New session mid-turn: clearing chatHistory during an in-flight turn
-  // would desync it from the live API conversation.
   if (ac) el("btn-new-session").setAttribute("disabled", "");
   else el("btn-new-session").removeAttribute("disabled");
 }
@@ -345,10 +343,8 @@ function setupChat() {
   });
 }
 
-// Clear the conversation and start a fresh session: empty chatHistory and the
-// chat log, rotate the session id so new traces/gaps group separately, and drop
-// the context banner. The recorded audit trail in localStorage is left intact —
-// New session clears the conversation, not the record.
+// Rotate the session id so new traces/gaps group separately; the recorded audit
+// trail in localStorage is kept — New session clears the conversation, not the record.
 function setupNewSession() {
   el("btn-new-session").addEventListener("click", () => {
     if (activeAbort) return; // also disabled mid-turn; guard in case of a stray click
