@@ -233,6 +233,21 @@ describe("BrowserGapSink", () => {
     expect(all[1]!.session_id).toBe("shared-ctx-1");
   });
 
+  // session_id is read live from the holder at record() time, so rotating the
+  // shared SessionContext (New session) groups subsequent gaps under the new id
+  // while earlier gaps keep the old one.
+  it("reads the session id live: a rotate splits gaps into old/new groups", () => {
+    const ctx = new SessionContext("before");
+    const sink = new BrowserGapSink(new FakeKV(), "knowdb-gaps", ctx);
+    sink.record(ev({ keyword: "x", timestamp: "2026-05-16T10:00:00Z" }));
+    ctx.rotate();
+    sink.record(ev({ keyword: "y", timestamp: "2026-05-16T11:00:00Z" }));
+    const all = sink.readAll();
+    expect(all[0]!.session_id).toBe("before");
+    expect(all[1]!.session_id).not.toBe("before");
+    expect(all[1]!.session_id).toBe(ctx.id);
+  });
+
   // The third arg must be a SessionContext; a bare-string id would silently
   // bypass the holder, breaking cross-stream session_id sharing.
   it("type-level rejects bare string as third argument", () => {

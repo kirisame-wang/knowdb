@@ -74,21 +74,19 @@ export interface KeyValueStore {
  *  The session arg is a SessionContext — the holder lets the trace collector
  *  share one id with this sink for cross-stream join. */
 export class BrowserGapSink implements GapSink {
-  private readonly sessionId: string;
-
   constructor(
     private readonly store: KeyValueStore,
     private readonly key = "knowdb-gaps",
-    session: SessionContext = new SessionContext()
-  ) {
-    this.sessionId = session.id;
-  }
+    // Held (not snapshot) so session.rotate() — New session — re-groups
+    // subsequent gaps under the new id, matching the trace collector.
+    private readonly session: SessionContext = new SessionContext()
+  ) {}
 
   record(event: GapEvent): void {
     // Skip events with an empty canonical key (empty / |-only / whitespace
     // keyword). Symmetric with query.sh's CLI guard; keeps aggregate clean.
     if (!gapTopicKey(event.keyword)) return;
-    const stamped: GapEvent = { ...event, session_id: this.sessionId };
+    const stamped: GapEvent = { ...event, session_id: this.session.id };
     this.store.setItem(this.key, (this.store.getItem(this.key) ?? "") + toJsonLine(stamped) + "\n");
   }
 
