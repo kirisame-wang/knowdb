@@ -95,6 +95,16 @@ describe("SessionContext", () => {
   it("accepts an explicit id", () => {
     expect(new SessionContext("fixed-id").id).toBe("fixed-id");
   });
+
+  it("rotate() swaps in a fresh id, leaving the same holder for sinks to read live", () => {
+    const ctx = new SessionContext("first");
+    ctx.rotate();
+    expect(ctx.id).not.toBe("first");
+    expect(ctx.id.length).toBeGreaterThan(0);
+    const after = ctx.id;
+    ctx.rotate();
+    expect(ctx.id).not.toBe(after); // each rotate is a new group
+  });
 });
 
 describe("nextDailySeq (generic timestamped counter)", () => {
