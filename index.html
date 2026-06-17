@@ -266,8 +266,7 @@
         color: var(--c-text);
       }
 
-      .btn-small:hover:not(:disabled) { background: var(--c-surface); }
-      .btn-small:disabled { opacity: 0.45; cursor: not-allowed; }
+      .btn-small:hover { background: var(--c-surface); }
 
       /* ── Context-budget banner (pinned above the scrolling chat log) ── */
       .context-banner {
@@ -402,6 +401,32 @@
       .btn-send.btn-stop { background: var(--c-danger, #cf222e); }
       .btn-send.btn-stop:hover:not(:disabled) { background: #a40e26; }
 
+      /* ── New session chip: centered in its own band between the chat log and
+         the composer, so the floating pill never overlaps a bubble or the input ── */
+      .new-session-row {
+        display: flex;
+        justify-content: center;
+        padding: 10px 12px 2px;
+        flex-shrink: 0;
+      }
+      .btn-new-session {
+        height: 28px;
+        padding: 0 14px;
+        border: 1px solid var(--c-border);
+        border-radius: 999px;
+        background: var(--c-bg);
+        color: var(--c-text);
+        cursor: pointer;
+        font-size: 12px;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        box-shadow: 0 1px 3px rgba(31, 35, 40, 0.12);
+      }
+      .btn-new-session:hover:not(:disabled) { background: var(--c-surface); border-color: var(--c-accent); color: var(--c-accent); }
+      .btn-new-session:disabled { opacity: 0.45; cursor: not-allowed; }
+
       /* ── Audit trail trajectory viz ── */
       .knowdb-current-node { background: #fff3a0; font-weight: bold; }
       .knowdb-footprint-head { margin-top: 1em; font-size: 0.85em; font-weight: bold; }
@@ -453,7 +478,6 @@
           <div class="api-key-row">
             <input class="api-key-input" id="api-key-input" type="password" placeholder="sk-ant-… Anthropic API key" autocomplete="off" spellcheck="false" />
             <button class="btn-small" id="btn-save-key">Save</button>
-            <button class="btn-small" id="btn-new-session" title="Clear this conversation and start a new session (recorded gaps and traces are kept)">New session</button>
             <button class="btn-small" id="btn-export-gaps" title="Download recorded query gaps as JSONL">⤓ Gaps</button>
             <button class="btn-small" id="btn-export-traces" title="Download recorded query traces as JSONL">⤓ Traces</button>
           </div>
@@ -461,6 +485,9 @@
         <div class="context-banner" id="context-banner" role="status" style="display:none"></div>
         <div class="chat-messages" id="chat-messages">
           <div class="status-text">Enter your Anthropic API key, then ask a question about the knowledge base.</div>
+        </div>
+        <div class="new-session-row">
+          <button class="btn-new-session" id="btn-new-session" title="Clear this conversation and start a new session (recorded gaps and traces are kept)">↻ New session</button>
         </div>
         <div class="chat-input-row">
           <textarea class="chat-input" id="chat-input" rows="2" placeholder="Ask a question… (Enter to send, Shift+Enter for newline)"></textarea>
