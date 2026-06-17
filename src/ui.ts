@@ -58,6 +58,7 @@ async function init() {
   setupNav();
   setupApiKey();
   setupChat();
+  setupNewSession();
   setupGapExport();
   setupTraceExport();
   setupAuditTrailViz();
@@ -325,6 +326,10 @@ function setActiveAbort(ac: AbortController | null) {
   btn.classList.toggle("btn-stop", ac !== null);
   if (ac) el("search-input").setAttribute("disabled", "");
   else el("search-input").removeAttribute("disabled");
+  // Disable New session mid-turn: clearing chatHistory during an in-flight turn
+  // would desync it from the live API conversation.
+  if (ac) el("btn-new-session").setAttribute("disabled", "");
+  else el("btn-new-session").removeAttribute("disabled");
 }
 
 function setupChat() {
@@ -337,6 +342,21 @@ function setupChat() {
       e.preventDefault();
       if (!activeAbort) void sendMessage();
     }
+  });
+}
+
+// Clear the conversation and start a fresh session: empty chatHistory and the
+// chat log, rotate the session id so new traces/gaps group separately, and drop
+// the context banner. The recorded audit trail in localStorage is left intact —
+// New session clears the conversation, not the record.
+function setupNewSession() {
+  el("btn-new-session").addEventListener("click", () => {
+    if (activeAbort) return; // also disabled mid-turn; guard in case of a stray click
+    chatHistory.length = 0;
+    el("chat-messages").innerHTML = "";
+    appendStatus("New session started. Ask a question about the knowledge base.");
+    el("context-banner").style.display = "none";
+    session.rotate();
   });
 }
 

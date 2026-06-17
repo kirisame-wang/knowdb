@@ -266,7 +266,8 @@
         color: var(--c-text);
       }
 
-      .btn-small:hover { background: var(--c-surface); }
+      .btn-small:hover:not(:disabled) { background: var(--c-surface); }
+      .btn-small:disabled { opacity: 0.45; cursor: not-allowed; }
 
       /* ── Context-budget banner (pinned above the scrolling chat log) ── */
       .context-banner {
@@ -452,6 +453,7 @@
           <div class="api-key-row">
             <input class="api-key-input" id="api-key-input" type="password" placeholder="sk-ant-… Anthropic API key" autocomplete="off" spellcheck="false" />
             <button class="btn-small" id="btn-save-key">Save</button>
+            <button class="btn-small" id="btn-new-session" title="Clear this conversation and start a new session (recorded gaps and traces are kept)">New session</button>
             <button class="btn-small" id="btn-export-gaps" title="Download recorded query gaps as JSONL">⤓ Gaps</button>
             <button class="btn-small" id="btn-export-traces" title="Download recorded query traces as JSONL">⤓ Traces</button>
           </div>
