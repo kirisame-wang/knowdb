@@ -58,6 +58,7 @@ async function init() {
   setupNav();
   setupApiKey();
   setupChat();
+  setupNewSession();
   setupGapExport();
   setupTraceExport();
   setupAuditTrailViz();
@@ -316,8 +317,8 @@ const setupTraceExport = () =>
 
 // ── Right Panel: Chat ─────────────────────────────────────────────────────────
 
-// Single owner of turn-active state: controller, Send/Stop button, and search
-// lock move together.
+// Single owner of turn-active state: controller, Send/Stop button, search lock,
+// and New session move together.
 function setActiveAbort(ac: AbortController | null) {
   activeAbort = ac;
   const btn = el("btn-send");
@@ -325,6 +326,8 @@ function setActiveAbort(ac: AbortController | null) {
   btn.classList.toggle("btn-stop", ac !== null);
   if (ac) el("search-input").setAttribute("disabled", "");
   else el("search-input").removeAttribute("disabled");
+  if (ac) el("btn-new-session").setAttribute("disabled", "");
+  else el("btn-new-session").removeAttribute("disabled");
 }
 
 function setupChat() {
@@ -337,6 +340,19 @@ function setupChat() {
       e.preventDefault();
       if (!activeAbort) void sendMessage();
     }
+  });
+}
+
+// Rotate the session id so new traces/gaps group separately; the recorded audit
+// trail in localStorage is kept — New session clears the conversation, not the record.
+function setupNewSession() {
+  el("btn-new-session").addEventListener("click", () => {
+    if (activeAbort) return; // also disabled mid-turn; guard in case of a stray click
+    chatHistory.length = 0;
+    el("chat-messages").innerHTML = "";
+    appendStatus("New session started. Ask a question about the knowledge base.");
+    el("context-banner").style.display = "none";
+    session.rotate();
   });
 }
 
@@ -443,7 +459,7 @@ async function sendMessage() {
             const pct = Math.round((inputTokens / windowTokens) * 100);
             showContextBanner(
               `This conversation is using ~${pct}% of the model's context window. ` +
-                "Start a new conversation (reload the page) before it runs out of room."
+                "Use the New session button to start fresh before it runs out of room."
             );
           },
           onError: (err) => {
@@ -453,7 +469,7 @@ async function sendMessage() {
             if (isContextOverflowError(raw)) {
               showContextBanner(
                 "This conversation has reached the model's context window and can't continue. " +
-                  "Start a new conversation (reload the page) to keep going."
+                  "Use the New session button to start fresh."
               );
               if (thinkingBubble) {
                 thinkingBubble.remove();

@@ -21,7 +21,18 @@ export function newSessionId(): string {
  * they want deterministic injection (tests, fixtures).
  */
 export class SessionContext {
-  constructor(public readonly id: string = newSessionId()) {}
+  private _id: string;
+  constructor(id: string = newSessionId()) {
+    this._id = id;
+  }
+  /** Current session id. Read live by sinks/collectors, so rotate() propagates. */
+  get id(): string {
+    return this._id;
+  }
+  /** Start a new conversation group: subsequent traces/gaps stamp the new id. */
+  rotate(): void {
+    this._id = newSessionId();
+  }
 }
 
 /**
