@@ -181,6 +181,30 @@ describe("BrowserTraceCollector lifecycle", () => {
     expect(t.session_id).toBe("ctx-1");
   });
 
+  // session_id is read live at finalize, so rotating the shared holder (New
+  // session) stamps later queries with the new id — the same holder the gap
+  // sink reads, keeping trace × gap join consistent across the rotation.
+  it("a query after rotate() carries the new session_id", () => {
+    const ctx = new SessionContext("before");
+    const collector = new BrowserTraceCollector(ctx);
+    const q1 = collector.endQuery(
+      collector.startQuery("Q1", new Date("2026-05-16T10:00:00Z")),
+      "A1",
+      undefined,
+      new Date("2026-05-16T10:00:01Z"),
+    );
+    ctx.rotate();
+    const q2 = collector.endQuery(
+      collector.startQuery("Q2", new Date("2026-05-16T10:01:00Z")),
+      "A2",
+      undefined,
+      new Date("2026-05-16T10:01:01Z"),
+    );
+    expect(q1.session_id).toBe("before");
+    expect(q2.session_id).not.toBe("before");
+    expect(q2.session_id).toBe(ctx.id);
+  });
+
   it("endQuery on error records error and omits final_answer", () => {
     const collector = new BrowserTraceCollector(new SessionContext(SID));
     const q = collector.startQuery("Q", new Date("2026-05-16T10:00:00Z"));
