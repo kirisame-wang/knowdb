@@ -5,8 +5,8 @@ import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
-import { MODEL, MAX_OUTPUT_TOKENS } from "./constants.js";
-import { SessionContext, truncateOutput } from "./utils.js";
+import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO } from "./constants.js";
+import { SessionContext, truncateOutput, isContextOverflowError } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -359,6 +359,14 @@ function appendStatus(msg: string) {
   container.scrollTop = container.scrollHeight;
 }
 
+// The pinned context banner above the chat log: one element, refreshed in place
+// — approaching the window (a %) or already over it (the overflow message).
+function showContextBanner(msg: string) {
+  const banner = el("context-banner");
+  banner.textContent = msg;
+  banner.style.display = "";
+}
+
 function appendToolTrace(toolName: string, input: unknown, result: string) {
   const container = el("chat-messages");
 
@@ -415,6 +423,7 @@ async function sendMessage() {
           "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
         tools: KNOWDB_TOOLS,
         chatHistory,
+        contextBudget: { windowTokens: MODEL.contextWindowTokens, warnRatio: CONTEXT_WARN_RATIO },
         signal: ac.signal,
         hooks: {
           onUserMessage: (t) => appendBubble("user", t),
@@ -429,8 +438,30 @@ async function sendMessage() {
             if (thinkingBubble) thinkingBubble.remove();
             appendBubble("assistant", t || "(no response)");
           },
+          onContextWarning: (inputTokens, windowTokens) => {
+            // Refreshed in place to the latest % each over-band turn.
+            const pct = Math.round((inputTokens / windowTokens) * 100);
+            showContextBanner(
+              `This conversation is using ~${pct}% of the model's context window. ` +
+                "Start a new conversation (reload the page) before it runs out of room."
+            );
+          },
           onError: (err) => {
-            const msg = `Error: ${err instanceof Error ? err.message : String(err)}`;
+            const raw = err instanceof Error ? err.message : String(err);
+            // Window filled faster than the warning could catch — surface the
+            // "prompt is too long" 400 in the banner, not a raw error bubble.
+            if (isContextOverflowError(raw)) {
+              showContextBanner(
+                "This conversation has reached the model's context window and can't continue. " +
+                  "Start a new conversation (reload the page) to keep going."
+              );
+              if (thinkingBubble) {
+                thinkingBubble.remove();
+                thinkingBubble = null;
+              }
+              return;
+            }
+            const msg = `Error: ${raw}`;
             if (thinkingBubble) thinkingBubble.textContent = msg;
             else appendStatus(msg);
           },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyQuery, encounteredKnownGap, isContextOverflow, isContextOverflowError, reachSuccess, successOf, terminalGapReported } from "../../../src/benchmark/metrics.js";
+import { classifyQuery, encounteredKnownGap, isContextOverflow, reachSuccess, successOf, terminalGapReported } from "../../../src/benchmark/metrics.js";
 import type { QueryTrace, ToolCallEvent } from "../../../src/types.js";
 import type { BenchmarkTurn } from "../../../src/benchmark/types.js";
 
@@ -253,12 +253,6 @@ describe("isContextOverflow", () => {
 
   it("false for a completed turn with no error", () => {
     expect(isContextOverflow(trace([]))).toBe(false);
-  });
-
-  it("isContextOverflowError matches the same raw message the error banner sees", () => {
-    expect(isContextOverflowError('400 {"error":{"message":"prompt is too long: 204050 tokens > 200000 maximum"}}')).toBe(true);
-    expect(isContextOverflowError("401 invalid x-api-key")).toBe(false);
-    expect(isContextOverflowError(undefined)).toBe(false);
   });
 });
 
