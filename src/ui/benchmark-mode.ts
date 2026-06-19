@@ -29,30 +29,16 @@ import {
   benchmarkVariantKey,
 } from "../benchmark/sink.js";
 import { SessionContext } from "../utils.js";
-import { MODEL, MAX_OUTPUT_TOKENS } from "../constants.js";
+import { MODEL, MAX_OUTPUT_TOKENS, SYSTEM_PROMPT } from "../constants.js";
+import { hasFlag, elFromHtml, fmtUsd, fmtTok, nowStamp, wireApiKey, setRunButton } from "./mode-helpers.js";
 import type { SearchIndex, Manifest } from "../types.js";
 import type { BenchmarkProblem, BenchmarkReport } from "../benchmark/types.js";
-
-// Mirrors the chat system prompt so the cost story reflects the real agent.
-const SYSTEM_PROMPT =
-  "You are a helpful assistant with access to a knowledge base via tools. " +
-  "Call get_instructions first to learn how to use the tools. Be concise in your final answer.";
 
 const QUESTION_SET_PATH = "benchmark/pilot.json";
 
 // (variant × problem) threads in flight — a modest cap to cut wall-clock while
 // staying well under the API rate limit.
 const RUN_CONCURRENCY = 4;
-
-function isBenchmarkFlag(): boolean {
-  return new URLSearchParams(window.location.search).get("benchmark") === "1";
-}
-
-function elFromHtml(html: string): HTMLElement {
-  const t = document.createElement("template");
-  t.innerHTML = html.trim();
-  return t.content.firstElementChild as HTMLElement;
-}
 
 function download(filename: string, text: string, mime: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: mime }));
@@ -62,9 +48,6 @@ function download(filename: string, text: string, mime: string): void {
   a.click();
   URL.revokeObjectURL(url);
 }
-
-const fmtUsd = (x: number): string => `$${x.toFixed(2)}`;
-const fmtTok = (x: number): string => (x >= 1000 ? `${(x / 1000).toFixed(0)}k` : String(x));
 
 // ── Report rendering (zero-dep DOM; cells via textContent, XSS-safe) ──────────
 
@@ -207,12 +190,7 @@ export async function mountBenchmarkMode(): Promise<void> {
   const setStatus = (s: string): void => void (statusEl.textContent = s);
 
   // API key input mirrors the demo's, sharing the same session key. No popups.
-  apiKeyInput.value = sessionStorage.getItem("knowdb-api-key") ?? "";
-  const apiKey = (): string => apiKeyInput.value.trim() || sessionStorage.getItem("knowdb-api-key") || "";
-  saveKeyBtn.addEventListener("click", () => {
-    sessionStorage.setItem("knowdb-api-key", apiKeyInput.value.trim());
-    setStatus("API key saved for this session.");
-  });
+  const apiKey = wireApiKey(apiKeyInput, saveKeyBtn, () => setStatus("API key saved for this session."));
 
   // Load the static index + manifest and the question set.
   let searchIndex: SearchIndex = {};
@@ -249,8 +227,7 @@ export async function mountBenchmarkMode(): Promise<void> {
 
   const setRunning = (ac: AbortController | null): void => {
     running = ac;
-    runBtn.textContent = ac ? "Stop" : "Run benchmark";
-    runBtn.style.background = ac ? "#cf222e" : "#0969da";
+    setRunButton(runBtn, !!ac, "Run benchmark");
   };
 
   runBtn.addEventListener("click", () => {
@@ -360,11 +337,7 @@ export async function mountBenchmarkMode(): Promise<void> {
   setStatus("Ready.");
 }
 
-function nowStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, "-");
-}
-
 // Inert unless the flag is set.
-if (typeof window !== "undefined" && isBenchmarkFlag()) {
+if (typeof window !== "undefined" && hasFlag("benchmark")) {
   void mountBenchmarkMode();
 }
