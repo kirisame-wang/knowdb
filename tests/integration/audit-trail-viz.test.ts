@@ -78,7 +78,7 @@ describe("audit-trail-viz DOM smoke", () => {
 
     const info = fpRoot().querySelector<HTMLElement>(".knowdb-token-info")!;
     expect(info.title).toBe("this query — tokens in 180 / out 55"); // scoped to the current query
-    expect(info.textContent).toBe("ⓘ"); // icon only, no standing token text
+    expect(info.textContent).not.toMatch(/\d/); // hover-only: no standing token numbers (glyph not asserted)
   });
 
   it("with pricing, the ⓘ title adds an estimated cost line", () => {

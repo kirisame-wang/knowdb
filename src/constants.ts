@@ -14,3 +14,9 @@ export const MAX_OUTPUT_TOKENS = 2048;
 // Fraction of the context window at which the UI nudges the user to start fresh
 // — our setting, leaving headroom for the reply and the next round.
 export const CONTEXT_WARN_RATIO = 0.8;
+
+// The demo agent's system prompt. Shared by the chat and the gated modes so the
+// benchmark/compare runs drive the same agent the demo does.
+export const SYSTEM_PROMPT =
+  "You are a helpful assistant with access to a knowledge base via tools. " +
+  "Call get_instructions first to learn how to use the tools. Be concise in your final answer.";

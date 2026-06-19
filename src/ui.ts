@@ -5,7 +5,9 @@ import { search, expand, siblings, parent, splitId, compareChunkIds } from "./db
 import { BrowserGapSink } from "./gaps.js";
 import { BrowserTraceCollector, BrowserTraceSink } from "./traces.js";
 import { mount as mountAuditTrailViz } from "./audit-trail-viz.js";
-import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO } from "./constants.js";
+import { buildBubble, buildToolTrace } from "./ui/chat-dom.js";
+import { MODEL, MAX_OUTPUT_TOKENS, CONTEXT_WARN_RATIO, SYSTEM_PROMPT } from "./constants.js";
+import { wireApiKey } from "./ui/mode-helpers.js";
 import { SessionContext, truncateOutput, isContextOverflowError } from "./utils.js";
 import type { SearchIndex, Manifest } from "./types.js";
 
@@ -259,24 +261,13 @@ function showNavList(heading: string, ids: string[]) {
 
 // ── Right Panel: API Key ──────────────────────────────────────────────────────
 
+let getApiKey: () => string = () => "";
+
 function setupApiKey() {
-  const saved = sessionStorage.getItem("knowdb-api-key");
-  if (saved) el<HTMLInputElement>("api-key-input").value = saved;
-
-  el("btn-save-key").addEventListener("click", () => {
-    const key = el<HTMLInputElement>("api-key-input").value.trim();
-    if (key) {
-      sessionStorage.setItem("knowdb-api-key", key);
-      appendStatus("API key saved for this session.");
-    }
-  });
-}
-
-function getApiKey(): string {
-  return (
-    el<HTMLInputElement>("api-key-input").value.trim() ||
-    sessionStorage.getItem("knowdb-api-key") ||
-    ""
+  getApiKey = wireApiKey(
+    el<HTMLInputElement>("api-key-input"),
+    el("btn-save-key"),
+    () => appendStatus("API key saved for this session."),
   );
 }
 
@@ -358,9 +349,7 @@ function setupNewSession() {
 
 function appendBubble(role: "user" | "assistant", text: string): HTMLElement {
   const container = el("chat-messages");
-  const bubble = document.createElement("div");
-  bubble.className = `chat-bubble ${role}`;
-  bubble.textContent = text;
+  const bubble = buildBubble(role, text);
   container.appendChild(bubble);
   container.scrollTop = container.scrollHeight;
   return bubble;
@@ -385,21 +374,7 @@ function showContextBanner(msg: string) {
 
 function appendToolTrace(toolName: string, input: unknown, result: string) {
   const container = el("chat-messages");
-
-  const details = document.createElement("details");
-  details.className = "tool-trace";
-
-  const summary = document.createElement("summary");
-  const inputStr = JSON.stringify(input);
-  summary.textContent = `🔧 ${toolName}(${inputStr.length > 50 ? inputStr.slice(0, 50) + "…" : inputStr})`;
-
-  const body = document.createElement("div");
-  body.className = "tool-trace-body";
-  body.textContent = `Input:\n${JSON.stringify(input, null, 2)}\n\nResult:\n${truncateOutput(result)}`;
-
-  details.appendChild(summary);
-  details.appendChild(body);
-  container.appendChild(details);
+  container.appendChild(buildToolTrace(toolName, input, truncateOutput(result)));
   container.scrollTop = container.scrollHeight;
 }
 
@@ -434,9 +409,7 @@ async function sendMessage() {
         manifest,
         model: MODEL.id,
         maxTokens: MAX_OUTPUT_TOKENS,
-        system:
-          "You are a helpful assistant with access to a knowledge base via tools. " +
-          "Call get_instructions first to learn how to use the tools. Be concise in your final answer.",
+        system: SYSTEM_PROMPT,
         tools: KNOWDB_TOOLS,
         chatHistory,
         contextBudget: { windowTokens: MODEL.contextWindowTokens, warnRatio: CONTEXT_WARN_RATIO },
